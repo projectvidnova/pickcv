@@ -1,231 +1,279 @@
-# 🚀 PickCV - Visual Studio Code Ready
+# PickCV - AI-Powered Resume Optimization & Job Matching Platform
 
-## ⚡ INSTANT RUN - 3 Steps
+Transform your resume to beat ATS systems and land your dream job. Built with Next.js 16, FastAPI, PostgreSQL with pgvector, and powered by Google Gemini AI.
 
-### Step 1: Open in VS Code
-```bash
-# Option A: From command line
-code pickcv.code-workspace
+## 🚀 Features
 
-# Option B: In VS Code
-File → Open Workspace → Select "pickcv.code-workspace"
-```
+- **ATS Optimization**: Transform resumes to meet 2026 ATS standards
+- **AI-Powered Analysis**: Get detailed feedback on resume quality and compatibility
+- **Job Matching**: Semantic search using pgvector for intelligent job matching
+- **Skill Gap Analysis**: Identify missing skills and get learning recommendations
+- **Before/After Comparison**: See the transformation in real-time
+- **One-Click Apply**: Apply to jobs with your optimized resume
 
-### Step 2: Install Dependencies
-```bash
-# In VS Code terminal (Ctrl+` or Cmd+`)
-npm install
-```
+## 🏗️ Architecture
 
-### Step 3: Run
-```bash
-npm run dev
-```
+### Frontend
+- **Next.js 16** with App Router
+- **TypeScript** for type safety
+- **Tailwind CSS** for styling
+- **Lucide React** for icons
+- **Axios** for API calls
 
-✅ **Browser opens automatically at http://localhost:5173**
+### Backend
+- **FastAPI** (Python) for high-performance async API
+- **PostgreSQL** with pgvector extension for semantic search
+- **SQLAlchemy** (Async) for ORM
+- **Pydantic V2** for data validation
+- **Google Gemini 1.5 Flash** for AI operations
+- **JWT** for authentication
 
----
-
-## 🎯 What You Get
-
-### Working Demo Features:
-- ✅ **File Upload** - Upload resume (simulated)
-- ✅ **AI Analysis** - Animated ATS score calculation
-- ✅ **Results Dashboard** - Score display with recommendations
-- ✅ **Responsive Design** - Mobile-friendly UI
-- ✅ **Beautiful UI** - TailwindCSS styling
-- ✅ **Interactive** - Real-time feedback
-
-### Tech Stack:
-- ⚛️ React 18
-- ⚡ Vite (lightning fast)
-- 🎨 TailwindCSS
-- 🎭 Lucide Icons
-- 📱 Responsive
-
----
-
-## 🖥️ VS Code Features
-
-### Quick Run (Press F5)
-- Launches dev server automatically
-- Browser opens to http://localhost:5173
-- Hot reload on save
-
-### Available Tasks (Terminal → Run Task):
-- **Start Dev Server** - Launch app
-- **Build** - Create production build
-- **Run Tests** - Execute test suite
-
-### Keyboard Shortcuts:
-- `Ctrl+Shift+B` (or `Cmd+Shift+B`) - Build
-- `F5` - Start debugging/dev server
-- `Ctrl+` ` - Toggle terminal
-
----
+### Infrastructure
+- **Docker** for containerization
+- **Docker Compose** for local development
+- Optimized for **Google Cloud Run** deployment
 
 ## 📁 Project Structure
 
 ```
-pickcv/
-├── index.html              - Entry HTML
-├── package.json            - Dependencies
-├── vite.config.js          - Vite configuration
-├── tailwind.config.js      - Tailwind configuration
-├── pickcv.code-workspace   - VS Code workspace
+/
+├── backend/                 # FastAPI application
+│   ├── models/             # SQLAlchemy models
+│   ├── schemas/            # Pydantic schemas
+│   ├── routes/             # API routes
+│   ├── services/           # Business logic & AI services
+│   ├── config.py           # Configuration
+│   ├── database.py         # Database setup
+│   ├── main.py             # Application entry point
+│   └── requirements.txt    # Python dependencies
 │
-├── src/
-│   ├── main.jsx           - App entry point
-│   ├── App.jsx            - Main component (EDIT THIS!)
-│   ├── App.css            - Component styles
-│   ├── index.css          - Global styles
-│   │
-│   ├── components/        - Your components here
-│   ├── pages/             - Your pages here
-│   ├── hooks/             - Custom hooks
-│   ├── utils/             - Helper functions
-│   └── services/          - API services
+├── frontend/               # Next.js application
+│   ├── app/               # App router pages
+│   ├── components/        # React components
+│   ├── lib/               # Utilities & API client
+│   └── public/            # Static assets
 │
-├── public/                - Static assets
-└── tests/                 - Test files
+├── docker-compose.yml     # Full stack deployment
+├── docker-compose.dev.yml # Development database only
+└── instructions.md        # Development guidelines
 ```
 
----
+## 🚀 Quick Start
 
-## 🎨 Customize the Demo
+### Prerequisites
+- **Node.js 20+**
+- **Python 3.11+**
+- **Docker & Docker Compose**
+- **Google Gemini API Key** ([Get it here](https://makersuite.google.com/app/apikey))
 
-### Change Colors:
-Edit `src/App.jsx` - Look for `indigo-600` and replace with:
-- `blue-600`
-- `purple-600`
-- `green-600`
-- `red-600`
+### Option 1: Docker Compose (Recommended)
 
-### Add Your Logo:
-Replace the `<Sparkles>` icon in `App.jsx` line 19:
-```jsx
-<img src="/your-logo.png" className="w-8 h-8" />
-```
-
-### Modify Text:
-All text is in `src/App.jsx` - edit freely!
-
----
-
-## 📦 Available Commands
-
+1. **Clone the repository**
 ```bash
-# Development
-npm run dev          # Start dev server (auto-opens browser)
-npm run build        # Build for production
-npm run preview      # Preview production build
-
-# Testing
-npm test             # Run tests
+git clone https://github.com/projectvidnova/pickcv.git
+cd pickcv
 ```
 
----
-
-## 🔧 Common Tasks
-
-### Add New Component:
-1. Create file: `src/components/MyComponent.jsx`
-2. Write component:
-```jsx
-export default function MyComponent() {
-  return <div>Hello!</div>
-}
-```
-3. Import in App.jsx:
-```jsx
-import MyComponent from './components/MyComponent'
-```
-
-### Add New Page:
-1. Create file: `src/pages/Dashboard.jsx`
-2. Use it in App.jsx
-
-### Install Package:
+2. **Set up environment variables**
 ```bash
-npm install package-name
+# Backend
+cp backend/.env.example backend/.env
+# Edit backend/.env and add your GEMINI_API_KEY
 ```
 
----
-
-## 🐛 Troubleshooting
-
-### Port Already in Use?
+3. **Start all services**
 ```bash
-# Change port in vite.config.js
-server: {
-  port: 3000,  // Change to any available port
-}
+docker-compose up -d
 ```
 
-### Module Not Found?
+Services will be available at:
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:8000
+- API Docs: http://localhost:8000/docs
+- Database: localhost:5432
+
+### Option 2: Local Development
+
+#### 1. Start PostgreSQL with pgvector
 ```bash
-rm -rf node_modules package-lock.json
+docker-compose -f docker-compose.dev.yml up -d
+```
+
+#### 2. Backend Setup
+```bash
+cd backend
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Set up environment
+cp .env.example .env
+# Edit .env and add your GEMINI_API_KEY
+
+# Run database migrations (create tables)
+python -c "from database import engine, Base; from models import *; Base.metadata.create_all(bind=engine)"
+
+# Start backend
+uvicorn main:app --reload --port 8000
+```
+
+Backend will be available at http://localhost:8000
+
+#### 3. Frontend Setup
+```bash
+cd frontend
+
+# Install dependencies
 npm install
+
+# Set up environment
+cp .env.local.example .env.local
+
+# Start development server
+npm run dev
 ```
 
-### Hot Reload Not Working?
+Frontend will be available at http://localhost:3000
+
+## 🗄️ Database Setup
+
+The application uses PostgreSQL with the pgvector extension for semantic search.
+
+**Initialize tables:**
 ```bash
-# Restart dev server
-Ctrl+C (stop)
-npm run dev (start)
+cd backend
+python -c "from sqlalchemy import create_engine; from database import Base; from models import *; from config import settings; engine = create_engine(settings.database_url.replace('asyncpg', 'psycopg2')); Base.metadata.create_all(engine)"
 ```
 
----
+## 🔑 Environment Variables
 
-## 🚀 Deploy to Production
-
-### Option 1: Vercel (Recommended)
+### Backend (.env)
 ```bash
-npm install -g vercel
-vercel
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/pickcv
+GEMINI_API_KEY=your_gemini_api_key_here
+SECRET_KEY=your-secret-key-change-this-in-production
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3001
+ENVIRONMENT=development
 ```
 
-### Option 2: Netlify
+### Frontend (.env.local)
 ```bash
-npm run build
-# Upload 'dist' folder to Netlify
+NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
-### Option 3: Manual
+## 📚 API Documentation
+
+Once the backend is running, visit:
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
+
+### Key Endpoints
+
+#### Authentication
+- `POST /api/auth/register` - Register new user
+- `POST /api/auth/token` - Login and get JWT token
+- `GET /api/auth/me` - Get current user
+
+#### Resume
+- `POST /api/resume/upload` - Upload resume file
+- `GET /api/resume/` - List user's resumes
+- `GET /api/resume/{id}` - Get resume details
+- `POST /api/resume/{id}/optimize` - Optimize resume for ATS
+
+#### Analysis
+- `POST /api/analysis/resume/{id}` - Analyze resume for ATS compatibility
+- `GET /api/analysis/skill-gap` - Get skill gap analysis
+
+#### Jobs
+- `GET /api/jobs/` - List jobs with match scores
+- `GET /api/jobs/{id}` - Get job details
+- `POST /api/jobs/{id}/apply` - Apply to job
+- `GET /api/jobs/applications/` - List user's applications
+
+## 🧪 Testing
+
+### Backend Tests
 ```bash
-npm run build
-# Upload 'dist' folder to any hosting
+cd backend
+pytest
 ```
 
+### Frontend Tests
+```bash
+cd frontend
+npm test
+```
+
+## 🚢 Deployment
+
+### Google Cloud Run
+
+1. **Build and push Docker images**
+```bash
+# Backend
+gcloud builds submit --tag gcr.io/PROJECT_ID/pickcv-backend ./backend
+
+# Frontend
+gcloud builds submit --tag gcr.io/PROJECT_ID/pickcv-frontend ./frontend
+```
+
+2. **Deploy services**
+```bash
+# Backend
+gcloud run deploy pickcv-backend \
+  --image gcr.io/PROJECT_ID/pickcv-backend \
+  --platform managed \
+  --region us-central1 \
+  --allow-unauthenticated
+
+# Frontend
+gcloud run deploy pickcv-frontend \
+  --image gcr.io/PROJECT_ID/pickcv-frontend \
+  --platform managed \
+  --region us-central1 \
+  --allow-unauthenticated
+```
+
+## 🛠️ Development
+
+### Code Standards
+- **Python**: Type hints for all functions, async/await for I/O operations
+- **TypeScript**: Strict mode enabled
+- **API**: RESTful conventions, camelCase JSON responses
+- **Formatting**: Use single-column layout for ATS compliance
+
+### Adding New Features
+
+1. **Backend**: Add route in `routes/`, service logic in `services/`
+2. **Frontend**: Create component in `components/`, add page in `app/`
+3. **Database**: Update models in `models/__init__.py`, create migration
+
+## 📝 License
+
+MIT License - See LICENSE file for details
+
+## 🤝 Contributing
+
+Contributions are welcome! Please read CONTRIBUTING.md for guidelines.
+
+## 📧 Support
+
+For issues and questions:
+- GitHub Issues: https://github.com/projectvidnova/pickcv/issues
+- Email: support@pickcv.com
+
+## 🙏 Acknowledgments
+
+- Powered by Google Gemini 1.5 Flash
+- Built with Next.js, FastAPI, and PostgreSQL
+- Icons by Lucide React
+
 ---
 
-## 📚 Learn More
-
-- [React Docs](https://react.dev)
-- [Vite Docs](https://vitejs.dev)
-- [TailwindCSS Docs](https://tailwindcss.com)
-- [Lucide Icons](https://lucide.dev)
-
----
-
-## 🎉 Next Steps
-
-1. ✅ Run the demo (you're here!)
-2. 📝 Customize the UI
-3. 🔌 Add backend (Supabase)
-4. 💳 Add payments (Stripe)
-5. 🤖 Add AI (Anthropic)
-6. 🚀 Deploy to production
-
----
-
-## 💡 Tips
-
-- Save files to see changes instantly (Hot Reload)
-- Use VS Code extensions (auto-installed from workspace)
-- Check terminal for errors
-- Use React DevTools browser extension
-
----
-
-**Ready to build? Start editing `src/App.jsx`!** 🎨
+**PickCV** - Beat the ATS. Land the Job. 🚀
