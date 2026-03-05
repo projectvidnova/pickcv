@@ -1,5 +1,5 @@
-"""Database models for PickCV application."""
-from sqlalchemy import Column, Integer, String, DateTime, Text, Float, ForeignKey, Boolean
+"""Database models for PickCV application - Production Ready."""
+from sqlalchemy import Column, Integer, String, DateTime, Text, Float, ForeignKey, Boolean, Date, Array, JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from pgvector.sqlalchemy import Vector
@@ -14,13 +14,46 @@ class User(Base):
     email = Column(String(255), unique=True, index=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)
     full_name = Column(String(255))
-    is_active = Column(Boolean, default=True)
+    phone = Column(String(20))
+    location = Column(String(255))
+    linkedin_url = Column(String(500))
+    profile_picture_url = Column(String(500))
+    target_role = Column(String(255))
+    experience_level = Column(String(50))  # Entry, Mid, Senior, Lead
+    work_mode = Column(String(50))  # Remote, Hybrid, On-site
+    is_active = Column(Boolean, default=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    last_login = Column(DateTime(timezone=True))
+    
+    # Relationships
+    profile = relationship("UserProfile", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    resumes = relationship("Resume", back_populates="user", cascade="all, delete-orphan")
+    skills = relationship("UserSkill", back_populates="user", cascade="all, delete-orphan")
+    experiences = relationship("WorkExperience", back_populates="user", cascade="all, delete-orphan")
+    education = relationship("Education", back_populates="user", cascade="all, delete-orphan")
+    job_applications = relationship("JobApplication", back_populates="user", cascade="all, delete-orphan")
+    saved_jobs = relationship("SavedJob", back_populates="user", cascade="all, delete-orphan")
+
+
+class UserProfile(Base):
+    """Extended user profile information."""
+    __tablename__ = "user_profiles"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False)
+    bio = Column(Text)
+    preferred_locations = Column(Array(String(255)))  # Array of locations
+    preferred_job_types = Column(Array(String(50)))  # ['Full-time', 'Remote', 'Hybrid']
+    career_stage = Column(String(50))
+    industry_focus = Column(String(255))
+    notification_preferences = Column(JSONB, default={})
+    onboarding_completed = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
     # Relationships
-    resumes = relationship("Resume", back_populates="user")
-    job_applications = relationship("JobApplication", back_populates="user")
+    user = relationship("User", back_populates="profile")
 
 
 class Resume(Base):
@@ -28,56 +61,118 @@ class Resume(Base):
     __tablename__ = "resumes"
     
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     title = Column(String(255), nullable=False)
-    original_filename = Column(String(255))
+    template_name = Column(String(50))  # classic, modern, minimal, etc.
+    original_filename = Column(String(500))
     
     # Resume content
     raw_text = Column(Text)
     optimized_text = Column(Text)
     
-    # Structured data
+    # Contact info (structured)
+    contact_info = Column(JSONB)  # {name, email, phone, location, linkedin}
     professional_summary = Column(Text)
-    work_experience = Column(Text)
-    skills = Column(Text)
-    education = Column(Text)
     
-    # ATS metrics
+    # Sections (structured as JSON)
+    sections = Column(JSONB)  # {experience: [...], education: [...], skills: [...]}
+    
+    # Metadata & Scores
+    is_optimized = Column(Boolean, default=False)
+    optimization_target_job_id = Column(Integer, ForeignKey("jobs.id", ondelete="SET NULL"))
     ats_score = Column(Float)
     keyword_density = Column(Float)
     
     # Vector embeddings for semantic search
     embedding = Column(Vector(768))  # Gemini embedding dimension
     
+    # File storage
+    file_path = Column(String(500))
+    file_format = Column(String(20))  # pdf, docx, txt
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    last_modified = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Relationships
+    user = relationship("User", back_populates="resumes")
+    analyses = relationship("ResumeAnalysis", back_populates="resume", cascade="all, delete-orphan")
+
+
+class UserSkill(Base):
+    """User skills with proficiency levels."""
+    __tablename__ = "user_skills"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    skill_name = Column(String(255), nullable=False)
+    proficiency_level = Column(String(50))  # beginner, intermediate, expert
+    years_of_experience = Column(Float)
+    endorsement_count = Column(Integer, default=0)
+    is_primary = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Unique constraint on user + skill
+    __table_args__ = (
+        {
+            "indexes": [
+                Column("user_id"),
+                Column("skill_name"),
+            ]
+        },
+    )
+    
+    # Relationships
+    user = relationship("User", back_populates="skills")
+
+
+class WorkExperience(Base):
+    """User work experience."""
+    __tablename__ = "work_experiences"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    resume_id = Column(Integer, ForeignKey("resumes.id", ondelete="SET NULL"))
+    
+    job_title = Column(String(255), nullable=False)
+    company_name = Column(String(255), nullable=False)
+    location = Column(String(255))
+    
+    start_date = Column(Date)
+    end_date = Column(Date)
+    is_current = Column(Boolean, default=False)
+    
+    description = Column(Text)
+    achievements = Column(Array(Text))  # Array of bullet points
+    
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
     # Relationships
-    user = relationship("User", back_populates="resumes")
-    analyses = relationship("ResumeAnalysis", back_populates="resume")
+    user = relationship("User", back_populates="experiences")
 
 
-class ResumeAnalysis(Base):
-    """Resume analysis results."""
-    __tablename__ = "resume_analyses"
+class Education(Base):
+    """User education details."""
+    __tablename__ = "education"
     
     id = Column(Integer, primary_key=True, index=True)
-    resume_id = Column(Integer, ForeignKey("resumes.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    resume_id = Column(Integer, ForeignKey("resumes.id", ondelete="SET NULL"))
     
-    ats_score = Column(Float, nullable=False)
-    readability_score = Column(Float)
-    keyword_match_score = Column(Float)
+    degree_type = Column(String(100))  # Bachelor, Master, PhD
+    field_of_study = Column(String(255))
+    school_name = Column(String(255), nullable=False)
+    graduation_date = Column(Date)
     
-    # Detailed feedback
-    strengths = Column(Text)
-    weaknesses = Column(Text)
-    suggestions = Column(Text)
-    missing_keywords = Column(Text)
+    gpa = Column(Float)
+    activities = Column(Text)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
     # Relationships
-    resume = relationship("Resume", back_populates="analyses")
+    user = relationship("User", back_populates="education")
 
 
 class Job(Base):
@@ -85,30 +180,48 @@ class Job(Base):
     __tablename__ = "jobs"
     
     id = Column(Integer, primary_key=True, index=True)
-    title = Column(String(255), nullable=False, index=True)
-    company = Column(String(255), nullable=False)
-    location = Column(String(255))
-    job_type = Column(String(50))  # Full-time, Part-time, Contract, etc.
+    job_title = Column(String(255), nullable=False, index=True)
+    company_name = Column(String(255), nullable=False, index=True)
+    company_logo_url = Column(String(500))
     
     # Job details
     description = Column(Text, nullable=False)
     requirements = Column(Text)
-    responsibilities = Column(Text)
-    salary_range = Column(String(100))
+    benefits = Column(Text)
+    
+    # Classification
+    job_type = Column(String(50), index=True)  # Full-time, Part-time, Contract, Remote
+    experience_level = Column(String(50), index=True)  # Entry, Mid, Senior, Lead
+    industry = Column(String(255))
+    
+    # Location
+    location = Column(String(255), index=True)
+    remote_policy = Column(String(50))  # Fully Remote, Hybrid, On-site
+    
+    # Compensation
+    salary_min = Column(Integer)
+    salary_max = Column(Integer)
+    currency = Column(String(10), default="USD")  # USD, GBP, etc.
     
     # Metadata
-    posted_date = Column(DateTime(timezone=True))
-    application_url = Column(String(500))
+    source = Column(String(100))  # linkedin, indeed, api, etc.
+    external_job_id = Column(String(255))
+    external_url = Column(String(500))
+    
+    # AI
+    keywords = Column(Array(String(255)))
+    embedding = Column(Vector(768))  # For semantic search
+    
+    # Status
+    posted_date = Column(DateTime(timezone=True), index=True)
+    expiry_date = Column(DateTime(timezone=True))
     is_active = Column(Boolean, default=True)
-    
-    # Vector embeddings for semantic matching
-    embedding = Column(Vector(768))
-    
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
     # Relationships
-    applications = relationship("JobApplication", back_populates="job")
+    applications = relationship("JobApplication", back_populates="job", cascade="all, delete-orphan")
+    saved_by = relationship("SavedJob", back_populates="job", cascade="all, delete-orphan")
 
 
 class JobApplication(Base):
@@ -116,17 +229,23 @@ class JobApplication(Base):
     __tablename__ = "job_applications"
     
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    job_id = Column(Integer, ForeignKey("jobs.id"), nullable=False)
-    resume_id = Column(Integer, ForeignKey("resumes.id"))
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    job_id = Column(Integer, ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True)
+    resume_id = Column(Integer, ForeignKey("resumes.id", ondelete="SET NULL"))
     
     # Application status
-    status = Column(String(50), default="pending")  # pending, applied, rejected, interview, offer
-    match_score = Column(Float)  # Cosine similarity score
+    status = Column(String(50), index=True)  # applied, reviewing, interview, offer, rejected
     
-    # Application details
-    cover_letter = Column(Text)
-    applied_at = Column(DateTime(timezone=True))
+    # Timeline
+    applied_date = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    first_response_date = Column(DateTime(timezone=True))
+    last_updated_date = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Tracking
+    match_score = Column(Float)  # Calculated by system
+    custom_cover_letter = Column(Text)
+    notes = Column(Text)
+    is_bookmarked = Column(Boolean, default=False)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -136,20 +255,63 @@ class JobApplication(Base):
     job = relationship("Job", back_populates="applications")
 
 
-class SkillGap(Base):
-    """Skill gap analysis for users."""
-    __tablename__ = "skill_gaps"
+class SavedJob(Base):
+    """Jobs saved by users."""
+    __tablename__ = "saved_jobs"
     
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    job_id = Column(Integer, ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True)
     
-    # Gap analysis
-    current_skills = Column(Text)
-    missing_skills = Column(Text)
-    recommended_skills = Column(Text)
+    saved_at = Column(DateTime(timezone=True), server_default=func.now())
+    notes = Column(Text)
     
-    # Learning recommendations
-    learning_paths = Column(Text)
-    estimated_time = Column(String(100))
+    # Relationships
+    user = relationship("User", back_populates="saved_jobs")
+    job = relationship("Job", back_populates="saved_by")
+
+
+class ResumeAnalysis(Base):
+    """Resume analysis results."""
+    __tablename__ = "resume_analyses"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    resume_id = Column(Integer, ForeignKey("resumes.id", ondelete="CASCADE"), nullable=False, index=True)
+    job_id = Column(Integer, ForeignKey("jobs.id", ondelete="SET NULL"))
+    
+    # Analysis results
+    ats_score = Column(Float)
+    ats_score_breakdown = Column(JSONB)  # {formatting: 85, keywords: 75, structure: 90}
+    
+    # Keywords
+    matched_keywords = Column(Array(String(255)))
+    missing_keywords = Column(Array(String(255)))
+    keyword_frequency = Column(JSONB)  # {keyword: count}
+    
+    # Suggestions
+    suggestions = Column(JSONB)  # [{type: 'add_skill', suggestion: 'Python', priority: 'high'}]
+    
+    # Confidence
+    confidence_score = Column(Float)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Relationships
+    resume = relationship("Resume", back_populates="analyses")
+
+
+class AuditLog(Base):
+    """Audit log for tracking changes and user actions."""
+    __tablename__ = "audit_logs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    action = Column(String(255), index=True)  # resume_created, resume_optimized, job_applied
+    entity_type = Column(String(100), index=True)  # resume, job, application
+    entity_id = Column(Integer)
+    details = Column(JSONB)
+    ip_address = Column(String(45))
+    user_agent = Column(Text)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
