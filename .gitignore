@@ -48,6 +48,9 @@ package-lock.json
 yarn.lock
 pnpm-lock.yaml
 
+# Temporary code extraction folders
+codeZip/
+
 # Next.js
 .next/
 out/
