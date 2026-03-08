@@ -2,6 +2,10 @@
 from pydantic_settings import BaseSettings
 from typing import List
 import os
+from dotenv import load_dotenv
+
+# Load .env file
+load_dotenv()
 
 
 class Settings(BaseSettings):
@@ -29,9 +33,7 @@ class Settings(BaseSettings):
     
     # ============= SECURITY =============
     # Secret key MUST be set in production
-    secret_key: str = os.getenv("SECRET_KEY")
-    if not secret_key and environment == "production":
-        raise ValueError("SECRET_KEY must be set in production!")
+    secret_key: str = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
     
     algorithm: str = "HS256"
     
@@ -58,11 +60,30 @@ class Settings(BaseSettings):
     rate_limit_window_seconds: int = 60
     
     # ============= EXTERNAL APIS =============
-    gemini_api_key: str = os.getenv("GEMINI_API_KEY")
+    gemini_api_key: str = os.getenv("GEMINI_API_KEY", "temp-dev-key")
+    
+    # ============= GOOGLE OAUTH =============
+    google_client_id: str = os.getenv("GOOGLE_CLIENT_ID", "")
+    google_client_secret: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
+    google_redirect_uri: str = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/api/auth/google/callback")
+    
+    # ============= EMAIL CONFIGURATION =============
+    smtp_server: str = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+    smtp_port: int = int(os.getenv("SMTP_PORT", "587"))
+    sender_email: str = os.getenv("SENDER_EMAIL", "noreply@pickcv.com")
+    sender_password: str = os.getenv("SENDER_PASSWORD", "")
     
     # ============= FILE UPLOAD =============
     max_upload_size_mb: int = 50
     allowed_file_types: List[str] = ["pdf", "docx", "doc", "txt"]
+    
+    # ============= GOOGLE CLOUD STORAGE (GCS) =============
+    gcs_bucket_name: str = os.getenv("GCS_BUCKET_NAME", "")
+    gcp_project_id: str = os.getenv("GCP_PROJECT_ID", "")
+    storage_backend: str = os.getenv("STORAGE_BACKEND", "local")  # "gcs" or "local"
+    
+    # ============= FRONTEND CONFIG =============
+    frontend_url: str = os.getenv("FRONTEND_URL", "http://localhost:5173")
     
     # ============= LOGGING =============
     log_level: str = "INFO" if environment == "production" else "DEBUG"

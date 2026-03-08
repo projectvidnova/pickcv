@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import AuthModal from './AuthModal';
 import OptimizeModal from './OptimizeModal';
+import UserProfileDropdown from './UserProfileDropdown';
+import { googleAuthService } from '../../services/googleAuthService';
 
 export default function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -8,6 +10,36 @@ export default function Navbar() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isOptimizeModalOpen, setIsOptimizeModalOpen] = useState(false);
   const [activeLink, setActiveLink] = useState('');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userName, setUserName] = useState('');
+  const [userEmail, setUserEmail] = useState('');
+  const [userAvatar, setUserAvatar] = useState('');
+
+  useEffect(() => {
+    // Check if user is authenticated
+    const checkAuth = () => {
+      const token = googleAuthService.getAccessToken();
+      const name = localStorage.getItem('user_name') || '';
+      const email = localStorage.getItem('user_email') || '';
+      const picture = localStorage.getItem('user_picture') || '';
+      
+      setIsAuthenticated(!!token);
+      setUserName(name || 'User');
+      setUserEmail(email);
+      setUserAvatar(picture);
+    };
+
+    checkAuth();
+    // Listen for storage changes (logout from other tabs)
+    window.addEventListener('storage', checkAuth);
+    // Listen for custom logout event (logout in same tab)
+    window.addEventListener('auth-logout', checkAuth);
+    
+    return () => {
+      window.removeEventListener('storage', checkAuth);
+      window.removeEventListener('auth-logout', checkAuth);
+    };
+  }, []);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -87,17 +119,32 @@ export default function Navbar() {
 
             {/* Right CTA */}
             <div className="hidden md:flex items-center gap-2 shrink-0">
-              <button onClick={() => setIsAuthModalOpen(true)}
-                className="text-sm font-medium px-4 py-2 rounded-xl transition-all duration-200 whitespace-nowrap cursor-pointer text-gray-600 hover:text-gray-900 hover:bg-white/60">
-                Sign In
-              </button>
-              <button onClick={() => setIsOptimizeModalOpen(true)}
-                className="relative overflow-hidden text-sm font-semibold px-5 py-2 rounded-xl transition-all duration-200 whitespace-nowrap cursor-pointer group bg-gradient-to-r from-teal-500 to-emerald-500 text-white hover:from-teal-600 hover:to-emerald-600 shadow-md shadow-teal-500/20">
-                <span className="relative z-10 flex items-center gap-1.5">
-                  Get Started
-                  <i className="ri-arrow-right-line text-xs group-hover:translate-x-0.5 transition-transform duration-200"></i>
-                </span>
-              </button>
+              {isAuthenticated ? (
+                <>
+                  <button onClick={() => setIsOptimizeModalOpen(true)}
+                    className="relative overflow-hidden text-sm font-semibold px-5 py-2 rounded-xl transition-all duration-200 whitespace-nowrap cursor-pointer group bg-gradient-to-r from-teal-500 to-emerald-500 text-white hover:from-teal-600 hover:to-emerald-600 shadow-md shadow-teal-500/20">
+                    <span className="relative z-10 flex items-center gap-1.5">
+                      Optimize Resume
+                      <i className="ri-arrow-right-line text-xs group-hover:translate-x-0.5 transition-transform duration-200"></i>
+                    </span>
+                  </button>
+                  <UserProfileDropdown userName={userName} userEmail={userEmail} userAvatar={userAvatar} />
+                </>
+              ) : (
+                <>
+                  <button onClick={() => setIsAuthModalOpen(true)}
+                    className="text-sm font-medium px-4 py-2 rounded-xl transition-all duration-200 whitespace-nowrap cursor-pointer text-gray-600 hover:text-gray-900 hover:bg-white/60">
+                    Sign In
+                  </button>
+                  <button onClick={() => setIsAuthModalOpen(true)}
+                    className="relative overflow-hidden text-sm font-semibold px-5 py-2 rounded-xl transition-all duration-200 whitespace-nowrap cursor-pointer group bg-gradient-to-r from-teal-500 to-emerald-500 text-white hover:from-teal-600 hover:to-emerald-600 shadow-md shadow-teal-500/20">
+                    <span className="relative z-10 flex items-center gap-1.5">
+                      Get Started
+                      <i className="ri-arrow-right-line text-xs group-hover:translate-x-0.5 transition-transform duration-200"></i>
+                    </span>
+                  </button>
+                </>
+              )}
             </div>
 
             {/* Mobile Menu Toggle */}
@@ -111,28 +158,69 @@ export default function Navbar() {
           {isMobileMenuOpen && (
             <div className="md:hidden mobile-menu-enter border-t px-4 py-4 space-y-1 rounded-b-2xl border-white/50"
               style={{ background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(20px)' }}>
-              <a href="/resume-builder" onClick={() => setIsMobileMenuOpen(false)}
-                className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors text-gray-700 hover:bg-teal-50/80 hover:text-teal-700">
-                <i className="ri-magic-line text-teal-500"></i>AI Resume Maker
-              </a>
-              <a href="/jobs" onClick={() => setIsMobileMenuOpen(false)}
-                className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors text-gray-700 hover:bg-teal-50/80 hover:text-teal-700">
-                <i className="ri-briefcase-line text-teal-500"></i>Jobs
-              </a>
-              <a href="/profile" onClick={() => setIsMobileMenuOpen(false)}
-                className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors text-gray-700 hover:bg-teal-50/80 hover:text-teal-700">
-                <i className="ri-user-3-line text-teal-500"></i>My Profile
-              </a>
-              <div className="pt-3 border-t border-white/50 space-y-2">
-                <button onClick={() => { setIsAuthModalOpen(true); setIsMobileMenuOpen(false); }}
-                  className="w-full py-2.5 text-center text-sm font-medium rounded-xl transition-colors whitespace-nowrap cursor-pointer border border-white/70 text-gray-700 hover:bg-white/60">
-                  Sign In
-                </button>
-                <button onClick={() => { setIsOptimizeModalOpen(true); setIsMobileMenuOpen(false); }}
-                  className="w-full py-2.5 text-center bg-gradient-to-r from-teal-500 to-emerald-500 text-white text-sm font-semibold rounded-xl whitespace-nowrap cursor-pointer">
-                  Get Started →
-                </button>
-              </div>
+              {isAuthenticated ? (
+                <>
+                  {/* User Name and Email */}
+                  <div className="px-3 py-2 mb-2 border-b border-white/30">
+                    <p className="text-sm font-semibold text-gray-900">{userName}</p>
+                    {userEmail && (
+                      <p className="text-xs text-gray-600">{userEmail}</p>
+                    )}
+                  </div>
+                  
+                  {/* Navigation Links */}
+                  <a href="/profile" onClick={() => setIsMobileMenuOpen(false)}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors text-gray-700 hover:bg-teal-50/80 hover:text-teal-700">
+                    <i className="ri-user-3-line text-teal-500"></i>My Profile
+                  </a>
+                  <a href="/resume-builder" onClick={() => setIsMobileMenuOpen(false)}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors text-gray-700 hover:bg-teal-50/80 hover:text-teal-700">
+                    <i className="ri-magic-line text-teal-500"></i>Resume Builder
+                  </a>
+                  <a href="/jobs" onClick={() => setIsMobileMenuOpen(false)}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors text-gray-700 hover:bg-teal-50/80 hover:text-teal-700">
+                    <i className="ri-briefcase-line text-teal-500"></i>Jobs
+                  </a>
+
+                  {/* Sign Out */}
+                  <button
+                    onClick={() => {
+                      googleAuthService.clearTokens();
+                      setIsAuthenticated(false);
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 mt-3 pt-3 rounded-xl text-sm font-medium transition-colors text-red-600 hover:bg-red-50/80 border-t border-white/30"
+                  >
+                    <i className="ri-logout-box-line text-red-500"></i>
+                    <span>Sign Out</span>
+                  </button>
+                </>
+              ) : (
+                <>
+                  <a href="/resume-builder" onClick={() => setIsMobileMenuOpen(false)}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors text-gray-700 hover:bg-teal-50/80 hover:text-teal-700">
+                    <i className="ri-magic-line text-teal-500"></i>AI Resume Maker
+                  </a>
+                  <a href="/jobs" onClick={() => setIsMobileMenuOpen(false)}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors text-gray-700 hover:bg-teal-50/80 hover:text-teal-700">
+                    <i className="ri-briefcase-line text-teal-500"></i>Jobs
+                  </a>
+                  <a href="/profile" onClick={() => setIsMobileMenuOpen(false)}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors text-gray-700 hover:bg-teal-50/80 hover:text-teal-700">
+                    <i className="ri-user-3-line text-teal-500"></i>My Profile
+                  </a>
+                  <div className="pt-3 border-t border-white/50 space-y-2">
+                    <button onClick={() => { setIsAuthModalOpen(true); setIsMobileMenuOpen(false); }}
+                      className="w-full py-2.5 text-center text-sm font-medium rounded-xl transition-colors whitespace-nowrap cursor-pointer border border-white/70 text-gray-700 hover:bg-white/60">
+                      Sign In
+                    </button>
+                    <button onClick={() => { setIsAuthModalOpen(true); setIsMobileMenuOpen(false); }}
+                      className="w-full py-2.5 text-center bg-gradient-to-r from-teal-500 to-emerald-500 text-white text-sm font-semibold rounded-xl whitespace-nowrap cursor-pointer">
+                      Get Started →
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>

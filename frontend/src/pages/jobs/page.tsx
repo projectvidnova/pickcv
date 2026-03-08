@@ -1,7 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Navbar from '../../components/feature/Navbar';
 import Footer from '../../components/feature/Footer';
-import { jobs as mockJobs } from '../../mocks/jobs';
+import { apiService } from '../../services/api';
 
 type ViewMode = 'grid' | 'list';
 type SortOption = 'relevance' | 'newest' | 'salary';
@@ -16,11 +16,27 @@ interface Filters {
   datePosted: string;
 }
 
+interface Job {
+  id: number;
+  title: string;
+  company: string;
+  location: string;
+  job_type?: string;
+  experience_level?: string;
+  salary_min?: number;
+  salary_max?: number;
+  match_score?: number;
+  [key: string]: any;
+}
+
 const JobsPage = () => {
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [sortBy, setSortBy] = useState<SortOption>('relevance');
   const [savedJobs, setSavedJobs] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const jobsPerPage = 12;
 
   const [filters, setFilters] = useState<Filters>({
@@ -32,6 +48,26 @@ const JobsPage = () => {
     industries: [],
     datePosted: 'any'
   });
+
+  // Load jobs from API on mount
+  useEffect(() => {
+    const loadJobs = async () => {
+      setLoading(true);
+      try {
+        const result = await apiService.listJobs(0, 100);
+        if (result.success) {
+          setJobs(result.jobs || []);
+        } else {
+          setError(result.error || 'Failed to load jobs');
+        }
+      } catch (err) {
+        setError('Failed to load jobs');
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadJobs();
+  }, []);
 
   const jobTypes = ['Full-time', 'Part-time', 'Remote', 'Contract'];
   const experienceLevels = ['Entry', 'Mid', 'Senior', 'Lead'];
@@ -101,77 +137,44 @@ const JobsPage = () => {
   };
 
   const filteredJobs = useMemo(() => {
-    let result = [...mockJobs];
+    let result = [...jobs];
 
     if (filters.keyword) {
       const keyword = filters.keyword.toLowerCase();
       result = result.filter(job =>
         job.title.toLowerCase().includes(keyword) ||
-        job.company.toLowerCase().includes(keyword) ||
-        job.skills.some(skill => skill.toLowerCase().includes(keyword))
+        job.company.toLowerCase().includes(keyword)
       );
     }
 
     if (filters.location) {
       const location = filters.location.toLowerCase();
       result = result.filter(job =>
-        job.location.toLowerCase().includes(location)
+        job.location?.toLowerCase().includes(location)
       );
     }
 
     if (filters.jobTypes.length > 0) {
-      result = result.filter(job => filters.jobTypes.includes(job.type));
+      result = result.filter(job => filters.jobTypes.includes(job.job_type));
     }
 
     if (filters.experienceLevels.length > 0) {
-      result = result.filter(job => filters.experienceLevels.includes(job.experienceLevel));
+      result = result.filter(job => filters.experienceLevels.includes(job.experience_level));
     }
 
-    if (filters.industries.length > 0) {
-      result = result.filter(job => filters.industries.includes(job.industry));
-    }
-
-    const [minSalary, maxSalary] = filters.salaryRange;
-    result = result.filter(job => {
-      const salaryMatch = job.salary.match(/\$(\d+)k/);
-      if (salaryMatch) {
-        const salary = parseInt(salaryMatch[1]);
-        return salary >= minSalary && salary <= maxSalary;
-      }
-      return true;
-    });
-
-    if (filters.datePosted !== 'any') {
-      const now = new Date();
-      const cutoffDate = new Date();
-      
-      if (filters.datePosted === '24h') {
-        cutoffDate.setDate(now.getDate() - 1);
-      } else if (filters.datePosted === 'week') {
-        cutoffDate.setDate(now.getDate() - 7);
-      } else if (filters.datePosted === 'month') {
-        cutoffDate.setMonth(now.getMonth() - 1);
-      }
-
-      result = result.filter(job => new Date(job.postedDate) >= cutoffDate);
-    }
-
-    if (sortBy === 'newest') {
-      result.sort((a, b) => new Date(b.postedDate).getTime() - new Date(a.postedDate).getTime());
-    } else if (sortBy === 'salary') {
-      result.sort((a, b) => {
-        const getSalary = (str: string) => {
-          const match = str.match(/\$(\d+)k/);
-          return match ? parseInt(match[1]) : 0;
-        };
-        return getSalary(b.salary) - getSalary(a.salary);
+    if (filters.salaryRange) {
+      const [minSalary, maxSalary] = filters.salaryRange;
+      result = result.filter(job => {
+        const salary = job.salary_min || 0;
+        return salary >= minSalary * 1000 && salary <= maxSalary * 1000;
       });
-    } else {
-      result.sort((a, b) => b.matchPercentage - a.matchPercentage);
     }
+
+    // Sort by match score or relevance
+    result.sort((a, b) => (b.match_score || 0) - (a.match_score || 0));
 
     return result;
-  }, [filters, sortBy]);
+  }, [jobs, filters, sortBy]);
 
   const totalPages = Math.ceil(filteredJobs.length / jobsPerPage);
   const paginatedJobs = filteredJobs.slice(
@@ -520,7 +523,29 @@ const JobsPage = () => {
               </div>
 
               {/* Job Cards */}
-              {paginatedJobs.length === 0 ? (
+              {loading ? (
+                <div className="text-center py-16">
+                  <div className="w-20 h-20 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
+                    <i className="ri-loader-4-line text-3xl text-gray-400 animate-spin"></i>
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Loading jobs...</h3>
+                  <p className="text-gray-600">Please wait while we fetch available opportunities</p>
+                </div>
+              ) : error ? (
+                <div className="text-center py-16">
+                  <div className="w-20 h-20 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
+                    <i className="ri-alert-line text-3xl text-red-600"></i>
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Error loading jobs</h3>
+                  <p className="text-gray-600 mb-6">{error}</p>
+                  <button
+                    onClick={() => window.location.reload()}
+                    className="px-6 py-2.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors font-medium whitespace-nowrap cursor-pointer"
+                  >
+                    Retry
+                  </button>
+                </div>
+              ) : paginatedJobs.length === 0 ? (
                 <div className="text-center py-16">
                   <div className="w-20 h-20 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
                     <i className="ri-search-line text-3xl text-gray-400"></i>

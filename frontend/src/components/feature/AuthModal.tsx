@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { apiService } from '../../services/api';
+import { googleAuthService } from '../../services/googleAuthService';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -28,6 +30,8 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const [isAnimating, setIsAnimating] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [linkedinLoading, setLinkedinLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -54,21 +58,13 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
   const handleGoogleSignIn = () => {
     setGoogleLoading(true);
-    setTimeout(() => {
-      const user = MOCK_GOOGLE_USERS[0];
+    try {
+      googleAuthService.redirectToGoogleLogin();
+    } catch (error) {
+      console.error('Google sign in error:', error);
+      setError(error instanceof Error ? error.message : 'Failed to sign in with Google');
       setGoogleLoading(false);
-      onClose();
-      navigate('/onboarding', {
-        state: {
-          fromGoogle: true,
-          prefill: {
-            name: user.name,
-            email: user.email,
-            phone: user.phone,
-          },
-        },
-      });
-    }, 1800);
+    }
   };
 
   const handleLinkedInSignIn = () => {
@@ -90,18 +86,49 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     }, 1800);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onClose();
-    navigate('/onboarding', {
-      state: {
-        prefill: {
-          name: formData.name,
-          email: formData.email,
-          phone: '',
-        },
-      },
-    });
+    setError(null);
+    setIsLoading(true);
+
+    try {
+      if (isLogin) {
+        // Login
+        const result = await apiService.login(formData.email, formData.password);
+        if (result.success) {
+          onClose();
+          navigate('/onboarding', {
+            state: {
+              prefill: {
+                email: formData.email,
+                phone: '',
+              },
+            },
+          });
+        } else {
+          setError(result.error || 'Login failed');
+        }
+      } else {
+        // Register
+        const result = await apiService.register(
+          formData.email,
+          formData.password,
+          formData.name
+        );
+        if (result.success) {
+          // Show verification message
+          setError(null);
+          onClose();
+          alert('✅ Registration successful! Please check your email for a verification link. You must verify your email before you can login.');
+        } else {
+          setError(result.error || 'Registration failed');
+        }
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -283,12 +310,28 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
               )}
             </div>
 
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700 mb-3">
+                {error}
+              </div>
+            )}
+
             <button
               type="submit"
-              className="w-full bg-gradient-to-r from-teal-500 to-emerald-500 text-white py-3 rounded-xl text-sm font-semibold hover:from-teal-600 hover:to-emerald-600 transition-all active:scale-[0.98] flex items-center justify-center gap-2 whitespace-nowrap mt-1 cursor-pointer shadow-lg shadow-teal-500/20"
+              disabled={isLoading || googleLoading || linkedinLoading}
+              className="w-full bg-gradient-to-r from-teal-500 to-emerald-500 text-white py-3 rounded-xl text-sm font-semibold hover:from-teal-600 hover:to-emerald-600 transition-all active:scale-[0.98] flex items-center justify-center gap-2 whitespace-nowrap mt-1 cursor-pointer shadow-lg shadow-teal-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isLogin ? 'Sign In' : 'Create Account'}
-              <i className="ri-arrow-right-line text-base" />
+              {isLoading ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>{isLogin ? 'Signing in...' : 'Creating account...'}</span>
+                </>
+              ) : (
+                <>
+                  {isLogin ? 'Sign In' : 'Create Account'}
+                  <i className="ri-arrow-right-line text-base" />
+                </>
+              )}
             </button>
           </form>
 

@@ -3,14 +3,19 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List
+import logging
 
 from database import get_db
 from models import User, Resume
-from schemas import ResumeResponse, ResumeDetail
+from schemas import ResumeResponse, ResumeDetail, ResumeOptimizationRequest
 from routes.auth import get_current_user
 from services.resume_processor import resume_processor
 from services.gemini_service import gemini_service
+from services.scraper_service import scraper_service
+from services.gcs_service import gcs_service
+from config import settings
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -41,18 +46,37 @@ async def upload_resume(
     # Generate embedding
     embedding = await gemini_service.generate_embedding(raw_text)
     
-    # Create resume record
+    # Create resume record in database first (to get ID)
     new_resume = Resume(
         user_id=current_user.id,
         title=title,
         original_filename=file.filename,
         raw_text=raw_text,
-        embedding=embedding
+        embedding=embedding,
+        file_format=file.filename.split('.')[-1].lower()
     )
     
     db.add(new_resume)
     await db.commit()
     await db.refresh(new_resume)
+    
+    # Upload file to GCS (if configured)
+    if settings.storage_backend == "gcs" and gcs_service.client:
+        file_path = gcs_service.upload_resume(
+            user_id=current_user.id,
+            resume_id=new_resume.id,
+            file_data=file_data,
+            filename=file.filename,
+            content_type=file.content_type
+        )
+        
+        if file_path:
+            new_resume.file_path = file_path
+            await db.commit()
+            await db.refresh(new_resume)
+            logger.info(f"Resume {new_resume.id} stored in GCS: {file_path}")
+        else:
+            logger.warning(f"Failed to upload resume {new_resume.id} to GCS - storing locally only")
     
     return new_resume
 
@@ -115,6 +139,73 @@ async def optimize_resume(
     return resume
 
 
+@router.post("/{resume_id}/optimize-for-job")
+async def optimize_resume_for_job(
+    resume_id: int,
+    request: ResumeOptimizationRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Optimize resume for a specific job with detailed comparison.
+    
+    Args:
+        resume_id: ID of resume to optimize
+        request: Request body containing job_title, job_description (optional), job_link (optional)
+    """
+    result = await db.execute(
+        select(Resume).where(Resume.id == resume_id, Resume.user_id == current_user.id)
+    )
+    resume = result.scalar_one_or_none()
+    
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    
+    job_title = request.job_title
+    job_description = request.job_description
+    job_link = request.job_link
+    
+    # Get job description from link if provided, otherwise use paste
+    if job_link:
+        job_description = scraper_service.scrape_job_description(job_link)
+        if not job_description:
+            raise HTTPException(
+                status_code=400, 
+                detail="Failed to scrape job description from link. Please try pasting the description instead."
+            )
+    elif not job_description:
+        raise HTTPException(status_code=400, detail="Either job_description or job_link must be provided")
+    
+    # Optimize resume for the specific job
+    optimization_result = await gemini_service.optimize_resume_for_job(
+        resume_text=resume.raw_text,
+        job_description=job_description,
+        job_title=job_title
+    )
+    
+    if "error" in optimization_result:
+        raise HTTPException(status_code=500, detail=f"Optimization failed: {optimization_result['error']}")
+    
+    # Generate detailed comparison
+    comparison = await gemini_service.generate_comparison_analysis(
+        original_resume=resume.raw_text,
+        optimized_resume=optimization_result.get("optimized_resume", ""),
+        job_description=job_description
+    )
+    
+    return {
+        "resume_id": resume_id,
+        "job_title": job_title,
+        "optimized_resume": optimization_result.get("optimized_resume", ""),
+        "changes_made": optimization_result.get("changes_made", []),
+        "key_improvements": optimization_result.get("key_improvements", []),
+        "keywords_added": optimization_result.get("keywords_added", []),
+        "match_score": optimization_result.get("match_score", 0),
+        "ats_optimized": optimization_result.get("ats_optimized", False),
+        "comparison": comparison,
+        "job_link": job_link
+    }
+
+
 @router.delete("/{resume_id}")
 async def delete_resume(
     resume_id: int,
@@ -130,6 +221,14 @@ async def delete_resume(
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
     
+    # Delete file from GCS if it exists
+    if resume.file_path and settings.storage_backend == "gcs":
+        # Extract blob name from GCS path (gs://bucket/path -> path)
+        blob_name = resume.file_path.replace(f"gs://{settings.gcs_bucket_name}/", "")
+        gcs_service.delete_resume(blob_name)
+        logger.info(f"Resume file deleted from GCS: {resume.file_path}")
+    
+    # Delete database record
     await db.delete(resume)
     await db.commit()
     

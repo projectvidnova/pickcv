@@ -20,6 +20,7 @@
     "firebase": "12.0.0",
     "@supabase/supabase-js": "2.57.4",
     "@stripe/react-stripe-js": "4.0.2",
+    "@react-oauth/google": "^0.12.1",
     "recharts": "3.2.0",
     "lucide-react": "^0.469.0"
   },

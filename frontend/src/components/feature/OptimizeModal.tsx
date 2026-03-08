@@ -89,19 +89,95 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
     return false;
   };
 
-  const startProcessing = () => {
-    let step = 0;
-    const interval = setInterval(() => {
-      step++;
+  const startProcessing = async () => {
+    // Check if user is authenticated
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+      alert('Please sign in first to optimize your resume.');
+      setCurrentStep(1);
+      onClose();
+      return;
+    }
+    
+    // Show processing steps
+    for (let step = 1; step <= 4; step++) {
       setProcessingStep(step);
-      if (step >= 4) {
-        clearInterval(interval);
-        setTimeout(() => {
-          navigate('/optimized-resume');
-          handleClose();
-        }, 800);
+      await new Promise(resolve => setTimeout(resolve, 1200));
+    }
+    
+    // Call backend API
+    try {
+      const formData = new FormData();
+      if (uploadedFile) {
+        formData.append('file', uploadedFile);
+        formData.append('title', uploadedFile.name.replace(/\.[^/.]+$/, ""));
       }
-    }, 1200);
+      
+      // First upload the resume
+      console.log('Uploading resume with token:', token.substring(0, 20) + '...');
+      const uploadResponse = await fetch(`${import.meta.env.VITE_API_URL}/resume/upload`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+      
+      if (!uploadResponse.ok) {
+        const errorText = await uploadResponse.text();
+        console.error('Upload failed:', uploadResponse.status, errorText);
+        throw new Error(`Failed to upload resume (${uploadResponse.status}): ${errorText}`);
+      }
+      
+      const uploadedResume = await uploadResponse.json();
+      const resumeId = uploadedResume.id;
+      
+      // Now optimize for the job
+      const jobTitle = jdMode === 'title' ? jdTitle : 'Target Role';
+      const jobDescription = jdMode === 'paste' ? jdPaste : undefined;
+      const jobLink = jdMode === 'link' ? jdLink : undefined;
+      
+      const optimizeResponse = await fetch(
+        `${import.meta.env.VITE_API_URL}/resume/${resumeId}/optimize-for-job`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            job_title: jobTitle,
+            job_description: jobDescription,
+            job_link: jobLink
+          })
+        }
+      );
+      
+      if (!optimizeResponse.ok) {
+        const errorText = await optimizeResponse.text();
+        console.error('Optimization failed:', optimizeResponse.status, errorText);
+        throw new Error(`Failed to optimize resume (${optimizeResponse.status}): ${errorText}`);
+      }
+      
+      const optimizationData = await optimizeResponse.json();
+      
+      // Store optimization data for the comparison page
+      sessionStorage.setItem('optimizationData', JSON.stringify({
+        resumeId,
+        ...optimizationData
+      }));
+      
+      setProcessingStep(4);
+      setTimeout(() => {
+        navigate('/resume-comparison');
+        handleClose();
+      }, 800);
+    } catch (error) {
+      console.error('Optimization error:', error);
+      alert('Failed to optimize resume. Please try again.');
+      setProcessingStep(0);
+      setCurrentStep(2);
+    }
   };
 
   const handleClose = () => {

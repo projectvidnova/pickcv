@@ -1,5 +1,6 @@
 
 import { useState, useRef } from 'react';
+import { apiService } from '../../../services/api';
 
 interface ResumeData {
   file: File | null;
@@ -17,6 +18,7 @@ export default function StepResumeUpload({ data, onChange }: StepResumeUploadPro
   const [isDragging, setIsDragging] = useState(false);
   const [localExtracting, setLocalExtracting] = useState(false);
   const [localExtracted, setLocalExtracted] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isValidFile = (file: File): boolean => {
@@ -28,16 +30,32 @@ export default function StepResumeUpload({ data, onChange }: StepResumeUploadPro
     return validTypes.includes(file.type) && file.size <= 5 * 1024 * 1024;
   };
 
-  const handleFile = (file: File) => {
+  const handleFile = async (file: File) => {
     if (!isValidFile(file)) return;
     setLocalExtracting(true);
     setLocalExtracted(false);
+    setError(null);
     onChange({ file, fileName: file.name, extracting: true, extracted: false });
-    setTimeout(() => {
+
+    // Upload to API
+    try {
+      const result = await apiService.uploadResume(file.name.replace(/\.[^.]+$/, ''), file);
+      if (result.success) {
+        setLocalExtracting(false);
+        setLocalExtracted(true);
+        onChange({ file, fileName: file.name, extracting: false, extracted: true });
+      } else {
+        setError(result.error || 'Upload failed');
+        setLocalExtracting(false);
+        setLocalExtracted(false);
+        onChange({ file: null, fileName: '', extracting: false, extracted: false });
+      }
+    } catch (err) {
+      setError('Failed to upload resume');
       setLocalExtracting(false);
-      setLocalExtracted(true);
-      onChange({ file, fileName: file.name, extracting: false, extracted: true });
-    }, 2500);
+      setLocalExtracted(false);
+      onChange({ file: null, fileName: '', extracting: false, extracted: false });
+    }
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -77,6 +95,19 @@ export default function StepResumeUpload({ data, onChange }: StepResumeUploadPro
       </div>
 
       <div className="space-y-5">
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+            <div className="flex items-start gap-3">
+              <div className="w-5 h-5 flex items-center justify-center text-red-500 mt-0.5 flex-shrink-0">
+                <i className="ri-error-warning-line text-lg" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-red-800 mb-0.5">Upload failed</p>
+                <p className="text-xs text-red-700">{error}</p>
+              </div>
+            </div>
+          </div>
+        )}
         {!data.fileName ? (
           /* ── Drop Zone ── */
           <div

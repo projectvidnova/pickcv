@@ -1,5 +1,6 @@
 """Database models for PickCV application - Production Ready."""
-from sqlalchemy import Column, Integer, String, DateTime, Text, Float, ForeignKey, Boolean, Date, Array, JSONB
+from sqlalchemy import Column, Integer, String, DateTime, Text, Float, ForeignKey, Boolean, Date, ARRAY
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from pgvector.sqlalchemy import Vector
@@ -22,6 +23,8 @@ class User(Base):
     experience_level = Column(String(50))  # Entry, Mid, Senior, Lead
     work_mode = Column(String(50))  # Remote, Hybrid, On-site
     is_active = Column(Boolean, default=True, index=True)
+    is_verified = Column(Boolean, default=False, index=True)  # Email verified
+    email_verified_at = Column(DateTime(timezone=True))  # When email was verified
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     last_login = Column(DateTime(timezone=True))
@@ -43,8 +46,8 @@ class UserProfile(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False)
     bio = Column(Text)
-    preferred_locations = Column(Array(String(255)))  # Array of locations
-    preferred_job_types = Column(Array(String(50)))  # ['Full-time', 'Remote', 'Hybrid']
+    preferred_locations = Column(ARRAY(String(255)))  # Array of locations
+    preferred_job_types = Column(ARRAY(String(50)))  # ['Full-time', 'Remote', 'Hybrid']
     career_stage = Column(String(50))
     industry_focus = Column(String(255))
     notification_preferences = Column(JSONB, default={})
@@ -112,16 +115,6 @@ class UserSkill(Base):
     is_primary = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
-    # Unique constraint on user + skill
-    __table_args__ = (
-        {
-            "indexes": [
-                Column("user_id"),
-                Column("skill_name"),
-            ]
-        },
-    )
-    
     # Relationships
     user = relationship("User", back_populates="skills")
 
@@ -143,7 +136,7 @@ class WorkExperience(Base):
     is_current = Column(Boolean, default=False)
     
     description = Column(Text)
-    achievements = Column(Array(Text))  # Array of bullet points
+    achievements = Column(ARRAY(Text))  # Array of bullet points
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -209,7 +202,7 @@ class Job(Base):
     external_url = Column(String(500))
     
     # AI
-    keywords = Column(Array(String(255)))
+    keywords = Column(ARRAY(String(255)))
     embedding = Column(Vector(768))  # For semantic search
     
     # Status
@@ -284,8 +277,8 @@ class ResumeAnalysis(Base):
     ats_score_breakdown = Column(JSONB)  # {formatting: 85, keywords: 75, structure: 90}
     
     # Keywords
-    matched_keywords = Column(Array(String(255)))
-    missing_keywords = Column(Array(String(255)))
+    matched_keywords = Column(ARRAY(String(255)))
+    missing_keywords = Column(ARRAY(String(255)))
     keyword_frequency = Column(JSONB)  # {keyword: count}
     
     # Suggestions

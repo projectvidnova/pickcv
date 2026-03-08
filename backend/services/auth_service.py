@@ -17,17 +17,21 @@ class AuthService:
         """Hash a password."""
         return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
     
-    def create_access_token(self, data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    def create_access_token(self, data, expires_delta: Optional[timedelta] = None) -> str:
         """Create a JWT access token.
         
         Args:
-            data: Data to encode in the token
+            data: Data to encode in the token (can be dict or int user_id)
             expires_delta: Optional expiration time delta
             
         Returns:
             Encoded JWT token
         """
-        to_encode = data.copy()
+        # Handle both dict and integer user_id inputs
+        if isinstance(data, int):
+            to_encode = {"sub": str(data)}
+        else:
+            to_encode = data.copy()
         
         if expires_delta:
             expire = datetime.utcnow() + expires_delta
@@ -52,6 +56,62 @@ class AuthService:
             return payload
         except JWTError:
             return None
+    
+    def create_verification_token(self, user_id: int) -> str:
+        """Create a verification token for email confirmation.
+        
+        Args:
+            user_id: User ID to encode in token
+            
+        Returns:
+            Encoded verification token (24 hour expiration)
+        """
+        to_encode = {"sub": str(user_id), "type": "email_verification"}
+        expire = datetime.utcnow() + timedelta(hours=24)
+        to_encode.update({"exp": expire})
+        
+        encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
+        return encoded_jwt
+    
+    def decode_verification_token(self, token: str) -> Optional[int]:
+        """Decode and verify an email verification token.
+        
+        Args:
+            token: Verification token to decode
+            
+        Returns:
+            User ID if valid, None if invalid/expired
+        """
+        try:
+            payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+            
+            # Verify token type
+            if payload.get("type") != "email_verification":
+                return None
+            
+            user_id = payload.get("sub")
+            if user_id is None:
+                return None
+            
+            return int(user_id)
+        except JWTError:
+            return None
+    
+    def create_refresh_token(self, user_id: int) -> str:
+        """Create a JWT refresh token for token refresh operations.
+        
+        Args:
+            user_id: User ID to encode in token
+            
+        Returns:
+            Encoded refresh token (7 day expiration)
+        """
+        to_encode = {"sub": str(user_id), "type": "refresh"}
+        expire = datetime.utcnow() + timedelta(days=settings.refresh_token_expire_days)
+        to_encode.update({"exp": expire})
+        
+        encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
+        return encoded_jwt
 
 
 auth_service = AuthService()

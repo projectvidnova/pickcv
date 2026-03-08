@@ -3,7 +3,7 @@ import logging
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.middleware.gzip import GZIPMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
 from config import settings
@@ -31,7 +31,7 @@ app.add_middleware(
 )
 
 # 2. GZIP Compression - Reduce response size
-app.add_middleware(GZIPMiddleware, minimum_size=1000)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # 3. CORS Middleware - Handle cross-origin requests
 app.add_middleware(
@@ -56,8 +56,10 @@ async def add_security_headers(request: Request, call_next):
         response.headers[header_name] = header_value
     
     # Remove vulnerable headers
-    response.headers.pop("Server", None)  # Don't expose server info
-    response.headers.pop("X-Powered-By", None)
+    if "Server" in response.headers:
+        del response.headers["Server"]  # Don't expose server info
+    if "X-Powered-By" in response.headers:
+        del response.headers["X-Powered-By"]
     
     return response
 

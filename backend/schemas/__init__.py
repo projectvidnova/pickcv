@@ -28,6 +28,15 @@ class Token(BaseModel):
     token_type: str = "bearer"
 
 
+# Resume Optimization Request
+class ResumeOptimizationRequest(BaseModel):
+    job_title: str = Field(..., min_length=1)
+    job_description: Optional[str] = None
+    job_link: Optional[str] = None
+    
+    class Config:
+        from_attributes = True
+
 # Resume Schemas
 class ResumeBase(BaseModel):
     title: str

@@ -1,17 +1,19 @@
 """Gemini AI service for resume analysis and optimization."""
-import google.generativeai as genai
+import google.genai as genai
 from config import settings
 from typing import Dict, List, Optional
+import json
 
-# Configure Gemini
-genai.configure(api_key=settings.gemini_api_key)
+# Configure Gemini with API key
+client = genai.Client(api_key=settings.gemini_api_key)
 
 
 class GeminiService:
     """Service for interacting with Google Gemini AI."""
     
     def __init__(self):
-        self.model = genai.GenerativeModel('gemini-1.5-flash')
+        self.model_name = 'gemini-1.5-flash'
+        self.client = client
     
     async def analyze_resume(self, resume_text: str) -> Dict:
         """Analyze resume for ATS compatibility and provide feedback.
@@ -50,9 +52,11 @@ class GeminiService:
         """
         
         try:
-            response = await self.model.generate_content_async(prompt)
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt
+            )
             # Parse JSON response
-            import json
             result = json.loads(response.text.strip())
             return result
         except Exception as e:
@@ -93,7 +97,10 @@ class GeminiService:
         """
         
         try:
-            response = await self.model.generate_content_async(prompt)
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt
+            )
             return response.text.strip()
         except Exception as e:
             return f"Error optimizing resume: {str(e)}"
@@ -108,12 +115,11 @@ class GeminiService:
             List of floats representing the embedding
         """
         try:
-            result = genai.embed_content(
+            result = self.client.models.embed_content(
                 model="models/embedding-001",
-                content=text,
-                task_type="retrieval_document"
+                content=text
             )
-            return result['embedding']
+            return result.embedding
         except Exception as e:
             # Return zero vector on error
             return [0.0] * 768
@@ -136,54 +142,158 @@ class GeminiService:
         """
         
         try:
-            response = await self.model.generate_content_async(prompt)
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt
+            )
             skills_text = response.text.strip()
             skills = [skill.strip() for skill in skills_text.split(',')]
             return skills
         except Exception as e:
             return []
     
-    async def identify_skill_gaps(
+    async def optimize_resume_for_job(
         self, 
-        user_skills: List[str], 
-        job_requirements: List[str]
+        resume_text: str, 
+        job_description: str,
+        job_title: Optional[str] = None
     ) -> Dict:
-        """Identify skill gaps and provide learning recommendations.
+        """Optimize resume for a specific job using Gemini Flash.
         
         Args:
-            user_skills: List of user's current skills
-            job_requirements: List of required skills for target jobs
+            resume_text: Original resume text
+            job_description: Job description or scraped job content
+            job_title: Optional job title for context
             
         Returns:
-            Dictionary with skill gap analysis
+            Dictionary with optimized resume and comparison
         """
+        context = f" for a {job_title} position" if job_title else ""
+        
         prompt = f"""
-        Analyze the skill gap between current skills and job market requirements.
+        You are an expert resume writer and ATS specialist. Your task is to optimize 
+        a resume for a specific job posting{context}.
         
-        Current Skills: {', '.join(user_skills)}
-        Required Skills: {', '.join(job_requirements)}
+        ORIGINAL RESUME:
+        {resume_text}
         
-        Provide analysis in JSON format:
+        JOB DESCRIPTION:
+        {job_description}
+        
+        Please provide a response in the following JSON format:
         {{
-            "missing_skills": ["skill1", "skill2", ...],
-            "recommended_skills": ["skill1", "skill2", ...],
-            "learning_paths": ["path1", "path2", ...],
-            "estimated_time": "<time estimate>"
+            "optimized_resume": "<complete optimized resume text following ATS best practices>",
+            "changes_made": [
+                {{
+                    "section": "<section name>",
+                    "what_changed": "<description of what changed>",
+                    "why": "<explanation of why this change improves the match>"
+                }},
+                ...
+            ],
+            "key_improvements": [
+                "<improvement 1>",
+                "<improvement 2>",
+                ...
+            ],
+            "keywords_added": ["keyword1", "keyword2", ...],
+            "match_score": <0-100>,
+            "ats_optimized": true/false
         }}
         
-        Focus on the top 3 most important missing skills and provide 
-        high-authority learning paths (courses, certifications).
+        Requirements:
+        - Use single-column layout ONLY
+        - Format dates as MM/YYYY consistently
+        - No tables, graphics, or complex formatting
+        - Focus on quantifiable achievements
+        - Match key terms from the job description
+        - Improve readability while maintaining professionalism
+        - Include action verbs and impact metrics
         """
         
         try:
-            response = await self.model.generate_content_async(prompt)
-            import json
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt
+            )
             result = json.loads(response.text.strip())
             return result
         except Exception as e:
             return {
-                "missing_skills": [],
-                "error": str(e)
+                "error": str(e),
+                "optimized_resume": resume_text,
+                "changes_made": []
+            }
+    
+    async def generate_comparison_analysis(
+        self,
+        original_resume: str,
+        optimized_resume: str,
+        job_description: str
+    ) -> Dict:
+        """Generate detailed comparison between original and optimized resume.
+        
+        Args:
+            original_resume: Original resume text
+            optimized_resume: Optimized resume text
+            job_description: Job description for context
+            
+        Returns:
+            Comparison analysis with specific changes highlighted
+        """
+        prompt = f"""
+        Compare the original and optimized resume below, and provide a detailed analysis.
+        
+        ORIGINAL RESUME:
+        {original_resume}
+        
+        OPTIMIZED RESUME:
+        {optimized_resume}
+        
+        JOB DESCRIPTION:
+        {job_description}
+        
+        Provide analysis in JSON format:
+        {{
+            "summary": "<brief summary of changes>",
+            "detailed_changes": [
+                {{
+                    "before": "<original text>",
+                    "after": "<optimized text>",
+                    "reason": "<why this is better>",
+                    "impact": "<how this improves job matching>"
+                }},
+                ...
+            ],
+            "improvement_areas": [
+                {{
+                    "area": "<section or aspect>",
+                    "improvements": "<list of improvements>"
+                }},
+                ...
+            ],
+            "ats_improvements": [
+                "<improvement 1>",
+                "<improvement 2>",
+                ...
+            ],
+            "overall_improvement": "<percentage or assessment>"
+        }}
+        
+        Focus on at most 5-7 key changes. Be specific with examples.
+        """
+        
+        try:
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt
+            )
+            result = json.loads(response.text.strip())
+            return result
+        except Exception as e:
+            return {
+                "error": str(e),
+                "detailed_changes": []
             }
 
 
