@@ -5,6 +5,13 @@
 .env.production
 .env.*.local
 *.env
+env.yaml
+env.prod.yaml
+backend/env.yaml
+backend/env.prod.yaml
+
+# Firebase
+.firebase/
 
 # Python
 __pycache__/

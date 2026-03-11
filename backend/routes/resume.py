@@ -196,6 +196,16 @@ async def optimize_resume_for_job(
         "resume_id": resume_id,
         "job_title": job_title,
         "optimized_resume": optimization_result.get("optimized_resume", ""),
+        "name": optimization_result.get("name", ""),
+        "title": optimization_result.get("title", ""),
+        "email": optimization_result.get("email", ""),
+        "phone": optimization_result.get("phone", ""),
+        "linkedin": optimization_result.get("linkedin", ""),
+        "location": optimization_result.get("location", ""),
+        "professional_summary": optimization_result.get("professional_summary", ""),
+        "experience": optimization_result.get("experience", []),
+        "skills": optimization_result.get("skills", []),
+        "education": optimization_result.get("education", []),
         "changes_made": optimization_result.get("changes_made", []),
         "key_improvements": optimization_result.get("key_improvements", []),
         "keywords_added": optimization_result.get("keywords_added", []),
@@ -233,3 +243,122 @@ async def delete_resume(
     await db.commit()
     
     return {"message": "Resume deleted successfully"}
+
+
+@router.post("/{resume_id}/save-edited")
+async def save_edited_resume(
+    resume_id: int,
+    resume_data: dict,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Save edited resume data with selected template.
+    
+    Args:
+        resume_id: ID of the base resume
+        resume_data: Edited resume content with structure:
+            {
+                "name": str,
+                "title": str,
+                "email": str,
+                "phone": str,
+                "linkedin": str,
+                "location": str,
+                "summary": str,
+                "experience": [...],
+                "skills": [...],
+                "education": [...],
+                "template_id": str  # selected template name
+            }
+    
+    Returns:
+        Success message with saved resume ID
+    """
+    # Get original resume to verify ownership
+    result = await db.execute(
+        select(Resume).where(Resume.id == resume_id, Resume.user_id == current_user.id)
+    )
+    original_resume = result.scalar_one_or_none()
+    
+    if not original_resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    
+    # Create new resume version with edited content
+    new_resume = Resume(
+        user_id=current_user.id,
+        title=f"{resume_data.get('name', 'Resume')} - {resume_data.get('template_id', 'custom').title()}",
+        template_name=resume_data.get('template_id', 'modern'),
+        is_optimized=True,
+        contact_info={
+            "name": resume_data.get('name'),
+            "email": resume_data.get('email'),
+            "phone": resume_data.get('phone'),
+            "linkedin": resume_data.get('linkedin'),
+            "location": resume_data.get('location')
+        },
+        professional_summary=resume_data.get('summary'),
+        sections={
+            "experience": resume_data.get('experience', []),
+            "skills": resume_data.get('skills', []),
+            "education": resume_data.get('education', [])
+        },
+        raw_text=original_resume.raw_text,  # Keep original raw text
+        optimized_text=_format_resume_as_text(resume_data),  # Convert to text format
+        ats_score=original_resume.ats_score,
+        optimization_target_job_id=original_resume.optimization_target_job_id
+    )
+    
+    db.add(new_resume)
+    await db.commit()
+    await db.refresh(new_resume)
+    
+    return {
+        "message": "Resume saved successfully",
+        "resume_id": new_resume.id,
+        "title": new_resume.title
+    }
+
+
+def _format_resume_as_text(data: dict) -> str:
+    """Convert structured resume data to text format."""
+    lines = []
+    
+    # Header
+    lines.append(data.get('name', '').upper())
+    lines.append(data.get('title', ''))
+    lines.append(f"{data.get('email', '')} | {data.get('phone', '')} | {data.get('location', '')}")
+    if data.get('linkedin'):
+        lines.append(data.get('linkedin'))
+    lines.append("")
+    
+    # Summary
+    if data.get('summary'):
+        lines.append("PROFESSIONAL SUMMARY")
+        lines.append(data.get('summary'))
+        lines.append("")
+    
+    # Experience
+    if data.get('experience'):
+        lines.append("WORK EXPERIENCE")
+        for exp in data.get('experience', []):
+            lines.append(f"\n{exp.get('role', '')} | {exp.get('company', '')} | {exp.get('location', '')}")
+            lines.append(exp.get('period', ''))
+            for bullet in exp.get('bullets', []):
+                lines.append(f"• {bullet}")
+        lines.append("")
+    
+    # Skills
+    if data.get('skills'):
+        lines.append("SKILLS")
+        lines.append(", ".join(data.get('skills', [])))
+        lines.append("")
+    
+    # Education
+    if data.get('education'):
+        lines.append("EDUCATION")
+        for edu in data.get('education', []):
+            lines.append(f"{edu.get('degree', '')} | {edu.get('school', '')} | {edu.get('period', '')}")
+        lines.append("")
+    
+    return "\n".join(lines)
+

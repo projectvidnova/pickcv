@@ -293,8 +293,8 @@ export default function JourneyTimeline({ currentStep }: JourneyTimelineProps) {
       {/* Bottom stats */}
       <div className="flex items-center gap-5 flex-shrink-0 pb-1">
         <div className="text-center">
-          <div className="text-sm font-black text-slate-800">50K+</div>
-          <div className="text-[9px] text-slate-400 font-semibold">Hired</div>
+          <div className="text-sm font-black text-slate-800">New</div>
+          <div className="text-[9px] text-slate-400 font-semibold">Launch</div>
         </div>
         <div className="w-px h-5 bg-slate-200" />
         <div className="text-center">

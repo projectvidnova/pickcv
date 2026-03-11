@@ -9,15 +9,15 @@ interface AuthModalProps {
 }
 
 const MOCK_GOOGLE_USERS = [
-  { name: 'Alex Johnson', email: 'alex.johnson@gmail.com', phone: '' },
-  { name: 'Sarah Williams', email: 'sarah.williams@gmail.com', phone: '' },
-  { name: 'Michael Chen', email: 'michael.chen@gmail.com', phone: '' },
+  { name: 'Adithya Kumar', email: 'adithya.kumar@gmail.com', phone: '' },
+  { name: 'Priya Verma', email: 'priya.verma@gmail.com', phone: '' },
+  { name: 'Rahul Sharma', email: 'rahul.sharma@gmail.com', phone: '' },
 ];
 
 const MOCK_LINKEDIN_USERS = [
-  { name: 'Jordan Rivera', email: 'jordan.rivera@outlook.com', phone: '' },
-  { name: 'Priya Sharma', email: 'priya.sharma@outlook.com', phone: '' },
-  { name: 'Daniel Park', email: 'daniel.park@outlook.com', phone: '' },
+  { name: 'Neha Patel', email: 'neha.patel@outlook.com', phone: '' },
+  { name: 'Arjun Reddy', email: 'arjun.reddy@outlook.com', phone: '' },
+  { name: 'Kavitha Nair', email: 'kavitha.nair@outlook.com', phone: '' },
 ];
 
 export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
@@ -176,7 +176,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
           <div className="text-center mb-7">
             <div className="inline-flex items-center justify-center mb-5">
               <img
-                src="https://static.readdy.ai/image/2eefbf55cd16506717139f8211e944ba/60e91a9d392df6be7dd22839478ab3ac.png"
+                src="https://static.readdy.ai/image/118f59b514d655f060b6a8ef60c2b755/e0bd9983c8b60cb1b82cd43c64b6d0bd.png"
                 alt="PickCV"
                 className="h-8 w-auto"
               />
@@ -254,7 +254,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                   <input
                     type="text" id="name" name="name" value={formData.name}
                     onChange={handleChange} onFocus={() => setFocusedField('name')} onBlur={() => setFocusedField(null)}
-                    placeholder="John Doe"
+                    placeholder="e.g. Rahul Sharma"
                     className="w-full px-4 py-3 text-sm bg-transparent focus:outline-none text-gray-900 placeholder:text-gray-400 rounded-xl"
                     required={!isLogin}
                   />

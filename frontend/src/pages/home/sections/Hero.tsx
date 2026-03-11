@@ -12,7 +12,7 @@ export default function Hero() {
     { icon: 'ri-user-add-line', title: 'Join Platform', description: 'Create your profile', color: 'from-teal-500 to-teal-600', pillColor: 'bg-teal-100 text-teal-700', detail: 'Sign up in 2 minutes' },
     { icon: 'ri-file-edit-line', title: 'Build Resume', description: 'AI-powered polish', color: 'from-emerald-500 to-emerald-600', pillColor: 'bg-emerald-100 text-emerald-700', detail: 'ATS-optimized format' },
     { icon: 'ri-graduation-cap-line', title: 'Learn Skills', description: 'Close skill gaps', color: 'from-amber-500 to-orange-500', pillColor: 'bg-amber-100 text-amber-700', detail: 'Personalized courses' },
-    { icon: 'ri-briefcase-4-line', title: 'Get Hired', description: 'Land your dream job', color: 'from-green-500 to-emerald-600', pillColor: 'bg-green-100 text-green-700', detail: '98% success rate' },
+    { icon: 'ri-briefcase-4-line', title: 'Get Hired', description: 'Land your dream job', color: 'from-green-500 to-emerald-600', pillColor: 'bg-green-100 text-green-700', detail: 'Smart job matching' },
   ];
 
   useEffect(() => {
@@ -48,7 +48,7 @@ export default function Hero() {
               <div className="max-w-2xl lg:pr-8">
                 <div className="inline-flex items-center gap-2 glass-badge text-teal-700 px-5 py-2.5 rounded-full text-sm font-medium mb-8">
                   <i className="ri-sparkling-fill text-teal-500"></i>
-                  Trusted by 50K+ job seekers
+                  AI-Powered Resume Builder
                 </div>
 
                 <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold text-gray-900 leading-[1.1] tracking-tight mb-6">
@@ -140,10 +140,10 @@ export default function Hero() {
                   <div className="relative glass-card rounded-3xl p-8 max-w-md mx-auto z-10 float-slow">
                     <div className="flex items-start gap-4 mb-6">
                       <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center text-white text-2xl font-bold shadow-lg shadow-teal-500/30">
-                        JD
+                        AS
                       </div>
                       <div className="flex-1">
-                        <h3 className="text-xl font-bold text-gray-900">John Doe</h3>
+                        <h3 className="text-xl font-bold text-gray-900">Adithya Sharma</h3>
                         <p className="text-teal-600 font-medium">Product Manager</p>
                       </div>
                       <div className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
@@ -157,7 +157,7 @@ export default function Hero() {
                           <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Experience</span>
                         </div>
                         <div className="rounded-xl p-3 glass">
-                          <p className="text-sm font-semibold text-gray-800">Senior PM at TechCorp</p>
+                          <p className="text-sm font-semibold text-gray-800">Senior PM at Razorpay</p>
                           <p className="text-xs text-gray-500">2021 - Present</p>
                         </div>
                       </div>
@@ -177,14 +177,14 @@ export default function Hero() {
                       <i className="ri-sparkling-fill"></i>AI Enhanced
                     </div>
                     <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-gray-900 text-white px-5 py-2 rounded-full text-sm font-semibold shadow-xl flex items-center gap-2 whitespace-nowrap">
-                      <i className="ri-briefcase-fill text-amber-400"></i>$145k Offer Received
+                      <i className="ri-briefcase-fill text-amber-400"></i>₹24 LPA Offer Received
                     </div>
                   </div>
 
                   {/* Floating Step Cards */}
                   {steps.map((step, index) => {
                     const positions = [
-                      '-top-4 -left-8',
+                      '-top-4 -left-16',
                       'top-8 -right-12',
                       '-bottom-4 -left-12',
                       'bottom-8 -right-8',
@@ -252,9 +252,9 @@ export default function Hero() {
               <div className="lg:hidden flex flex-col items-center gap-6">
                 <div className="glass-card rounded-2xl p-6 max-w-sm w-full relative">
                   <div className="flex items-start gap-4 mb-4">
-                    <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center text-white text-xl font-bold">JD</div>
+                    <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center text-white text-xl font-bold">AS</div>
                     <div className="flex-1">
-                      <h3 className="text-lg font-bold text-gray-900">John Doe</h3>
+                      <h3 className="text-lg font-bold text-gray-900">Adithya Sharma</h3>
                       <p className="text-teal-600 text-sm font-medium">Product Manager</p>
                     </div>
                     <div className="bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs font-bold">Hired</div>
@@ -269,7 +269,7 @@ export default function Hero() {
                     <span className="text-sm font-bold text-teal-600">98% Match</span>
                   </div>
                   <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-gray-900 text-white px-4 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap">
-                    <i className="ri-briefcase-fill text-amber-400"></i>$145k Offer
+                    <i className="ri-briefcase-fill text-amber-400"></i>₹24 LPA Offer
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3 w-full max-w-sm mt-4">

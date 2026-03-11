@@ -5,6 +5,7 @@
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+const GOOGLE_REDIRECT_URI = import.meta.env.VITE_GOOGLE_REDIRECT_URI || `${typeof window !== 'undefined' ? window.location.origin : ''}/auth/callback`;
 
 interface GoogleAuthResponse {
   access_token: string;
@@ -70,7 +71,7 @@ export const googleAuthService = {
 
     const params = new URLSearchParams({
       client_id: GOOGLE_CLIENT_ID,
-      redirect_uri: `${window.location.origin}/auth/callback`,
+      redirect_uri: GOOGLE_REDIRECT_URI,
       response_type: 'code',
       scope: 'openid email profile',
       state: state,

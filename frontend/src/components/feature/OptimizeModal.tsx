@@ -52,10 +52,10 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const processingSteps = [
-    { icon: 'ri-file-search-line', label: 'Scanning resume content', detail: 'Parsing structure & sections' },
-    { icon: 'ri-key-2-line', label: 'Extracting keywords', detail: 'Mapping to job requirements' },
-    { icon: 'ri-edit-line', label: 'Rewriting bullets', detail: 'Adding impact & action verbs' },
-    { icon: 'ri-shield-check-line', label: 'ATS compatibility check', detail: 'Ensuring clean formatting' },
+    { icon: 'ri-upload-cloud-2-line', label: 'Uploading resume', detail: 'Sending your file to our servers' },
+    { icon: 'ri-file-search-line', label: 'Analyzing content', detail: 'Parsing resume & job requirements' },
+    { icon: 'ri-sparkling-2-fill', label: 'AI optimization', detail: 'Rewriting for keywords & impact' },
+    { icon: 'ri-shield-check-line', label: 'Finalizing results', detail: 'Scoring ATS compatibility' },
   ];
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -98,22 +98,17 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
       onClose();
       return;
     }
-    
-    // Show processing steps
-    for (let step = 1; step <= 4; step++) {
-      setProcessingStep(step);
-      await new Promise(resolve => setTimeout(resolve, 1200));
-    }
-    
-    // Call backend API
+
     try {
+      // ── Step 1: Uploading resume ──
+      setProcessingStep(1);
+
       const formData = new FormData();
       if (uploadedFile) {
         formData.append('file', uploadedFile);
         formData.append('title', uploadedFile.name.replace(/\.[^/.]+$/, ""));
       }
-      
-      // First upload the resume
+
       console.log('Uploading resume with token:', token.substring(0, 20) + '...');
       const uploadResponse = await fetch(`${import.meta.env.VITE_API_URL}/resume/upload`, {
         method: 'POST',
@@ -122,21 +117,38 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
         },
         body: formData
       });
-      
+
       if (!uploadResponse.ok) {
         const errorText = await uploadResponse.text();
         console.error('Upload failed:', uploadResponse.status, errorText);
         throw new Error(`Failed to upload resume (${uploadResponse.status}): ${errorText}`);
       }
-      
+
       const uploadedResume = await uploadResponse.json();
       const resumeId = uploadedResume.id;
-      
-      // Now optimize for the job
-      const jobTitle = jdMode === 'title' ? jdTitle : 'Target Role';
-      const jobDescription = jdMode === 'paste' ? jdPaste : undefined;
-      const jobLink = jdMode === 'link' ? jdLink : undefined;
-      
+
+      // ── Step 2: Analyzing content ──
+      setProcessingStep(2);
+
+      let jobTitle = 'Target Role';
+      let jobDescription: string | undefined;
+      let jobLink: string | undefined;
+
+      if (jdMode === 'title') {
+        jobTitle = jdTitle;
+        jobDescription = `Position: ${jdTitle}\n\nPlease optimize this resume for the ${jdTitle} role.`;
+      } else if (jdMode === 'paste') {
+        jobDescription = jdPaste;
+      } else if (jdMode === 'link') {
+        jobLink = jdLink;
+      }
+
+      // Brief pause so step 2 is visible before the long AI call
+      await new Promise(resolve => setTimeout(resolve, 600));
+
+      // ── Step 3: AI optimization (the long call) ──
+      setProcessingStep(3);
+
       const optimizeResponse = await fetch(
         `${import.meta.env.VITE_API_URL}/resume/${resumeId}/optimize-for-job`,
         {
@@ -152,26 +164,31 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
           })
         }
       );
-      
+
       if (!optimizeResponse.ok) {
         const errorText = await optimizeResponse.text();
         console.error('Optimization failed:', optimizeResponse.status, errorText);
         throw new Error(`Failed to optimize resume (${optimizeResponse.status}): ${errorText}`);
       }
-      
+
       const optimizationData = await optimizeResponse.json();
-      
+
+      // ── Step 4: Finalizing results (only reached when backend has responded) ──
+      setProcessingStep(4);
+
       // Store optimization data for the comparison page
       sessionStorage.setItem('optimizationData', JSON.stringify({
         resumeId,
         ...optimizationData
       }));
-      
-      setProcessingStep(4);
-      setTimeout(() => {
-        navigate('/resume-comparison');
-        handleClose();
-      }, 800);
+
+      // Short delay to let the user see 100% before navigating
+      await new Promise(resolve => setTimeout(resolve, 800));
+
+      navigate('/resume-comparison', {
+        state: { optimizedResume: { resumeId, ...optimizationData } }
+      });
+      handleClose();
     } catch (error) {
       console.error('Optimization error:', error);
       alert('Failed to optimize resume. Please try again.');
@@ -651,8 +668,9 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
                 {/* Processing steps */}
                 <div className="space-y-3">
                   {processingSteps.map((step, index) => {
-                    const isDone = processingStep > index;
-                    const isActive = processingStep === index;
+                    const stepNum = index + 1;
+                    const isDone = processingStep > stepNum;
+                    const isActive = processingStep === stepNum;
                     return (
                       <div
                         key={index}

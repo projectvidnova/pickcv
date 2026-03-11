@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { googleAuthService } from '../../services/googleAuthService';
 
@@ -10,8 +10,13 @@ export default function OAuthCallback() {
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(true);
+  const hasRun = useRef(false);
 
   useEffect(() => {
+    // Prevent double execution in React Strict Mode (dev only)
+    if (hasRun.current) return;
+    hasRun.current = true;
+
     const handleCallback = async () => {
       try {
         // Get authorization code from URL

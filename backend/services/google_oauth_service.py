@@ -1,6 +1,7 @@
 """Google OAuth authentication service."""
 import aiohttp
 import logging
+from urllib.parse import urlencode
 from typing import Optional, Dict, Any
 from config import settings
 
@@ -37,7 +38,7 @@ class GoogleOAuthService:
             "access_type": "offline",
         }
         
-        query_string = "&".join(f"{k}={v}" for k, v in params.items())
+        query_string = urlencode(params)
         return f"https://accounts.google.com/o/oauth2/v2/auth?{query_string}"
     
     async def exchange_code_for_token(self, code: str) -> Optional[Dict[str, Any]]:

@@ -25,9 +25,14 @@ app = FastAPI(
 # ============= SECURITY MIDDLEWARE =============
 
 # 1. Trusted Host Middleware - Only accept requests from allowed hosts
+# In production on Cloud Run, use wildcard since Cloud Run handles ingress security
+if settings.is_production:
+    allowed_hosts = ["*"]
+else:
+    allowed_hosts = settings.origins_list + ["localhost", "127.0.0.1"]
 app.add_middleware(
     TrustedHostMiddleware,
-    allowed_hosts=settings.origins_list + ["localhost", "127.0.0.1"]
+    allowed_hosts=allowed_hosts
 )
 
 # 2. GZIP Compression - Reduce response size
@@ -118,9 +123,29 @@ async def api_health_check():
 # ============= STARTUP/SHUTDOWN =============
 @app.on_event("startup")
 async def startup_event():
-    """Log application startup."""
+    """Initialize database and log application startup."""
     logger.info(f"PickCV API starting up in {settings.environment} mode")
     logger.info(f"CORS enabled for: {settings.origins_list}")
+    
+    # Auto-create database tables
+    from database import engine, Base
+    from models import User  # noqa: F401 - Import to register models
+    from sqlalchemy import text
+    
+    try:
+        async with engine.begin() as conn:
+            # Enable pgvector extension if available
+            try:
+                await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+                logger.info("pgvector extension enabled")
+            except Exception as e:
+                logger.warning(f"pgvector extension not available: {e}")
+            
+            # Create all tables
+            await conn.run_sync(Base.metadata.create_all)
+            logger.info("Database tables created/verified successfully")
+    except Exception as e:
+        logger.error(f"Database initialization failed: {e}")
 
 
 @app.on_event("shutdown")

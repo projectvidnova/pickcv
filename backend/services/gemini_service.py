@@ -3,6 +3,10 @@ import google.genai as genai
 from config import settings
 from typing import Dict, List, Optional
 import json
+import re
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Configure Gemini with API key
 client = genai.Client(api_key=settings.gemini_api_key)
@@ -12,7 +16,7 @@ class GeminiService:
     """Service for interacting with Google Gemini AI."""
     
     def __init__(self):
-        self.model_name = 'gemini-1.5-flash'
+        self.model_name = 'models/gemini-2.5-flash'
         self.client = client
     
     async def analyze_resume(self, resume_text: str) -> Dict:
@@ -180,9 +184,33 @@ class GeminiService:
         JOB DESCRIPTION:
         {job_description}
         
-        Please provide a response in the following JSON format:
+        Please provide a response in the following JSON format with BOTH text and structured data:
         {{
             "optimized_resume": "<complete optimized resume text following ATS best practices>",
+            "name": "<candidate full name>",
+            "title": "<job title/professional title>",
+            "email": "<email address>",
+            "phone": "<phone number>",
+            "linkedin": "<linkedin URL or username>",
+            "location": "<city, state/country>",
+            "professional_summary": "<2-3 sentence summary>",
+            "experience": [
+                {{
+                    "role": "<job title>",
+                    "company": "<company name>",
+                    "location": "<location>",
+                    "period": "<start - end date>",
+                    "bullets": ["<achievement 1>", "<achievement 2>", ...]
+                }}
+            ],
+            "skills": ["<skill1>", "<skill2>", ...],
+            "education": [
+                {{
+                    "degree": "<degree name>",
+                    "school": "<institution name>",
+                    "period": "<year or date range>"
+                }}
+            ],
             "changes_made": [
                 {{
                     "section": "<section name>",
@@ -216,13 +244,56 @@ class GeminiService:
                 model=self.model_name,
                 contents=prompt
             )
-            result = json.loads(response.text.strip())
+            # Extract JSON from response, handling markdown code blocks
+            response_text = response.text.strip()
+            
+            # Remove markdown code blocks if present
+            if '```' in response_text:
+                # Extract content between code blocks
+                json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', response_text)
+                if json_match:
+                    response_text = json_match.group(1).strip()
+                else:
+                    # Fallback: remove all code block markers
+                    response_text = response_text.replace('```json', '').replace('```', '').strip()
+            
+            # Try to parse JSON
+            try:
+                result = json.loads(response_text)
+            except json.JSONDecodeError as json_err:
+                # Log the problematic response for debugging
+                logger.error(f"JSON parsing failed. Response text: {response_text[:500]}...")
+                logger.error(f"JSON error: {str(json_err)}")
+                
+                # Try to fix common JSON issues
+                # Replace single quotes with double quotes
+                response_text = response_text.replace("'", '"')
+                # Remove trailing commas before closing braces/brackets
+                response_text = re.sub(r',(\s*[}\]])', r'\1', response_text)
+                
+                try:
+                    result = json.loads(response_text)
+                except json.JSONDecodeError:
+                    # If still fails, return fallback structure
+                    raise ValueError(f"Failed to parse Gemini response as JSON: {str(json_err)}")
+            
             return result
         except Exception as e:
+            logger.error(f"Optimization failed: {str(e)}")
             return {
                 "error": str(e),
                 "optimized_resume": resume_text,
-                "changes_made": []
+                "changes_made": [],
+                "name": "",
+                "title": "",
+                "email": "",
+                "phone": "",
+                "linkedin": "",
+                "location": "",
+                "professional_summary": "",
+                "experience": [],
+                "skills": [],
+                "education": []
             }
     
     async def generate_comparison_analysis(

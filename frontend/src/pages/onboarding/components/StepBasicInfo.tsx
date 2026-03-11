@@ -63,7 +63,7 @@ export default function StepBasicInfo({ data, onChange }: StepBasicInfoProps) {
               onChange={(e) => handleChange('name', e.target.value)}
               onFocus={() => setFocused('name')}
               onBlur={() => setFocused(null)}
-              placeholder="e.g. Alex Johnson"
+              placeholder="e.g. Rahul Sharma"
               className={fieldClass('name')}
               required
             />
@@ -91,7 +91,7 @@ export default function StepBasicInfo({ data, onChange }: StepBasicInfoProps) {
                 onChange={(e) => handleChange('email', e.target.value)}
                 onFocus={() => setFocused('email')}
                 onBlur={() => setFocused(null)}
-                placeholder="alex@example.com"
+                placeholder="rahul@example.com"
                 className={fieldClass('email')}
                 required
               />

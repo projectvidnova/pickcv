@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import Navbar from '../../components/feature/Navbar';
 import Footer from '../../components/feature/Footer';
 import TemplateClassic from './components/TemplateClassic';
@@ -8,6 +8,7 @@ import TemplateMinimal from './components/TemplateMinimal';
 import TemplateExecutive from './components/TemplateExecutive';
 import TemplateCreative from './components/TemplateCreative';
 import TemplateCompact from './components/TemplateCompact';
+import ResumeEditor from './components/ResumeEditor';
 import { ResumeData } from './types';
 
 type TemplateId = 'classic' | 'modern' | 'minimal' | 'executive' | 'creative' | 'compact';
@@ -393,9 +394,108 @@ function ResumeRenderer({ templateId, data }: { templateId: TemplateId; data: Re
 
 export default function OptimizedResumePage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateId>('modern');
+  const [resumeData, setResumeData] = useState<ResumeData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Load resume data from location state or use mock data
+  useEffect(() => {
+    if (location.state?.optimizedResume) {
+      // Parse the optimized resume data from API response
+      const apiData = location.state.optimizedResume;
+      
+      // Transform API response to ResumeData format
+      const transformedData: ResumeData = {
+        name: apiData.name || 'Your Name',
+        title: apiData.title || apiData.professional_summary?.split(' ')[0] || 'Professional',
+        email: apiData.email || 'your.email@example.com',
+        phone: apiData.phone || '(555) 123-4567',
+        linkedin: apiData.linkedin || 'linkedin.com/in/yourname',
+        location: apiData.location || 'City, State',
+        summary: apiData.professional_summary || '',
+        experience: apiData.experience?.map((exp: any) => ({
+          role: exp.role || exp.title || '',
+          company: exp.company || '',
+          location: exp.location || '',
+          period: exp.period || exp.dates || '',
+          bullets: Array.isArray(exp.bullets) ? exp.bullets : exp.achievements || []
+        })) || [],
+        skills: Array.isArray(apiData.skills) ? apiData.skills : 
+                apiData.skills?.technical || [],
+        education: apiData.education?.map((edu: any) => ({
+          degree: edu.degree || '',
+          school: edu.school || edu.institution || '',
+          period: edu.period || edu.year || ''
+        })) || []
+      };
+      
+      setResumeData(transformedData);
+    } else {
+      // Use mock data if no optimization result available
+      setResumeData({
+        name: 'Sarah Mitchell',
+        title: 'Senior Product Manager',
+        email: 'sarah.mitchell@email.com',
+        phone: '(555) 123-4567',
+        linkedin: 'linkedin.com/in/sarahmitchell',
+        location: 'San Francisco, CA',
+        summary:
+          'Results-driven Senior Product Manager with 8+ years of experience leading cross-functional teams to deliver innovative SaaS products. Proven track record of driving product strategy, conducting user research, and implementing agile methodologies to achieve 40% increase in user engagement and 25% revenue growth.',
+        experience: [
+          {
+            role: 'Senior Product Manager',
+            company: 'TechCorp Solutions',
+            location: 'San Francisco, CA',
+            period: '2020 – Present',
+            bullets: [
+              'Led product strategy for flagship SaaS platform, resulting in 40% increase in user engagement',
+              'Managed cross-functional team of 12 engineers, designers, and analysts',
+              'Drove $2M in additional ARR through new feature development'
+            ]
+          },
+          {
+            role: 'Product Manager',
+            company: 'InnovateTech',
+            location: 'San Jose, CA',
+            period: '2018 – 2020',
+            bullets: [
+              'Launched 3 major product features that increased customer retention by 25%',
+              'Conducted user research with 100+ customers to inform product roadmap',
+              'Implemented agile methodologies, reducing time-to-market by 30%'
+            ]
+          }
+        ],
+        skills: ['Product Management', 'Agile/Scrum', 'User Research', 'Data Analysis', 'Roadmap Planning', 'A/B Testing'],
+        education: [
+          {
+            degree: 'MBA',
+            school: 'Stanford Graduate School of Business',
+            period: '2018'
+          },
+          {
+            degree: 'BS in Computer Science',
+            school: 'University of California, Berkeley',
+            period: '2014'
+          }
+        ]
+      });
+    }
+    setIsLoading(false);
+  }, [location.state]);
 
   const handleStartOver = () => navigate('/');
+
+  if (isLoading || !resumeData) {
+    return (
+      <div className="min-h-screen mesh-bg flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-teal-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading your optimized resume...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen mesh-bg relative overflow-hidden">
@@ -448,7 +548,7 @@ export default function OptimizedResumePage() {
 
             {/* Resume Preview — center */}
             <div className="lg:col-span-6">
-              <div className="glass-card rounded-2xl p-4 mb-4">
+              <div className="glass-card rounded-2xl p-4 mb-4 relative">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <div className={`w-3 h-3 rounded-sm ${templates.find(t => t.id === selectedTemplate)?.accent}`}></div>
@@ -464,9 +564,15 @@ export default function OptimizedResumePage() {
                     <span>Live Preview</span>
                   </div>
                 </div>
-                {/* Resume paper */}
-                <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100 transition-all duration-300">
-                  <ResumeRenderer templateId={selectedTemplate} data={resumeData} />
+                {/* Resume paper with editor */}
+                <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100 transition-all duration-300 relative">
+                  <ResumeEditor
+                    data={resumeData}
+                    onDataChange={setResumeData}
+                    templateId={selectedTemplate}
+                  >
+                    <ResumeRenderer templateId={selectedTemplate} data={resumeData} />
+                  </ResumeEditor>
                 </div>
               </div>
             </div>
