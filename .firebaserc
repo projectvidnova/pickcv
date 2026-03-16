@@ -1,5 +1,17 @@
 {
   "projects": {
     "default": "studio-1324640898-76b00"
+  },
+  "targets": {
+    "studio-1324640898-76b00": {
+      "hosting": {
+        "production": [
+          "studio-1324640898-76b00"
+        ],
+        "staging": [
+          "pickcv-staging"
+        ]
+      }
+    }
   }
 }
