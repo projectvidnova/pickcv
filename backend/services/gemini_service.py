@@ -96,6 +96,9 @@ class GeminiService:
         - Focus on impact-first descriptions (achieved X by doing Y)
         - Use industry-relevant keywords
         - Include quantifiable achievements
+        - NEVER fabricate or invent personal information (name, email, phone, LinkedIn, etc.)
+        - Keep ALL personal details exactly as they appear in the original resume
+        - If a detail is missing from the original, leave it out — do NOT make it up
         
         Return the optimized resume in clean, structured text format.
         """
@@ -156,6 +159,47 @@ class GeminiService:
         except Exception as e:
             return []
     
+    async def generate_job_description_from_title(self, job_title: str) -> Optional[str]:
+        """Generate a realistic, comprehensive job description from just a job title.
+        
+        Used when the user only provides a job title (no JD or link).
+        Gemini creates an industry-standard JD so the optimizer has real
+        keywords and requirements to work with.
+        """
+        prompt = f"""You are an expert technical recruiter. Generate a realistic, detailed job description
+for the following role:
+
+Job Title: {job_title}
+
+Create a comprehensive job posting that includes:
+1. **Job Title** (use the exact title given)
+2. **About the Role** (2-3 sentences)
+3. **Responsibilities** (6-8 bullet points)
+4. **Required Qualifications** (5-7 bullet points with specific skills, tools, years of experience)
+5. **Preferred Qualifications** (3-5 bullet points)
+6. **Key Skills & Technologies** (list the most important technical and soft skills)
+
+Make it realistic — use industry-standard terminology, specific technology names,
+and concrete experience requirements. The description should look like a real
+job posting from a top company in 2026.
+
+Return ONLY the job description text, no extra commentary."""
+
+        try:
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt
+            )
+            result = response.text.strip()
+            if len(result) > 100:
+                logger.info(f"Generated JD from title '{job_title}': {len(result)} chars")
+                return result
+            logger.warning(f"Generated JD too short for '{job_title}': {len(result)} chars")
+            return None
+        except Exception as e:
+            logger.error(f"Failed to generate JD from title '{job_title}': {e}")
+            return None
+
     async def optimize_resume_for_job(
         self, 
         resume_text: str, 
@@ -184,31 +228,44 @@ class GeminiService:
         JOB DESCRIPTION:
         {job_description}
         
+        ⚠️ CRITICAL RULES — PERSONAL INFORMATION:
+        - NEVER invent, fabricate, or hallucinate ANY personal information.
+        - For name, email, phone, linkedin, location: extract ONLY what is explicitly 
+          present in the ORIGINAL RESUME above. If a field is not found, return an empty string "".
+        - Do NOT guess or generate phone numbers, email addresses, LinkedIn URLs, 
+          GitHub profiles, portfolio links, or any contact details.
+        - Do NOT change the candidate's name, email, phone, or location.
+        - For experience: keep the SAME companies, roles, and dates from the original resume.
+          Do NOT invent companies, job titles, or employment periods.
+        - For education: keep the SAME schools, degrees, and years. Do NOT fabricate degrees.
+        - You MAY improve bullet points, add relevant keywords, rewrite the summary, 
+          and reorder/enhance skills — but ONLY using truthful information from the original resume.
+        
         Please provide a response in the following JSON format with BOTH text and structured data:
         {{
             "optimized_resume": "<complete optimized resume text following ATS best practices>",
-            "name": "<candidate full name>",
-            "title": "<job title/professional title>",
-            "email": "<email address>",
-            "phone": "<phone number>",
-            "linkedin": "<linkedin URL or username>",
-            "location": "<city, state/country>",
-            "professional_summary": "<2-3 sentence summary>",
+            "name": "<candidate full name — EXTRACT from original resume, or empty string>",
+            "title": "<professional title — can be tailored to match the target job>",
+            "email": "<EXTRACT from original resume ONLY, or empty string if not found>",
+            "phone": "<EXTRACT from original resume ONLY, or empty string if not found>",
+            "linkedin": "<EXTRACT from original resume ONLY, or empty string if not found>",
+            "location": "<EXTRACT from original resume ONLY, or empty string if not found>",
+            "professional_summary": "<2-3 sentence summary tailored to the job>",
             "experience": [
                 {{
-                    "role": "<job title>",
-                    "company": "<company name>",
-                    "location": "<location>",
-                    "period": "<start - end date>",
-                    "bullets": ["<achievement 1>", "<achievement 2>", ...]
+                    "role": "<job title from original resume>",
+                    "company": "<company name from original resume>",
+                    "location": "<location from original resume or empty string>",
+                    "period": "<start - end date from original resume>",
+                    "bullets": ["<improved achievement 1>", "<improved achievement 2>", ...]
                 }}
             ],
             "skills": ["<skill1>", "<skill2>", ...],
             "education": [
                 {{
-                    "degree": "<degree name>",
-                    "school": "<institution name>",
-                    "period": "<year or date range>"
+                    "degree": "<degree name from original resume>",
+                    "school": "<institution name from original resume>",
+                    "period": "<year or date range from original resume>"
                 }}
             ],
             "changes_made": [
@@ -237,6 +294,7 @@ class GeminiService:
         - Match key terms from the job description
         - Improve readability while maintaining professionalism
         - Include action verbs and impact metrics
+        - NEVER fabricate personal details — only extract from the original resume
         """
         
         try:

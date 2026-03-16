@@ -13,10 +13,51 @@ from services.resume_processor import resume_processor
 from services.gemini_service import gemini_service
 from services.scraper_service import scraper_service
 from services.gcs_service import gcs_service
+from services.college_service import college_service
 from config import settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _format_resume_as_text(data: dict) -> str:
+    """Format structured resume data into a readable text block for storage."""
+    lines = []
+    if data.get('name'):
+        lines.append(data['name'])
+    contact_parts = [data.get('email', ''), data.get('phone', ''), data.get('location', '')]
+    contact_line = ' | '.join(p for p in contact_parts if p)
+    if contact_line:
+        lines.append(contact_line)
+    if data.get('linkedin'):
+        lines.append(data['linkedin'])
+    if data.get('summary'):
+        lines.append('\nPROFESSIONAL SUMMARY')
+        lines.append(data['summary'])
+    if data.get('experience'):
+        lines.append('\nWORK EXPERIENCE')
+        for exp in data['experience']:
+            if isinstance(exp, dict):
+                lines.append(f"{exp.get('title', '')} at {exp.get('company', '')} ({exp.get('dates', '')})")
+                for bullet in exp.get('bullets', exp.get('responsibilities', [])):
+                    lines.append(f"  • {bullet}")
+            else:
+                lines.append(str(exp))
+    if data.get('education'):
+        lines.append('\nEDUCATION')
+        for edu in data['education']:
+            if isinstance(edu, dict):
+                lines.append(f"{edu.get('degree', '')} – {edu.get('school', edu.get('institution', ''))} ({edu.get('year', edu.get('dates', ''))})")
+            else:
+                lines.append(str(edu))
+    if data.get('skills'):
+        lines.append('\nSKILLS')
+        for skill in data['skills']:
+            if isinstance(skill, str):
+                lines.append(f"  • {skill}")
+            elif isinstance(skill, dict):
+                lines.append(f"  • {skill.get('name', skill.get('skill', ''))}")
+    return '\n'.join(lines)
 
 
 @router.post("/upload", response_model=ResumeResponse)
@@ -78,7 +119,66 @@ async def upload_resume(
         else:
             logger.warning(f"Failed to upload resume {new_resume.id} to GCS - storing locally only")
     
+    # Update college student status: registered → ready (first resume uploaded)
+    try:
+        await college_service.update_student_status_on_resume_upload(db, current_user.id)
+    except Exception as e:
+        logger.warning(f"College student status update on resume upload failed: {e}")
+    
     return new_resume
+
+
+@router.post("/create")
+async def create_resume(
+    resume_data: dict,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a resume from structured data (resume builder flow)."""
+    title = resume_data.get('title', 'My Resume')
+    template = resume_data.get('template_name', 'modern')
+    contact = resume_data.get('contact', {})
+    
+    new_resume = Resume(
+        user_id=current_user.id,
+        title=title,
+        template_name=template,
+        is_optimized=True,
+        contact_info={
+            "name": contact.get('name', ''),
+            "email": contact.get('email', ''),
+            "phone": contact.get('phone', ''),
+            "linkedin": contact.get('linkedin', ''),
+            "location": contact.get('location', ''),
+        },
+        professional_summary=resume_data.get('summary', ''),
+        sections={
+            "experience": resume_data.get('experience', []),
+            "skills": resume_data.get('skills', []),
+            "education": resume_data.get('education', []),
+            "certifications": resume_data.get('certifications', []),
+        },
+        ats_score=resume_data.get('ats_score'),
+        optimized_text=_format_resume_as_text({
+            **contact,
+            'summary': resume_data.get('summary', ''),
+            'experience': resume_data.get('experience', []),
+            'skills': resume_data.get('skills', []),
+            'education': resume_data.get('education', []),
+        }),
+    )
+    
+    db.add(new_resume)
+    await db.commit()
+    await db.refresh(new_resume)
+    
+    return {
+        "id": new_resume.id,
+        "title": new_resume.title,
+        "template_name": new_resume.template_name,
+        "ats_score": new_resume.ats_score,
+        "created_at": new_resume.created_at.isoformat() if new_resume.created_at else None,
+    }
 
 
 @router.get("/", response_model=List[ResumeResponse])
@@ -164,16 +264,28 @@ async def optimize_resume_for_job(
     job_description = request.job_description
     job_link = request.job_link
     
-    # Get job description from link if provided, otherwise use paste
+    # ── Mode 1: Job Link — scrape the URL and extract JD ──
     if job_link:
+        logger.info(f"Optimize mode: LINK — scraping {job_link}")
         job_description = scraper_service.scrape_job_description(job_link)
         if not job_description:
             raise HTTPException(
                 status_code=400, 
                 detail="Failed to scrape job description from link. Please try pasting the description instead."
             )
-    elif not job_description:
-        raise HTTPException(status_code=400, detail="Either job_description or job_link must be provided")
+    
+    # ── Mode 2: Title only — use Gemini to generate a realistic JD ──
+    elif not job_description or job_description.strip() == "":
+        logger.info(f"Optimize mode: TITLE ONLY — generating JD for '{job_title}'")
+        job_description = await gemini_service.generate_job_description_from_title(job_title)
+        if not job_description:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to generate job description from title. Please try pasting a description instead."
+            )
+    else:
+        # ── Mode 3: Pasted JD — use it directly ──
+        logger.info(f"Optimize mode: PASTE — using provided JD ({len(job_description)} chars)")
     
     # Optimize resume for the specific job
     optimization_result = await gemini_service.optimize_resume_for_job(

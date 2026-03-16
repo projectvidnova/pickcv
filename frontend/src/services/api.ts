@@ -177,6 +177,67 @@ class ApiService {
     localStorage.setItem('access_token', token);
   }
 
+  // ===== USER PROFILE API METHODS =====
+
+  /**
+   * Get full user profile (including skills, preferred locations)
+   */
+  async getProfile() {
+    try {
+      const response = await fetch(`${this.baseUrl}/auth/profile`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${this.token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch profile');
+      }
+
+      const profile = await response.json();
+      return { success: true, profile };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to fetch profile' };
+    }
+  }
+
+  /**
+   * Update user profile
+   */
+  async updateProfile(data: {
+    full_name?: string;
+    phone?: string;
+    location?: string;
+    linkedin_url?: string;
+    target_role?: string;
+    experience_level?: string;
+    work_mode?: string;
+    preferred_locations?: string[];
+    skills?: Array<{ name: string; years: number }>;
+  }) {
+    try {
+      const response = await fetch(`${this.baseUrl}/auth/profile`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${this.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to update profile');
+      }
+
+      const profile = await response.json();
+      return { success: true, profile };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to update profile' };
+    }
+  }
+
   // ===== RESUME API METHODS =====
 
   /**
@@ -634,6 +695,366 @@ class ApiService {
       return { success: true, analysis };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Failed to fetch analysis' };
+    }
+  }
+
+  // ===== COLLEGE API METHODS =====
+
+  private collegeToken: string | null = localStorage.getItem('college_token');
+  private adminToken: string | null = localStorage.getItem('admin_token');
+
+  setCollegeToken(token: string) {
+    this.collegeToken = token;
+    localStorage.setItem('college_token', token);
+  }
+  getCollegeToken(): string | null { return this.collegeToken; }
+  clearCollegeToken() {
+    this.collegeToken = null;
+    localStorage.removeItem('college_token');
+    localStorage.removeItem('college_session');
+  }
+  isCollegeAuthenticated(): boolean { return !!this.collegeToken; }
+
+  setAdminToken(token: string) {
+    this.adminToken = token;
+    localStorage.setItem('admin_token', token);
+  }
+  getAdminToken(): string | null { return this.adminToken; }
+  clearAdminToken() {
+    this.adminToken = null;
+    localStorage.removeItem('admin_token');
+    localStorage.removeItem('admin_session');
+  }
+  isAdminAuthenticated(): boolean { return !!this.adminToken; }
+
+  /**
+   * College registration
+   */
+  async collegeRegister(data: {
+    institution_name: string;
+    official_email: string;
+    password: string;
+    contact_person_name: string;
+    designation?: string;
+    phone_number?: string;
+    city?: string;
+    state?: string;
+    institution_type?: string;
+  }) {
+    try {
+      const response = await fetch(`${this.baseUrl}/college/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Registration failed');
+      }
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Registration failed' };
+    }
+  }
+
+  /**
+   * College login
+   */
+  async collegeLogin(email: string, password: string) {
+    try {
+      const response = await fetch(`${this.baseUrl}/college/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Login failed');
+      }
+      const data = await response.json();
+      this.setCollegeToken(data.access_token);
+      // Store session info for quick UI access
+      localStorage.setItem('college_session', JSON.stringify({
+        college_id: data.college_id,
+        email: data.email,
+        institution_name: data.institution_name,
+        status: data.status,
+        onboarding_completed: data.onboarding_completed,
+      }));
+      return { success: true, data };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Login failed' };
+    }
+  }
+
+  /**
+   * Get college profile
+   */
+  async getCollegeProfile() {
+    try {
+      const response = await fetch(`${this.baseUrl}/college/profile`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${this.collegeToken}` },
+      });
+      if (!response.ok) throw new Error('Failed to fetch college profile');
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to fetch profile' };
+    }
+  }
+
+  /**
+   * Update college profile
+   */
+  async updateCollegeProfile(data: Record<string, any>) {
+    try {
+      const response = await fetch(`${this.baseUrl}/college/profile`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${this.collegeToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+      if (!response.ok) throw new Error('Failed to update profile');
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to update profile' };
+    }
+  }
+
+  /**
+   * Complete college onboarding
+   */
+  async completeCollegeOnboarding() {
+    try {
+      const response = await fetch(`${this.baseUrl}/college/onboarding/complete`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${this.collegeToken}` },
+      });
+      if (!response.ok) throw new Error('Failed to complete onboarding');
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to complete onboarding' };
+    }
+  }
+
+  /**
+   * Upload students via file (CSV/Excel) or text (email list)
+   */
+  async uploadStudents(payload: { file?: File; text?: string }) {
+    try {
+      const formData = new FormData();
+      if (payload.file) {
+        formData.append('file', payload.file);
+      }
+      if (payload.text) {
+        formData.append('text', payload.text);
+      }
+      const response = await fetch(`${this.baseUrl}/college/students/upload`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${this.collegeToken}` },
+        body: formData,
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Upload failed');
+      }
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Upload failed' };
+    }
+  }
+
+  /**
+   * Send invitation emails to invited students
+   */
+  async inviteStudents() {
+    try {
+      const response = await fetch(`${this.baseUrl}/college/students/invite`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${this.collegeToken}` },
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Invitation failed');
+      }
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Invitation failed' };
+    }
+  }
+
+  /**
+   * Get list of students for this college
+   */
+  async getCollegeStudents() {
+    try {
+      const response = await fetch(`${this.baseUrl}/college/students`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${this.collegeToken}` },
+      });
+      if (!response.ok) throw new Error('Failed to fetch students');
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to fetch students' };
+    }
+  }
+
+  /**
+   * Get student statistics
+   */
+  async getCollegeStudentStats() {
+    try {
+      const response = await fetch(`${this.baseUrl}/college/students/stats`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${this.collegeToken}` },
+      });
+      if (!response.ok) throw new Error('Failed to fetch stats');
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to fetch stats' };
+    }
+  }
+
+  /**
+   * Share student profiles with recruiter
+   */
+  async shareStudentProfiles(data: {
+    recruiter_email: string;
+    message?: string;
+    student_ids: number[];
+    expires_in_days?: number;
+  }) {
+    try {
+      const response = await fetch(`${this.baseUrl}/college/share`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.collegeToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+      if (!response.ok) throw new Error('Failed to share profiles');
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to share profiles' };
+    }
+  }
+
+  /**
+   * Get detailed resumes for a specific student
+   */
+  async getStudentResumes(studentId: number) {
+    try {
+      const response = await fetch(`${this.baseUrl}/college/students/${studentId}/resumes`, {
+        headers: { 'Authorization': `Bearer ${this.collegeToken}` },
+      });
+      if (!response.ok) throw new Error('Failed to fetch student resumes');
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching student resumes:', error);
+      return [];
+    }
+  }
+
+  // ===== ADMIN API METHODS =====
+
+  /**
+   * Admin login
+   */
+  async adminLogin(email: string, password: string) {
+    try {
+      const response = await fetch(`${this.baseUrl}/admin/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Invalid admin credentials');
+      }
+      const data = await response.json();
+      this.setAdminToken(data.access_token);
+      localStorage.setItem('admin_session', JSON.stringify({
+        admin_id: data.admin_id,
+        email: data.email,
+        name: data.name,
+      }));
+      return { success: true, data };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Admin login failed' };
+    }
+  }
+
+  /**
+   * Get all colleges (admin)
+   */
+  async getAdminColleges(statusFilter?: string) {
+    try {
+      const url = statusFilter
+        ? `${this.baseUrl}/admin/colleges?status_filter=${statusFilter}`
+        : `${this.baseUrl}/admin/colleges`;
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${this.adminToken}` },
+      });
+      if (!response.ok) throw new Error('Failed to fetch colleges');
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to fetch colleges' };
+    }
+  }
+
+  /**
+   * Approve a college (admin)
+   */
+  async approveCollege(collegeId: number) {
+    try {
+      const response = await fetch(`${this.baseUrl}/admin/colleges/${collegeId}/approve`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${this.adminToken}` },
+      });
+      if (!response.ok) throw new Error('Failed to approve college');
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to approve college' };
+    }
+  }
+
+  /**
+   * Reject a college (admin)
+   */
+  async rejectCollege(collegeId: number, reason: string) {
+    try {
+      const response = await fetch(`${this.baseUrl}/admin/colleges/${collegeId}/reject`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${this.adminToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ reason }),
+      });
+      if (!response.ok) throw new Error('Failed to reject college');
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to reject college' };
+    }
+  }
+
+  /**
+   * Get admin dashboard stats
+   */
+  async getAdminStats() {
+    try {
+      const response = await fetch(`${this.baseUrl}/admin/stats`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${this.adminToken}` },
+      });
+      if (!response.ok) throw new Error('Failed to fetch admin stats');
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to fetch admin stats' };
     }
   }
 }

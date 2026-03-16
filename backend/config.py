@@ -72,6 +72,7 @@ class Settings(BaseSettings):
     smtp_port: int = int(os.getenv("SMTP_PORT", "587"))
     sender_email: str = os.getenv("SENDER_EMAIL", "noreply@pickcv.com")
     sender_password: str = os.getenv("SENDER_PASSWORD", "")
+    resend_api_key: str = os.getenv("RESEND_API_KEY", "")
     
     # ============= FILE UPLOAD =============
     max_upload_size_mb: int = 50
@@ -95,8 +96,20 @@ class Settings(BaseSettings):
     
     @property
     def origins_list(self) -> List[str]:
-        """Parse comma-separated origins into a list."""
-        return [origin.strip() for origin in self.allowed_origins.split(",")]
+        """Parse origins separated by comma or semicolon into a list.
+        Automatically includes admin. and institution. subdomain variants."""
+        import re
+        origins = [origin.strip() for origin in re.split(r'[,;]', self.allowed_origins) if origin.strip()]
+        # Auto-add subdomain origins for any pickcv.com domain
+        extra = []
+        for origin in origins:
+            if 'pickcv.com' in origin and not origin.startswith('https://admin.') and not origin.startswith('https://institution.'):
+                # Extract scheme
+                scheme = origin.split('://')[0] if '://' in origin else 'https'
+                extra.append(f"{scheme}://admin.pickcv.com")
+                extra.append(f"{scheme}://institution.pickcv.com")
+        origins.extend([e for e in extra if e not in origins])
+        return origins
     
     @property
     def is_production(self) -> bool:

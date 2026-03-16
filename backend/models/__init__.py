@@ -308,3 +308,104 @@ class AuditLog(Base):
     user_agent = Column(Text)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
+
+# ============= COLLEGE MODULE MODELS =============
+
+class Admin(Base):
+    """Admin user model."""
+    __tablename__ = "admins"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(255), unique=True, index=True, nullable=False)
+    password_hash = Column(String(255), nullable=False)
+    name = Column(String(255))
+    role = Column(String(50), default="admin")
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    last_login = Column(DateTime(timezone=True))
+
+
+class College(Base):
+    """College/institution model."""
+    __tablename__ = "colleges"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    institution_name = Column(String(500), nullable=False)
+    official_email = Column(String(255), unique=True, index=True, nullable=False)
+    password_hash = Column(String(255), nullable=False)
+    contact_person_name = Column(String(255), nullable=False)
+    designation = Column(String(255))
+    phone_number = Column(String(20))
+    city = Column(String(255))
+    state = Column(String(255))
+    institution_type = Column(String(50))  # engineering, university, medical, arts, other
+    
+    # Approval
+    status = Column(String(20), default="pending", index=True)  # pending, approved, rejected
+    rejection_reason = Column(Text)
+    
+    # Profile (filled during onboarding)
+    logo_url = Column(String(500))
+    website = Column(String(500))
+    address = Column(Text)
+    naac_grade = Column(String(10))
+    total_students = Column(Integer, default=0)
+    onboarding_completed = Column(Boolean, default=False)
+    
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    approved_at = Column(DateTime(timezone=True))
+    approved_by = Column(Integer, ForeignKey("admins.id", ondelete="SET NULL"))
+    
+    # Relationships
+    students = relationship("CollegeStudent", back_populates="college", cascade="all, delete-orphan")
+    shared_profiles = relationship("SharedProfile", back_populates="college", cascade="all, delete-orphan")
+
+
+class CollegeStudent(Base):
+    """Student linked to a college — tracks onboarding status."""
+    __tablename__ = "college_students"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    college_id = Column(Integer, ForeignKey("colleges.id", ondelete="CASCADE"), nullable=False, index=True)
+    email = Column(String(255), nullable=False, index=True)
+    name = Column(String(255))
+    branch = Column(String(255))
+    graduation_year = Column(Integer)
+    
+    # Link to actual user account
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    
+    # Status: invited → registered → ready
+    status = Column(String(20), default="invited", index=True)
+    invitation_token = Column(String(255))
+    
+    # Timestamps
+    invited_at = Column(DateTime(timezone=True))
+    registered_at = Column(DateTime(timezone=True))
+    ready_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Relationships
+    college = relationship("College", back_populates="students")
+    user = relationship("User")
+
+
+class SharedProfile(Base):
+    """Shared student profiles with recruiters."""
+    __tablename__ = "shared_profiles"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    college_id = Column(Integer, ForeignKey("colleges.id", ondelete="CASCADE"), nullable=False, index=True)
+    share_token = Column(String(255), unique=True, nullable=False, index=True)
+    recruiter_email = Column(String(255), nullable=False)
+    message = Column(Text)
+    student_ids = Column(ARRAY(Integer), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationships
+    college = relationship("College", back_populates="shared_profiles")
+

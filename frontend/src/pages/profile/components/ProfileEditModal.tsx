@@ -23,6 +23,7 @@ interface ProfileEditModalProps {
   data: ProfileData;
   onSave: (data: ProfileData) => void;
   onClose: () => void;
+  saving?: boolean;
 }
 
 const experienceLevels = [
@@ -42,7 +43,7 @@ const expLabels = ['< 1 yr', '1 yr', '2 yrs', '3 yrs', '4 yrs', '5 yrs', '6 yrs'
 
 type TabKey = 'personal' | 'career' | 'skills';
 
-export default function ProfileEditModal({ data, onSave, onClose }: ProfileEditModalProps) {
+export default function ProfileEditModal({ data, onSave, onClose, saving = false }: ProfileEditModalProps) {
   const [form, setForm] = useState<ProfileData>({ ...data, skills: data.skills.map((s) => ({ ...s })), preferredLocations: [...data.preferredLocations] });
   const [activeTab, setActiveTab] = useState<TabKey>('personal');
   const [locationInput, setLocationInput] = useState('');
@@ -79,8 +80,6 @@ export default function ProfileEditModal({ data, onSave, onClose }: ProfileEditM
 
   const handleSave = () => {
     onSave(form);
-    setSaved(true);
-    setTimeout(() => { setSaved(false); onClose(); }, 1200);
   };
 
   const inputCls = 'w-full pl-10 pr-4 py-3 text-sm rounded-xl border border-slate-200 focus:outline-none focus:border-teal-400 focus:ring-4 focus:ring-teal-50 transition-all bg-white text-slate-900 placeholder:text-slate-300';
@@ -351,14 +350,15 @@ export default function ProfileEditModal({ data, onSave, onClose }: ProfileEditM
           </button>
           <button
             onClick={handleSave}
+            disabled={saving}
             className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer whitespace-nowrap shadow-sm ${
-              saved
-                ? 'bg-emerald-500 text-white'
+              saving
+                ? 'bg-slate-400 text-white cursor-not-allowed'
                 : 'bg-slate-900 text-white hover:bg-slate-700'
             }`}
           >
-            {saved ? (
-              <><i className="ri-checkbox-circle-fill text-base" /> Saved!</>
+            {saving ? (
+              <><i className="ri-loader-4-line text-base animate-spin" /> Saving...</>
             ) : (
               <><i className="ri-save-3-line text-base" /> Save Changes</>
             )}

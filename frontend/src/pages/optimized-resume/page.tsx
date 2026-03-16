@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import Navbar from '../../components/feature/Navbar';
 import Footer from '../../components/feature/Footer';
 import TemplateClassic from './components/TemplateClassic';
@@ -10,10 +10,12 @@ import TemplateCreative from './components/TemplateCreative';
 import TemplateCompact from './components/TemplateCompact';
 import ResumeEditor from './components/ResumeEditor';
 import { ResumeData } from './types';
+import { apiService } from '../../services/api';
 
 type TemplateId = 'classic' | 'modern' | 'minimal' | 'executive' | 'creative' | 'compact';
 
-const resumeData: ResumeData = {
+// Sample data used only for template thumbnail previews
+const samplePreviewData: ResumeData = {
   name: 'Sarah Mitchell',
   title: 'Senior Product Manager',
   email: 'sarah.mitchell@email.com',
@@ -176,7 +178,7 @@ function TemplateThumbnail({ template, isSelected, onClick }: { template: Templa
             userSelect: 'none',
           }}
         >
-          <ResumeRenderer templateId={template.id} data={resumeData} />
+          <ResumeRenderer templateId={template.id} data={samplePreviewData} />
         </div>
         {/* Overlay gradient so bottom fades nicely */}
         <div className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-white/80 to-transparent pointer-events-none"></div>
@@ -395,104 +397,145 @@ function ResumeRenderer({ templateId, data }: { templateId: TemplateId; data: Re
 export default function OptimizedResumePage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateId>('modern');
   const [resumeData, setResumeData] = useState<ResumeData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [atsScoreValue, setAtsScoreValue] = useState<number>(94);
 
-  // Load resume data from location state or use mock data
+  // Load resume data from location state, URL params (DB fetch), or show error
   useEffect(() => {
-    if (location.state?.optimizedResume) {
-      // Parse the optimized resume data from API response
-      const apiData = location.state.optimizedResume;
-      
-      // Transform API response to ResumeData format
-      const transformedData: ResumeData = {
-        name: apiData.name || 'Your Name',
-        title: apiData.title || apiData.professional_summary?.split(' ')[0] || 'Professional',
-        email: apiData.email || 'your.email@example.com',
-        phone: apiData.phone || '(555) 123-4567',
-        linkedin: apiData.linkedin || 'linkedin.com/in/yourname',
-        location: apiData.location || 'City, State',
-        summary: apiData.professional_summary || '',
-        experience: apiData.experience?.map((exp: any) => ({
-          role: exp.role || exp.title || '',
-          company: exp.company || '',
-          location: exp.location || '',
-          period: exp.period || exp.dates || '',
-          bullets: Array.isArray(exp.bullets) ? exp.bullets : exp.achievements || []
-        })) || [],
-        skills: Array.isArray(apiData.skills) ? apiData.skills : 
-                apiData.skills?.technical || [],
-        education: apiData.education?.map((edu: any) => ({
-          degree: edu.degree || '',
-          school: edu.school || edu.institution || '',
-          period: edu.period || edu.year || ''
-        })) || []
-      };
-      
-      setResumeData(transformedData);
-    } else {
-      // Use mock data if no optimization result available
-      setResumeData({
-        name: 'Sarah Mitchell',
-        title: 'Senior Product Manager',
-        email: 'sarah.mitchell@email.com',
-        phone: '(555) 123-4567',
-        linkedin: 'linkedin.com/in/sarahmitchell',
-        location: 'San Francisco, CA',
-        summary:
-          'Results-driven Senior Product Manager with 8+ years of experience leading cross-functional teams to deliver innovative SaaS products. Proven track record of driving product strategy, conducting user research, and implementing agile methodologies to achieve 40% increase in user engagement and 25% revenue growth.',
-        experience: [
-          {
-            role: 'Senior Product Manager',
-            company: 'TechCorp Solutions',
-            location: 'San Francisco, CA',
-            period: '2020 – Present',
-            bullets: [
-              'Led product strategy for flagship SaaS platform, resulting in 40% increase in user engagement',
-              'Managed cross-functional team of 12 engineers, designers, and analysts',
-              'Drove $2M in additional ARR through new feature development'
-            ]
-          },
-          {
-            role: 'Product Manager',
-            company: 'InnovateTech',
-            location: 'San Jose, CA',
-            period: '2018 – 2020',
-            bullets: [
-              'Launched 3 major product features that increased customer retention by 25%',
-              'Conducted user research with 100+ customers to inform product roadmap',
-              'Implemented agile methodologies, reducing time-to-market by 30%'
-            ]
+    const loadResume = async () => {
+      setIsLoading(true);
+      setLoadError(null);
+
+      // Priority 1: Fresh data passed via navigation state
+      if (location.state?.optimizedResume) {
+        const apiData = location.state.optimizedResume;
+        const transformedData: ResumeData = {
+          name: apiData.name || 'Your Name',
+          title: apiData.title || apiData.professional_summary?.split(' ')[0] || 'Professional',
+          email: apiData.email || 'your.email@example.com',
+          phone: apiData.phone || '(555) 123-4567',
+          linkedin: apiData.linkedin || 'linkedin.com/in/yourname',
+          location: apiData.location || 'City, State',
+          summary: apiData.professional_summary || '',
+          experience: apiData.experience?.map((exp: any) => ({
+            role: exp.role || exp.title || '',
+            company: exp.company || '',
+            location: exp.location || '',
+            period: exp.period || exp.dates || '',
+            bullets: Array.isArray(exp.bullets) ? exp.bullets : exp.achievements || []
+          })) || [],
+          skills: Array.isArray(apiData.skills) ? apiData.skills :
+                  apiData.skills?.technical || [],
+          education: apiData.education?.map((edu: any) => ({
+            degree: edu.degree || '',
+            school: edu.school || edu.institution || '',
+            period: edu.period || edu.year || ''
+          })) || []
+        };
+        setResumeData(transformedData);
+        if (apiData.ats_score) setAtsScoreValue(Math.round(apiData.ats_score));
+        setIsLoading(false);
+        return;
+      }
+
+      // Priority 2: Fetch from database using resumeId query parameter
+      const resumeId = searchParams.get('resumeId');
+      if (resumeId) {
+        try {
+          const result = await apiService.getResume(Number(resumeId));
+          if (result.success && result.resume) {
+            const r = result.resume;
+            const contact = r.contact_info || {};
+            const sections = r.sections || {};
+
+            // Set template if saved
+            if (r.template_name && ['classic','modern','minimal','executive','creative','compact'].includes(r.template_name)) {
+              setSelectedTemplate(r.template_name as TemplateId);
+            }
+
+            const transformedData: ResumeData = {
+              name: contact.name || r.title || 'Your Name',
+              title: r.title || 'Professional',
+              email: contact.email || '',
+              phone: contact.phone || '',
+              linkedin: contact.linkedin || '',
+              location: contact.location || '',
+              summary: r.professional_summary || '',
+              experience: (sections.experience || []).map((exp: any) => ({
+                role: exp.title || exp.role || '',
+                company: exp.company || '',
+                location: exp.location || '',
+                period: exp.dates || exp.period || '',
+                bullets: exp.bullets || exp.responsibilities || []
+              })),
+              skills: (sections.skills || []).map((s: any) => typeof s === 'string' ? s : s.name || s.skill || ''),
+              education: (sections.education || []).map((edu: any) => ({
+                degree: edu.degree || '',
+                school: edu.school || edu.institution || '',
+                period: edu.year || edu.dates || edu.period || ''
+              }))
+            };
+            setResumeData(transformedData);
+            if (r.ats_score) setAtsScoreValue(Math.round(r.ats_score));
+            setIsLoading(false);
+            return;
+          } else {
+            setLoadError('Resume not found. It may have been deleted.');
           }
-        ],
-        skills: ['Product Management', 'Agile/Scrum', 'User Research', 'Data Analysis', 'Roadmap Planning', 'A/B Testing'],
-        education: [
-          {
-            degree: 'MBA',
-            school: 'Stanford Graduate School of Business',
-            period: '2018'
-          },
-          {
-            degree: 'BS in Computer Science',
-            school: 'University of California, Berkeley',
-            period: '2014'
-          }
-        ]
-      });
-    }
-    setIsLoading(false);
-  }, [location.state]);
+        } catch {
+          setLoadError('Failed to load resume. Please try again.');
+        }
+      } else {
+        setLoadError('No resume data available. Please optimize a resume first.');
+      }
+
+      setIsLoading(false);
+    };
+
+    loadResume();
+  }, [location.state, searchParams]);
 
   const handleStartOver = () => navigate('/');
 
-  if (isLoading || !resumeData) {
+  if (isLoading) {
     return (
       <div className="min-h-screen mesh-bg flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-teal-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-gray-600">Loading your optimized resume...</p>
         </div>
+      </div>
+    );
+  }
+
+  if (loadError || !resumeData) {
+    return (
+      <div className="min-h-screen mesh-bg">
+        <Navbar />
+        <div className="flex items-center justify-center pt-32">
+          <div className="text-center glass-card rounded-2xl p-10 max-w-md">
+            <div className="w-16 h-16 flex items-center justify-center rounded-2xl bg-amber-50 text-amber-500 mx-auto mb-4">
+              <i className="ri-file-warning-line text-3xl"></i>
+            </div>
+            <h2 className="text-xl font-bold text-gray-900 mb-2">Resume Not Found</h2>
+            <p className="text-sm text-gray-600 mb-6">{loadError || 'No resume data available.'}</p>
+            <div className="flex gap-3 justify-center">
+              <button onClick={() => navigate('/resume-builder')}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-500 text-white font-medium text-sm hover:shadow-lg transition-all cursor-pointer">
+                <i className="ri-edit-line mr-2"></i>Build a Resume
+              </button>
+              <button onClick={() => navigate('/profile')}
+                className="px-5 py-2.5 rounded-xl glass text-gray-700 font-medium text-sm hover:bg-white/60 transition-all cursor-pointer">
+                <i className="ri-arrow-left-line mr-2"></i>Go to Profile
+              </button>
+            </div>
+          </div>
+        </div>
+        <Footer />
       </div>
     );
   }
@@ -511,7 +554,7 @@ export default function OptimizedResumePage() {
           <div className="text-center mb-10">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass-card mb-4">
               <i className="ri-sparkling-fill text-teal-500 text-lg"></i>
-              <span className="text-sm font-semibold text-gray-700">Optimization Complete — 94% ATS Match</span>
+              <span className="text-sm font-semibold text-gray-700">Optimization Complete — {atsScoreValue}% ATS Match</span>
             </div>
             <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-3">
               Your Optimized Resume
@@ -590,7 +633,7 @@ export default function OptimizedResumePage() {
                         cx="40" cy="40" r="34" fill="none"
                         stroke="url(#atsGrad)" strokeWidth="7"
                         strokeDasharray="213.6"
-                        strokeDashoffset="12.8"
+                        strokeDashoffset={213.6 - (213.6 * atsScoreValue / 100)}
                         strokeLinecap="round"
                       />
                       <defs>
@@ -601,17 +644,17 @@ export default function OptimizedResumePage() {
                       </defs>
                     </svg>
                     <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <span className="text-xl font-black text-gray-900">94%</span>
+                      <span className="text-xl font-black text-gray-900">{atsScoreValue}%</span>
                     </div>
                   </div>
-                  <h3 className="text-sm font-bold text-gray-900">Excellent ATS Match</h3>
+                  <h3 className="text-sm font-bold text-gray-900">{atsScoreValue >= 90 ? 'Excellent' : atsScoreValue >= 70 ? 'Good' : 'Fair'} ATS Match</h3>
                   <p className="text-xs text-gray-500 mt-1">Your resume is highly optimized for applicant tracking systems</p>
                 </div>
                 <div className="space-y-2">
                   {[
-                    { label: 'Keyword Match', value: 94 },
-                    { label: 'Format Score', value: 98 },
-                    { label: 'Readability', value: 91 },
+                    { label: 'Keyword Match', value: atsScoreValue },
+                    { label: 'Format Score', value: Math.min(100, atsScoreValue + 4) },
+                    { label: 'Readability', value: Math.min(100, atsScoreValue - 3) },
                   ].map((item) => (
                     <div key={item.label}>
                       <div className="flex justify-between text-xs mb-1">

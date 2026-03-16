@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import AuthModal from './AuthModal';
 import OptimizeModal from './OptimizeModal';
 import UserProfileDropdown from './UserProfileDropdown';
 import { googleAuthService } from '../../services/googleAuthService';
 
 export default function Navbar() {
+  const navigate = useNavigate();
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -14,6 +16,9 @@ export default function Navbar() {
   const [userName, setUserName] = useState('');
   const [userEmail, setUserEmail] = useState('');
   const [userAvatar, setUserAvatar] = useState('');
+  const [isToolsOpen, setIsToolsOpen] = useState(false);
+  const [isMobileToolsOpen, setIsMobileToolsOpen] = useState(false);
+  const toolsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     // Check if user is authenticated
@@ -49,6 +54,23 @@ export default function Navbar() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // Close Tools dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (toolsRef.current && !toolsRef.current.contains(event.target as Node)) {
+        setIsToolsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleCollegesClick = () => {
+    setIsToolsOpen(false);
+    setIsMobileMenuOpen(false);
+    navigate('/college/login');
+  };
+
   return (
     <>
       <style>{`
@@ -77,6 +99,13 @@ export default function Navbar() {
         }
         .mobile-menu-enter {
           animation: slideDown 0.2s ease forwards;
+        }
+        @keyframes toolsDropdownEnter {
+          from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .tools-dropdown-enter {
+          animation: toolsDropdownEnter 0.15s ease forwards;
         }
         .nav-scrolled {
           background: rgba(255, 255, 255, 0.92) !important;
@@ -111,6 +140,44 @@ export default function Navbar() {
                 className={`nav-link-pill text-sm font-medium transition-colors duration-200 whitespace-nowrap cursor-pointer pb-0.5 text-gray-600 hover:text-gray-900 ${activeLink === 'jobs' ? 'active' : ''}`}>
                 Jobs
               </a>
+              {/* Tools Dropdown */}
+              <div className="relative" ref={toolsRef}>
+                <button
+                  onClick={() => setIsToolsOpen(!isToolsOpen)}
+                  className={`nav-link-pill text-sm font-medium transition-colors duration-200 whitespace-nowrap cursor-pointer pb-0.5 flex items-center gap-1 text-gray-600 hover:text-gray-900 ${activeLink === 'tools' ? 'active' : ''}`}>
+                  Tools
+                  <i className={`ri-arrow-down-s-line text-xs transition-transform duration-200 ${isToolsOpen ? 'rotate-180' : ''}`}></i>
+                </button>
+                {isToolsOpen && (
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-3 w-64 tools-dropdown-enter">
+                    <div className="bg-white/95 backdrop-blur-xl rounded-xl shadow-lg border border-gray-100/80 p-2 overflow-hidden">
+                      <a
+                        href="#recruiters"
+                        onClick={() => setIsToolsOpen(false)}
+                        className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-teal-50/60 transition-colors group cursor-pointer">
+                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-teal-500/10 to-emerald-500/10 flex items-center justify-center shrink-0">
+                          <i className="ri-building-2-line text-teal-600 text-base"></i>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-gray-900 group-hover:text-teal-700 transition-colors">For Recruiters & Companies</p>
+                          <p className="text-xs text-gray-500">Post jobs & find talent</p>
+                        </div>
+                      </a>
+                      <a
+                        onClick={handleCollegesClick}
+                        className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-teal-50/60 transition-colors group cursor-pointer">
+                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500/10 to-cyan-500/10 flex items-center justify-center shrink-0">
+                          <i className="ri-graduation-cap-line text-blue-600 text-base"></i>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-gray-900 group-hover:text-teal-700 transition-colors">For Colleges & Universities</p>
+                          <p className="text-xs text-gray-500">Manage placements</p>
+                        </div>
+                      </a>
+                    </div>
+                  </div>
+                )}
+              </div>
               <a href="/profile" onClick={() => setActiveLink('profile')}
                 className={`nav-link-pill text-sm font-medium transition-colors duration-200 whitespace-nowrap cursor-pointer pb-0.5 text-gray-600 hover:text-gray-900 ${activeLink === 'profile' ? 'active' : ''}`}>
                 My Profile
@@ -181,6 +248,29 @@ export default function Navbar() {
                     className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors text-gray-700 hover:bg-teal-50/80 hover:text-teal-700">
                     <i className="ri-briefcase-line text-teal-500"></i>Jobs
                   </a>
+                  {/* Mobile Tools Accordion */}
+                  <div>
+                    <button
+                      onClick={() => setIsMobileToolsOpen(!isMobileToolsOpen)}
+                      className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-colors text-gray-700 hover:bg-teal-50/80 hover:text-teal-700 cursor-pointer">
+                      <span className="flex items-center gap-3">
+                        <i className="ri-tools-line text-teal-500"></i>Tools
+                      </span>
+                      <i className={`ri-arrow-down-s-line text-xs transition-transform duration-200 ${isMobileToolsOpen ? 'rotate-180' : ''}`}></i>
+                    </button>
+                    {isMobileToolsOpen && (
+                      <div className="ml-8 mt-1 space-y-1">
+                        <a href="#recruiters" onClick={() => setIsMobileMenuOpen(false)}
+                          className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-teal-50/60 hover:text-teal-700 transition-colors">
+                          <i className="ri-building-2-line text-teal-500 text-xs"></i>For Recruiters
+                        </a>
+                        <button onClick={handleCollegesClick}
+                          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-teal-50/60 hover:text-teal-700 transition-colors cursor-pointer">
+                          <i className="ri-graduation-cap-line text-blue-500 text-xs"></i>For Colleges
+                        </button>
+                      </div>
+                    )}
+                  </div>
 
                   {/* Sign Out */}
                   <button
@@ -205,6 +295,29 @@ export default function Navbar() {
                     className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors text-gray-700 hover:bg-teal-50/80 hover:text-teal-700">
                     <i className="ri-briefcase-line text-teal-500"></i>Jobs
                   </a>
+                  {/* Mobile Tools Accordion (Unauthenticated) */}
+                  <div>
+                    <button
+                      onClick={() => setIsMobileToolsOpen(!isMobileToolsOpen)}
+                      className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-colors text-gray-700 hover:bg-teal-50/80 hover:text-teal-700 cursor-pointer">
+                      <span className="flex items-center gap-3">
+                        <i className="ri-tools-line text-teal-500"></i>Tools
+                      </span>
+                      <i className={`ri-arrow-down-s-line text-xs transition-transform duration-200 ${isMobileToolsOpen ? 'rotate-180' : ''}`}></i>
+                    </button>
+                    {isMobileToolsOpen && (
+                      <div className="ml-8 mt-1 space-y-1">
+                        <a href="#recruiters" onClick={() => setIsMobileMenuOpen(false)}
+                          className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-teal-50/60 hover:text-teal-700 transition-colors">
+                          <i className="ri-building-2-line text-teal-500 text-xs"></i>For Recruiters
+                        </a>
+                        <button onClick={handleCollegesClick}
+                          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-teal-50/60 hover:text-teal-700 transition-colors cursor-pointer">
+                          <i className="ri-graduation-cap-line text-blue-500 text-xs"></i>For Colleges
+                        </button>
+                      </div>
+                    )}
+                  </div>
                   <a href="/profile" onClick={() => setIsMobileMenuOpen(false)}
                     className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors text-gray-700 hover:bg-teal-50/80 hover:text-teal-700">
                     <i className="ri-user-3-line text-teal-500"></i>My Profile

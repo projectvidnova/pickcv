@@ -163,6 +163,46 @@ export const RESUME_TEMPLATES: ResumeTemplate[] = [
     atsScore: 4,
     colors: [STEEL, DARK_TEAL, FOREST, WINE],
   },
+  {
+    id: 'elegant',
+    name: 'Elegant',
+    description: 'Refined serif typography with tasteful accents. Perfect for creative professionals.',
+    icon: 'ri-quill-pen-line',
+    atsScore: 5,
+    colors: [WINE, CHARCOAL, NAVY, FOREST],
+  },
+  {
+    id: 'compact',
+    name: 'Compact',
+    description: 'Dense two-column layout. Fit more content without sacrificing readability.',
+    icon: 'ri-layout-grid-line',
+    atsScore: 4,
+    colors: [CHARCOAL, STEEL, SLATE, DARK_TEAL],
+  },
+  {
+    id: 'bold',
+    name: 'Bold',
+    description: 'Strong typography with oversized name header. Makes a powerful first impression.',
+    icon: 'ri-bold',
+    atsScore: 5,
+    colors: [BLACK, NAVY, CHARCOAL, WINE],
+  },
+  {
+    id: 'timeline',
+    name: 'Timeline',
+    description: 'Visual timeline for experience. Clean dotted connectors show career progression.',
+    icon: 'ri-git-commit-line',
+    atsScore: 5,
+    colors: [DARK_TEAL, NAVY, FOREST, STEEL],
+  },
+  {
+    id: 'clean',
+    name: 'Clean',
+    description: 'Airy whitespace-driven design. Subtle color accents, ultra-modern feel.',
+    icon: 'ri-sparkle-line',
+    atsScore: 5,
+    colors: [SLATE, CHARCOAL, DARK_TEAL, NAVY],
+  },
 ];
 
 /* Helper: get default theme for a template */

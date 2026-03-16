@@ -37,7 +37,7 @@ export const googleAuthService = {
    */
   async exchangeCodeForToken(code: string): Promise<GoogleAuthResponse> {
     try {
-      const url = `${API_URL}/auth/google/token?code=${encodeURIComponent(code)}`;
+      const url = `${API_URL}/auth/google/token?code=${encodeURIComponent(code)}&redirect_uri=${encodeURIComponent(GOOGLE_REDIRECT_URI)}`;
       console.log('Calling backend token exchange:', url);
       
       const response = await fetch(url, {

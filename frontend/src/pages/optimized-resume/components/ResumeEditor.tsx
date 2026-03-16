@@ -75,15 +75,42 @@ export default function ResumeEditor({ data, onDataChange, templateId, children 
         format: 'a4',
       });
 
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = canvas.width;
-      const imgHeight = canvas.height;
-      const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
-      const imgX = (pdfWidth - imgWidth * ratio) / 2;
-      const imgY = 0;
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
 
-      pdf.addImage(imgData, 'PNG', imgX, imgY, imgWidth * ratio, imgHeight * ratio);
+      // Scale image to fit page width
+      const imgWidth = pageWidth;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+      // If it fits on one page, just add it
+      if (imgHeight <= pageHeight) {
+        pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+      } else {
+        // Multi-page: slice the canvas into page-sized chunks
+        const scaledPageHeight = (pageHeight * canvas.width) / imgWidth;
+        let yOffset = 0;
+        let pageNum = 0;
+
+        while (yOffset < canvas.height) {
+          if (pageNum > 0) pdf.addPage();
+
+          const sliceHeight = Math.min(scaledPageHeight, canvas.height - yOffset);
+          const pageCanvas = document.createElement('canvas');
+          pageCanvas.width = canvas.width;
+          pageCanvas.height = sliceHeight;
+          const ctx = pageCanvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(canvas, 0, yOffset, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight);
+            const pageImgData = pageCanvas.toDataURL('image/png');
+            const renderedHeight = (sliceHeight * imgWidth) / canvas.width;
+            pdf.addImage(pageImgData, 'PNG', 0, 0, imgWidth, renderedHeight);
+          }
+
+          yOffset += scaledPageHeight;
+          pageNum++;
+        }
+      }
+
       pdf.save(`${data.name.replace(/\s+/g, '_')}_Resume.pdf`);
     } catch (error) {
       console.error('Error downloading PDF:', error);

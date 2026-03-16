@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Navbar from '../../components/feature/Navbar';
 import Footer from '../../components/feature/Footer';
 import OptimizeModal from '../../components/feature/OptimizeModal';
+import { apiService } from '../../services/api';
 
 interface WorkExperience {
   id: string;
@@ -65,6 +67,8 @@ const ACTION_VERBS = [
 ];
 
 export default function ResumeBuilder() {
+  const navigate = useNavigate();
+
   // Personal Info
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -99,6 +103,8 @@ export default function ResumeBuilder() {
   const [atsScore, setAtsScore] = useState(0);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [hasPlan, setHasPlan] = useState(false);
+  const [savedResumeId, setSavedResumeId] = useState<number | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const processingSteps = [
     { icon: 'ri-search-line', text: 'Analyzing keywords…' },
@@ -362,10 +368,49 @@ export default function ResumeBuilder() {
         setOptimizedResume(optimized);
         setProcessingStep(2);
 
-        // Step 3: Final check
-        setTimeout(() => {
+        // Step 3: Final check & save to database
+        setTimeout(async () => {
           setIsProcessing(false);
           setShowOutput(true);
+
+          // Persist to DB in the background
+          try {
+            setIsSaving(true);
+            const result = await apiService.createResume(
+              `${fullName} - ${targetJobTitle}`,
+              'modern',
+              {
+                contact: {
+                  name: fullName,
+                  email: email,
+                  phone: phone,
+                  location: '',
+                  linkedin: linkedinUrl || '',
+                },
+                summary: optimized.summary,
+                skills: optimized.skills.flatMap(cat => cat.items),
+                experience: optimized.experience.map(exp => ({
+                  title: exp.title,
+                  company: exp.company,
+                  dates: exp.period,
+                  bullets: exp.bullets,
+                })),
+                education: optimized.education.map(edu => ({
+                  degree: edu.degree,
+                  school: edu.school,
+                  year: edu.year,
+                })),
+                ats_score: matchScore,
+              }
+            );
+            if (result.success && result.resume?.id) {
+              setSavedResumeId(result.resume.id);
+            }
+          } catch (err) {
+            console.warn('Could not save resume to account:', err);
+          } finally {
+            setIsSaving(false);
+          }
         }, 800);
       }, 1500);
     }, 1500);
@@ -892,7 +937,7 @@ ${optimizedResume.certifications ? `CERTIFICATIONS\n${optimizedResume.certificat
 
                 {!isProcessing && (
                   <p className="text-center text-xs text-gray-500">
-                    <i className="ri-lock-line mr-1"></i>Your data is processed securely and never stored
+                    <i className="ri-lock-line mr-1"></i>Your data is processed securely and saved to your account
                   </p>
                 )}
               </div>
@@ -952,7 +997,19 @@ ${optimizedResume.certifications ? `CERTIFICATIONS\n${optimizedResume.certificat
                   <div className="space-y-6">
                     <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
                       <h3 className="text-xl font-bold text-gray-900">Your Optimized Resume</h3>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 flex-wrap">
+                        {savedResumeId && (
+                          <button
+                            onClick={() => navigate(`/optimized-resume?resumeId=${savedResumeId}`)}
+                            className="px-5 py-2.5 rounded-xl font-medium transition-all whitespace-nowrap cursor-pointer bg-gradient-to-r from-teal-500 to-emerald-500 text-white hover:from-teal-600 hover:to-emerald-600 shadow-lg shadow-teal-500/30">
+                            <i className="ri-palette-line mr-2"></i>Customize in Editor
+                          </button>
+                        )}
+                        {isSaving && (
+                          <span className="text-xs text-gray-500 flex items-center gap-1">
+                            <i className="ri-loader-4-line animate-spin"></i>Saving…
+                          </span>
+                        )}
                         <button onClick={handleDownloadPDF}
                           className="px-5 py-2.5 rounded-xl font-medium transition-all whitespace-nowrap cursor-pointer bg-gray-900 text-white hover:bg-gray-800">
                           <i className="ri-download-line mr-2"></i>Download PDF

@@ -209,3 +209,9 @@
 .float-slow { animation: float-slow 6s ease-in-out infinite; }
 .float-medium { animation: float-medium 4s ease-in-out infinite; }
 .animate-fade-in-up { animation: fade-in-up 0.4s ease forwards; }
+
+/* ─── Thin scrollbar for template picker ─── */
+.scrollbar-thin::-webkit-scrollbar { height: 4px; }
+.scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
+.scrollbar-thin::-webkit-scrollbar-thumb:hover { background: #9ca3af; }

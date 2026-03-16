@@ -3,7 +3,7 @@ export default function Footer() {
   return (
     <footer className="bg-gradient-to-br from-teal-50 via-emerald-50 to-cyan-50 text-gray-700 rounded-t-[32px] mt-12 border-t border-teal-100">
       <div className="w-full px-4 sm:px-6 lg:px-8 xl:px-12 py-16 lg:py-20">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 lg:gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-12 lg:gap-8">
           {/* Newsletter */}
           <div className="lg:col-span-1">
             <div className="flex items-center gap-2 mb-4">
@@ -39,30 +39,15 @@ export default function Footer() {
             </form>
           </div>
 
-          {/* Product Links */}
-          <div>
-            <h4 className="text-xs uppercase tracking-wider text-gray-400 font-semibold mb-4">
-              Product
-            </h4>
-            <ul className="space-y-3">
-              <li><a href="#" className="text-gray-500 hover:text-teal-700 text-sm transition-colors">Resume Builder</a></li>
-              <li><a href="#" className="text-gray-500 hover:text-teal-700 text-sm transition-colors">Job Search</a></li>
-              <li><a href="#" className="text-gray-500 hover:text-teal-700 text-sm transition-colors">ATS Checker</a></li>
-              <li><a href="#" className="text-gray-500 hover:text-teal-700 text-sm transition-colors">Templates</a></li>
-              <li><a href="#" className="text-gray-500 hover:text-teal-700 text-sm transition-colors">Pricing</a></li>
-            </ul>
-          </div>
-
           {/* Company Links */}
           <div>
             <h4 className="text-xs uppercase tracking-wider text-gray-400 font-semibold mb-4">
               Company
             </h4>
             <ul className="space-y-3">
-              <li><a href="#" className="text-gray-500 hover:text-teal-700 text-sm transition-colors">About Us</a></li>
-              <li><a href="#" className="text-gray-500 hover:text-teal-700 text-sm transition-colors">Careers</a></li>
-              <li><a href="#" className="text-gray-500 hover:text-teal-700 text-sm transition-colors">Blog</a></li>
-              <li><a href="#" className="text-gray-500 hover:text-teal-700 text-sm transition-colors">Contact</a></li>
+              <li><a href="/about" className="text-gray-500 hover:text-teal-700 text-sm transition-colors">About Us</a></li>
+              <li><a href="/careers" className="text-gray-500 hover:text-teal-700 text-sm transition-colors">Careers</a></li>
+              <li><a href="/contact" className="text-gray-500 hover:text-teal-700 text-sm transition-colors">Contact</a></li>
             </ul>
           </div>
 
@@ -90,16 +75,24 @@ export default function Footer() {
         </div>
 
         {/* Bottom Bar */}
-        <div className="border-t border-teal-100 mt-12 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
-          <p className="text-gray-400 text-sm">
-            © 2025 Pick. All rights reserved.
-          </p>
-          <p className="text-gray-400 text-sm">
-            Made with <span className="text-red-400">♥</span> for job seekers
-          </p>
-          <a href="https://readdy.ai/?ref=logo" target="_blank" rel="noopener noreferrer" className="text-gray-400 text-sm hover:text-teal-700 transition-colors">
-            Powered by Readdy
-          </a>
+        <div className="border-t border-teal-100 mt-12 pt-8 flex flex-col items-center gap-4">
+          <div className="w-full flex flex-col md:flex-row items-center justify-between gap-4">
+            <p className="text-gray-400 text-sm">
+              © 2025 PickCV. All rights reserved.
+            </p>
+            <p className="text-gray-400 text-sm">
+              Made with <span className="text-red-400">♥</span> for job seekers
+            </p>
+          </div>
+          <div className="w-full flex flex-col md:flex-row items-center justify-center gap-1 pt-2 border-t border-teal-50">
+            <p className="text-gray-400 text-[11px]">
+              A product of <span className="font-semibold text-gray-500">Bhoomer Digital Solutions Private Limited</span>
+            </p>
+            <span className="hidden md:inline text-gray-300 text-[11px]">·</span>
+            <p className="text-gray-300 text-[10px]">
+              9-1-1/4, Oppelim School, Amalapuram, Andhra Pradesh, India, 533201
+            </p>
+          </div>
         </div>
       </div>
     </footer>

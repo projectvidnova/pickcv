@@ -135,10 +135,16 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
       let jobLink: string | undefined;
 
       if (jdMode === 'title') {
+        // Title-only mode: backend will generate a full JD from the title
         jobTitle = jdTitle;
-        jobDescription = `Position: ${jdTitle}\n\nPlease optimize this resume for the ${jdTitle} role.`;
+        // Don't send a fake job_description — let the backend handle it
       } else if (jdMode === 'paste') {
         jobDescription = jdPaste;
+        // Try to extract job title from the first meaningful line of the pasted JD
+        const firstLine = jdPaste.trim().split('\n').find(l => l.trim().length > 3);
+        if (firstLine && firstLine.trim().length < 100) {
+          jobTitle = firstLine.trim();
+        }
       } else if (jdMode === 'link') {
         jobLink = jdLink;
       }

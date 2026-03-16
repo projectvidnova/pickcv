@@ -41,16 +41,18 @@ class GoogleOAuthService:
         query_string = urlencode(params)
         return f"https://accounts.google.com/o/oauth2/v2/auth?{query_string}"
     
-    async def exchange_code_for_token(self, code: str) -> Optional[Dict[str, Any]]:
+    async def exchange_code_for_token(self, code: str, redirect_uri: str = None) -> Optional[Dict[str, Any]]:
         """
         Exchange authorization code for access token.
         
         Args:
             code: Authorization code from Google redirect
+            redirect_uri: Override redirect_uri (must match the one used in the auth request)
             
         Returns:
             Token response containing access_token and id_token, or None if failed
         """
+        used_redirect_uri = redirect_uri or self.redirect_uri
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.post(
@@ -60,13 +62,14 @@ class GoogleOAuthService:
                         "client_secret": self.client_secret,
                         "code": code,
                         "grant_type": "authorization_code",
-                        "redirect_uri": self.redirect_uri,
+                        "redirect_uri": used_redirect_uri,
                     }
                 ) as resp:
                     if resp.status == 200:
                         return await resp.json()
                     else:
-                        logger.error(f"Token exchange failed: {resp.status}")
+                        error_body = await resp.text()
+                        logger.error(f"Token exchange failed: {resp.status} - {error_body}")
                         return None
         except Exception as e:
             logger.error(f"Token exchange error: {e}")

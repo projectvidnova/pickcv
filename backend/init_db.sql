@@ -233,3 +233,91 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
+
+-- ============= 12. ADMINS TABLE =============
+CREATE TABLE IF NOT EXISTS admins (
+    id SERIAL PRIMARY KEY,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    name VARCHAR(255),
+    role VARCHAR(50) DEFAULT 'admin',
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    last_login TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX IF NOT EXISTS idx_admins_email ON admins(email);
+
+-- ============= 13. COLLEGES TABLE =============
+CREATE TABLE IF NOT EXISTS colleges (
+    id SERIAL PRIMARY KEY,
+    institution_name VARCHAR(500) NOT NULL,
+    official_email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    contact_person_name VARCHAR(255) NOT NULL,
+    designation VARCHAR(255),
+    phone_number VARCHAR(20),
+    city VARCHAR(255),
+    state VARCHAR(255),
+    institution_type VARCHAR(50),
+    status VARCHAR(20) DEFAULT 'pending',
+    rejection_reason TEXT,
+    logo_url VARCHAR(500),
+    website VARCHAR(500),
+    address TEXT,
+    naac_grade VARCHAR(10),
+    total_students INTEGER DEFAULT 0,
+    onboarding_completed BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    approved_at TIMESTAMP WITH TIME ZONE,
+    approved_by INTEGER REFERENCES admins(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_colleges_email ON colleges(official_email);
+CREATE INDEX IF NOT EXISTS idx_colleges_status ON colleges(status);
+
+-- ============= 14. COLLEGE STUDENTS TABLE =============
+CREATE TABLE IF NOT EXISTS college_students (
+    id SERIAL PRIMARY KEY,
+    college_id INTEGER NOT NULL REFERENCES colleges(id) ON DELETE CASCADE,
+    email VARCHAR(255) NOT NULL,
+    name VARCHAR(255),
+    branch VARCHAR(255),
+    graduation_year INTEGER,
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    status VARCHAR(20) DEFAULT 'invited',
+    invitation_token VARCHAR(255),
+    invited_at TIMESTAMP WITH TIME ZONE,
+    registered_at TIMESTAMP WITH TIME ZONE,
+    ready_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(college_id, email)
+);
+
+CREATE INDEX IF NOT EXISTS idx_college_students_college_id ON college_students(college_id);
+CREATE INDEX IF NOT EXISTS idx_college_students_email ON college_students(email);
+CREATE INDEX IF NOT EXISTS idx_college_students_user_id ON college_students(user_id);
+CREATE INDEX IF NOT EXISTS idx_college_students_status ON college_students(status);
+
+-- ============= 15. SHARED PROFILES TABLE =============
+CREATE TABLE IF NOT EXISTS shared_profiles (
+    id SERIAL PRIMARY KEY,
+    college_id INTEGER NOT NULL REFERENCES colleges(id) ON DELETE CASCADE,
+    share_token VARCHAR(255) UNIQUE NOT NULL,
+    recruiter_email VARCHAR(255) NOT NULL,
+    message TEXT,
+    student_ids INTEGER[] NOT NULL,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_shared_profiles_token ON shared_profiles(share_token);
+CREATE INDEX IF NOT EXISTS idx_shared_profiles_college_id ON shared_profiles(college_id);
+
+-- ============= SEED DEFAULT ADMIN =============
+-- Only insert if no admin exists
+INSERT INTO admins (email, password_hash, name, role)
+SELECT 'admin@pickcv.com', '$2b$12$W7Bl8Usjaa5aFBnBRbQXve8LsYHfyzAkcGwHwGcU7JLqO1Jzyiuye', 'PickCV Admin', 'admin'
+WHERE NOT EXISTS (SELECT 1 FROM admins WHERE email = 'admin@pickcv.com');

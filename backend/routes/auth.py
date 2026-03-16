@@ -9,11 +9,12 @@ import secrets
 import logging
 
 from database import get_db
-from models import User
-from schemas import UserCreate, UserResponse, Token
+from models import User, UserProfile, UserSkill
+from schemas import UserCreate, UserResponse, Token, UserProfileFullResponse, UserProfileUpdateRequest, SkillItem
 from services.auth_service import auth_service
 from services.email_service import email_service
 from services.google_oauth_service import google_oauth_service
+from services.college_service import college_service
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -86,6 +87,12 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     
     # Send verification email (in dev: prints to console, in prod: sends via SMTP)
     email_service.send_verification_email(new_user.email, verification_token)
+    
+    # Update college student status if this email was invited by a college
+    try:
+        await college_service.update_student_status_on_register(db, new_user.id, new_user.email)
+    except Exception as e:
+        logger.warning(f"College student status update failed for {new_user.email}: {e}")
     
     return new_user
 
@@ -189,6 +196,135 @@ async def get_me(current_user: User = Depends(get_current_user)):
     return current_user
 
 
+@router.get("/profile", response_model=UserProfileFullResponse)
+async def get_profile(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get full user profile including preferences and skills."""
+    # Get user profile (preferred_locations)
+    result = await db.execute(
+        select(UserProfile).where(UserProfile.user_id == current_user.id)
+    )
+    user_profile = result.scalar_one_or_none()
+    preferred_locations = user_profile.preferred_locations or [] if user_profile else []
+
+    # Get skills
+    result = await db.execute(
+        select(UserSkill).where(UserSkill.user_id == current_user.id)
+    )
+    user_skills = result.scalars().all()
+    skills = [
+        SkillItem(name=s.skill_name, years=int(s.years_of_experience or 0))
+        for s in user_skills
+    ]
+
+    return UserProfileFullResponse(
+        id=current_user.id,
+        email=current_user.email,
+        full_name=current_user.full_name,
+        phone=current_user.phone,
+        location=current_user.location,
+        linkedin_url=current_user.linkedin_url,
+        profile_picture_url=current_user.profile_picture_url,
+        target_role=current_user.target_role,
+        experience_level=current_user.experience_level,
+        work_mode=current_user.work_mode,
+        preferred_locations=preferred_locations,
+        skills=skills,
+        is_active=current_user.is_active,
+        created_at=current_user.created_at,
+    )
+
+
+@router.put("/profile", response_model=UserProfileFullResponse)
+async def update_profile(
+    data: UserProfileUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update user profile, preferences, and skills."""
+    # Update direct user fields
+    if data.full_name is not None:
+        current_user.full_name = data.full_name
+    if data.phone is not None:
+        current_user.phone = data.phone
+    if data.location is not None:
+        current_user.location = data.location
+    if data.linkedin_url is not None:
+        current_user.linkedin_url = data.linkedin_url
+    if data.target_role is not None:
+        current_user.target_role = data.target_role
+    if data.experience_level is not None:
+        current_user.experience_level = data.experience_level
+    if data.work_mode is not None:
+        current_user.work_mode = data.work_mode
+
+    # Update preferred_locations in UserProfile
+    if data.preferred_locations is not None:
+        result = await db.execute(
+            select(UserProfile).where(UserProfile.user_id == current_user.id)
+        )
+        user_profile = result.scalar_one_or_none()
+        if user_profile:
+            user_profile.preferred_locations = data.preferred_locations
+        else:
+            user_profile = UserProfile(
+                user_id=current_user.id,
+                preferred_locations=data.preferred_locations,
+            )
+            db.add(user_profile)
+
+    # Sync skills: delete existing, insert new
+    if data.skills is not None:
+        from sqlalchemy import delete
+        await db.execute(
+            delete(UserSkill).where(UserSkill.user_id == current_user.id)
+        )
+        for skill in data.skills:
+            db.add(UserSkill(
+                user_id=current_user.id,
+                skill_name=skill.name,
+                years_of_experience=float(skill.years),
+            ))
+
+    await db.commit()
+    await db.refresh(current_user)
+
+    # Re-fetch for response
+    result = await db.execute(
+        select(UserProfile).where(UserProfile.user_id == current_user.id)
+    )
+    user_profile = result.scalar_one_or_none()
+    preferred_locations = user_profile.preferred_locations or [] if user_profile else []
+
+    result = await db.execute(
+        select(UserSkill).where(UserSkill.user_id == current_user.id)
+    )
+    user_skills = result.scalars().all()
+    skills = [
+        SkillItem(name=s.skill_name, years=int(s.years_of_experience or 0))
+        for s in user_skills
+    ]
+
+    return UserProfileFullResponse(
+        id=current_user.id,
+        email=current_user.email,
+        full_name=current_user.full_name,
+        phone=current_user.phone,
+        location=current_user.location,
+        linkedin_url=current_user.linkedin_url,
+        profile_picture_url=current_user.profile_picture_url,
+        target_role=current_user.target_role,
+        experience_level=current_user.experience_level,
+        work_mode=current_user.work_mode,
+        preferred_locations=preferred_locations,
+        skills=skills,
+        is_active=current_user.is_active,
+        created_at=current_user.created_at,
+    )
+
+
 @router.get("/google/login")
 async def google_login():
     """Redirect to Google OAuth login."""
@@ -248,6 +384,11 @@ async def google_callback(code: str, state: str, db: AsyncSession = Depends(get_
         await db.commit()
         await db.refresh(user)
         logger.info(f"New user created via Google OAuth: {email}")
+        # Update college student status if this email was invited
+        try:
+            await college_service.update_student_status_on_register(db, user.id, user.email)
+        except Exception as e:
+            logger.warning(f"College student status update failed for {email}: {e}")
     else:
         # Update profile picture if available
         if picture and not user.profile_picture_url:
@@ -266,7 +407,7 @@ async def google_callback(code: str, state: str, db: AsyncSession = Depends(get_
 
 
 @router.post("/google/token")
-async def google_token(code: str, db: AsyncSession = Depends(get_db)):
+async def google_token(code: str, redirect_uri: str = None, db: AsyncSession = Depends(get_db)):
     """Exchange Google authorization code for JWT tokens (mobile/SPA friendly)."""
     try:
         if not code:
@@ -275,8 +416,8 @@ async def google_token(code: str, db: AsyncSession = Depends(get_db)):
                 detail="Authorization code missing"
             )
         
-        # Exchange code for token
-        token_response = await google_oauth_service.exchange_code_for_token(code)
+        # Exchange code for token (use frontend's redirect_uri if provided to avoid mismatch)
+        token_response = await google_oauth_service.exchange_code_for_token(code, redirect_uri=redirect_uri)
         if not token_response or "access_token" not in token_response:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -314,6 +455,11 @@ async def google_token(code: str, db: AsyncSession = Depends(get_db)):
                 await db.commit()
                 await db.refresh(user)
                 logger.info(f"New user created via Google OAuth: {email}")
+                # Update college student status if invited
+                try:
+                    await college_service.update_student_status_on_register(db, user.id, user.email)
+                except Exception as e:
+                    logger.warning(f"College student status update failed for {email}: {e}")
             
             # Generate JWT tokens using real database user ID
             access_token_jwt = auth_service.create_access_token(user.id)

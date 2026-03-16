@@ -7,7 +7,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
 from config import settings
-from routes import resume, jobs, auth, analysis
+from routes import resume, jobs, auth, analysis, college, admin
 from security import get_security_headers
 
 # Configure logging
@@ -94,6 +94,8 @@ app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(resume.router, prefix="/api/resume", tags=["Resume"])
 app.include_router(analysis.router, prefix="/api/analysis", tags=["Analysis"])
 app.include_router(jobs.router, prefix="/api/jobs", tags=["Jobs"])
+app.include_router(college.router, prefix="/api/college", tags=["College"])
+app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 
 
 # ============= HEALTH CHECKS =============
@@ -129,7 +131,7 @@ async def startup_event():
     
     # Auto-create database tables
     from database import engine, Base
-    from models import User  # noqa: F401 - Import to register models
+    from models import User, Admin, College, CollegeStudent, SharedProfile  # noqa: F401 - Import to register models
     from sqlalchemy import text
     
     try:
@@ -144,6 +146,22 @@ async def startup_event():
             # Create all tables
             await conn.run_sync(Base.metadata.create_all)
             logger.info("Database tables created/verified successfully")
+            
+            # Seed default admin if not exists
+            try:
+                from services.auth_service import auth_service as _auth
+                result = await conn.execute(text("SELECT 1 FROM admins WHERE email = :email"), {"email": "admin@pickcv.com"})
+                if not result.fetchone():
+                    admin_hash = _auth.get_password_hash("admin123")
+                    await conn.execute(
+                        text("INSERT INTO admins (email, password_hash, name, role, is_active) VALUES (:email, :hash, :name, :role, :active)"),
+                        {"email": "admin@pickcv.com", "hash": admin_hash, "name": "PickCV Admin", "role": "admin", "active": True}
+                    )
+                    logger.info("Default admin seeded: admin@pickcv.com")
+                else:
+                    logger.info("Default admin already exists")
+            except Exception as e:
+                logger.warning(f"Admin seeding skipped: {e}")
     except Exception as e:
         logger.error(f"Database initialization failed: {e}")
 

@@ -6,6 +6,7 @@ import StepSkills from './components/StepSkills';
 import StepResumeUpload from './components/StepResumeUpload';
 import JourneyTimeline from './components/JourneyTimeline';
 import ResumePreview from './components/ResumePreview';
+import { apiService } from '../../services/api';
 
 interface OnboardingData {
   name: string;
@@ -130,10 +131,26 @@ export default function OnboardingPage() {
     if (currentStep > 1) setCurrentStep(currentStep - 1);
   };
 
-  const handleComplete = () => {
+  const handleComplete = async () => {
     setConfettiActive(true);
     setIsCompleting(true);
-    setTimeout(() => navigate('/'), 3500);
+    // Save profile to backend
+    try {
+      await apiService.updateProfile({
+        full_name: formData.name,
+        phone: formData.phone,
+        location: formData.location,
+        linkedin_url: formData.linkedin,
+        target_role: formData.targetRole,
+        experience_level: formData.experienceLevel,
+        work_mode: formData.workMode,
+        preferred_locations: formData.preferredLocations,
+        skills: formData.skills.map(s => ({ name: s.name, years: s.years })),
+      });
+    } catch {
+      // Profile save failed silently — user can edit from profile page
+    }
+    setTimeout(() => navigate('/profile'), 3500);
   };
 
   const isStepValid = () => {

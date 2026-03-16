@@ -49,7 +49,7 @@ export interface ColorTheme {
   skillText: string;      /* skill tag text */
 }
 
-export type TemplateId = 'classic' | 'modern' | 'executive' | 'minimal' | 'professional';
+export type TemplateId = 'classic' | 'modern' | 'executive' | 'minimal' | 'professional' | 'elegant' | 'compact' | 'bold' | 'timeline' | 'clean';
 
 export interface ResumeTemplate {
   id: TemplateId;
