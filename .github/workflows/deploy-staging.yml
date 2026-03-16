@@ -66,8 +66,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
 
       - name: Build frontend for staging
         working-directory: frontend
@@ -76,7 +74,11 @@ jobs:
           VITE_GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID_STAGING }}
           VITE_GOOGLE_REDIRECT_URI: https://pickcv-staging.web.app/auth/callback
         run: |
-          npm ci
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
           npm run build
 
       - name: Install Firebase CLI
