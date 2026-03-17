@@ -17,6 +17,7 @@ env:
   CLOUD_SQL_INSTANCE: pickcv-prod-001:us-central1:pickcv-postgres
   FIREBASE_PROJECT_ID: studio-1324640898-76b00
   PRODUCTION_HOSTING_URL: https://studio-1324640898-76b00.web.app
+  PRODUCTION_API_URL: https://pickcv-backend-318698650933.us-central1.run.app/api
 
 jobs:
   deploy:
@@ -78,7 +79,7 @@ jobs:
       - name: Build frontend for production
         working-directory: frontend
         env:
-          VITE_API_URL: ${{ steps.backend.outputs.backend_url }}/api
+          VITE_API_URL: ${{ env.PRODUCTION_API_URL }}
           VITE_GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID_PROD }}
           VITE_GOOGLE_REDIRECT_URI: https://studio-1324640898-76b00.web.app/auth/callback
         run: |
