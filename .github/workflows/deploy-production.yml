@@ -22,6 +22,7 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment: production
 
     steps:
       - name: Checkout
@@ -37,6 +38,46 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Validate production configuration
+        env:
+          GEMINI_API_KEY_PROD: ${{ secrets.GEMINI_API_KEY_PROD }}
+          SECRET_KEY_PROD: ${{ secrets.SECRET_KEY_PROD }}
+          GOOGLE_CLIENT_ID_PROD: ${{ secrets.GOOGLE_CLIENT_ID_PROD }}
+          GOOGLE_CLIENT_SECRET_PROD: ${{ secrets.GOOGLE_CLIENT_SECRET_PROD }}
+          PROD_DB_PASSWORD: ${{ secrets.PROD_DB_PASSWORD }}
+          PROD_ALLOWED_ORIGINS: ${{ secrets.PROD_ALLOWED_ORIGINS }}
+          PROD_FRONTEND_URL: ${{ secrets.PROD_FRONTEND_URL }}
+        run: |
+          set -euo pipefail
+
+          for var_name in GEMINI_API_KEY_PROD SECRET_KEY_PROD GOOGLE_CLIENT_ID_PROD GOOGLE_CLIENT_SECRET_PROD PROD_DB_PASSWORD PROD_ALLOWED_ORIGINS PROD_FRONTEND_URL; do
+            val="${!var_name}"
+            if [ -z "$val" ] || [ "$val" = "-" ]; then
+              echo "Invalid production secret: $var_name"
+              exit 1
+            fi
+          done
+
+          if [[ "$CLOUD_RUN_SERVICE" == *"staging"* ]]; then
+            echo "CLOUD_RUN_SERVICE cannot point to staging in production workflow"
+            exit 1
+          fi
+
+          if [[ "$CLOUD_SQL_INSTANCE" == *"staging"* ]]; then
+            echo "CLOUD_SQL_INSTANCE cannot point to staging in production workflow"
+            exit 1
+          fi
+
+          if [[ "$PRODUCTION_API_URL" == *"staging"* ]]; then
+            echo "PRODUCTION_API_URL cannot contain staging host"
+            exit 1
+          fi
+
+          if [[ "$PROD_ALLOWED_ORIGINS" == *"staging"* ]] || [[ "$PROD_FRONTEND_URL" == *"staging"* ]]; then
+            echo "Production frontend/origin config cannot contain staging domains"
+            exit 1
+          fi
 
       - name: Deploy backend to Cloud Run (production)
         id: backend

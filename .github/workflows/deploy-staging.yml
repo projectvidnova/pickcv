@@ -21,6 +21,7 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment: staging
 
     steps:
       - name: Checkout
@@ -36,6 +37,39 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Validate staging configuration
+        env:
+          GEMINI_API_KEY_STAGING: ${{ secrets.GEMINI_API_KEY_STAGING }}
+          SECRET_KEY_STAGING: ${{ secrets.SECRET_KEY_STAGING }}
+          GOOGLE_CLIENT_ID_STAGING: ${{ secrets.GOOGLE_CLIENT_ID_STAGING }}
+          GOOGLE_CLIENT_SECRET_STAGING: ${{ secrets.GOOGLE_CLIENT_SECRET_STAGING }}
+          STAGING_DB_PASSWORD: ${{ secrets.STAGING_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          for var_name in GEMINI_API_KEY_STAGING SECRET_KEY_STAGING GOOGLE_CLIENT_ID_STAGING GOOGLE_CLIENT_SECRET_STAGING STAGING_DB_PASSWORD; do
+            val="${!var_name}"
+            if [ -z "$val" ] || [ "$val" = "-" ]; then
+              echo "Invalid staging secret: $var_name"
+              exit 1
+            fi
+          done
+
+          if [[ "$CLOUD_RUN_SERVICE" != *"staging"* ]]; then
+            echo "CLOUD_RUN_SERVICE must be a staging service"
+            exit 1
+          fi
+
+          if [[ "$CLOUD_SQL_INSTANCE" != *"staging"* ]]; then
+            echo "CLOUD_SQL_INSTANCE must be a staging instance"
+            exit 1
+          fi
+
+          if [[ "$STAGING_HOSTING_URL" != *"pickcv-staging.web.app"* ]]; then
+            echo "STAGING_HOSTING_URL is unexpected"
+            exit 1
+          fi
 
       - name: Deploy backend to Cloud Run (staging)
         id: backend
