@@ -25,8 +25,8 @@ app = FastAPI(
 # ============= SECURITY MIDDLEWARE =============
 
 # 1. Trusted Host Middleware - Only accept requests from allowed hosts
-# In production on Cloud Run, use wildcard since Cloud Run handles ingress security
-if settings.is_production:
+# In non-development Cloud Run environments, use wildcard since Cloud Run handles ingress security
+if settings.environment in {"production", "staging"}:
     allowed_hosts = ["*"]
 else:
     allowed_hosts = settings.origins_list + ["localhost", "127.0.0.1"]
