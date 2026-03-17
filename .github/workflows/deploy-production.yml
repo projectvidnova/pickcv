@@ -122,7 +122,9 @@ jobs:
         env:
           VITE_API_URL: ${{ env.PRODUCTION_API_URL }}
           VITE_GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID_PROD }}
-          VITE_GOOGLE_REDIRECT_URI: https://studio-1324640898-76b00.web.app/auth/callback
+          # VITE_GOOGLE_REDIRECT_URI intentionally NOT set.
+          # The frontend falls back to window.location.origin + '/auth/callback'
+          # so it works on both pickcv.com and the Firebase URL automatically.
         run: |
           if [ -f package-lock.json ]; then
             npm ci
