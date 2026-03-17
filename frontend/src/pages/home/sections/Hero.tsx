@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import AuthModal from '../../../components/feature/AuthModal';
 import OptimizeModal from '../../../components/feature/OptimizeModal';
@@ -9,10 +8,10 @@ export default function Hero() {
   const [isOptimizeModalOpen, setIsOptimizeModalOpen] = useState(false);
 
   const steps = [
-    { icon: 'ri-user-add-line', title: 'Join Platform', description: 'Create your profile', color: 'from-teal-500 to-teal-600', pillColor: 'bg-teal-100 text-teal-700', detail: 'Sign up in 2 minutes' },
-    { icon: 'ri-file-edit-line', title: 'Build Resume', description: 'AI-powered polish', color: 'from-emerald-500 to-emerald-600', pillColor: 'bg-emerald-100 text-emerald-700', detail: 'ATS-optimized format' },
-    { icon: 'ri-graduation-cap-line', title: 'Learn Skills', description: 'Close skill gaps', color: 'from-amber-500 to-orange-500', pillColor: 'bg-amber-100 text-amber-700', detail: 'Personalized courses' },
-    { icon: 'ri-briefcase-4-line', title: 'Get Hired', description: 'Land your dream job', color: 'from-green-500 to-emerald-600', pillColor: 'bg-green-100 text-green-700', detail: 'Smart job matching' },
+    { icon: 'ri-upload-cloud-2-line', title: 'Upload Resume', description: 'Drop your PDF/DOCX', color: 'from-teal-500 to-teal-600', pillColor: 'bg-teal-100 text-teal-700', detail: 'No signup needed' },
+    { icon: 'ri-radar-line', title: 'ATS Detection', description: 'Scan for issues', color: 'from-cyan-500 to-cyan-600', pillColor: 'bg-cyan-100 text-cyan-700', detail: 'Real-time analysis' },
+    { icon: 'ri-key-2-line', title: 'Keyword Injection', description: '6–12 keywords added', color: 'from-emerald-500 to-emerald-600', pillColor: 'bg-emerald-100 text-emerald-700', detail: 'Role-specific match' },
+    { icon: 'ri-download-cloud-2-line', title: 'Get Hired', description: 'Download & apply', color: 'from-green-500 to-emerald-600', pillColor: 'bg-green-100 text-green-700', detail: '94% ATS score' },
   ];
 
   useEffect(() => {
@@ -46,142 +45,136 @@ export default function Hero() {
 
               {/* Left Content */}
               <div className="max-w-2xl lg:pr-8">
-                <div className="inline-flex items-center gap-2 glass-badge text-teal-700 px-5 py-2.5 rounded-full text-sm font-medium mb-8">
-                  <i className="ri-sparkling-fill text-teal-500"></i>
-                  AI-Powered Resume Builder
+                {/* Hook stat */}
+                <div className="inline-flex items-center gap-2 glass-badge text-red-600 px-5 py-2.5 rounded-full text-sm font-medium mb-8">
+                  <i className="ri-error-warning-fill text-red-500"></i>
+                  70% of resumes are rejected by ATS before a human sees them
                 </div>
 
                 <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold text-gray-900 leading-[1.1] tracking-tight mb-6">
-                  Build, Optimize
+                  From Resume →
                   <br />
-                  <span className="bg-gradient-to-r from-teal-600 to-emerald-500 bg-clip-text text-transparent">
-                    &amp; Get Hired
+                  Get{' '}
+                  <span
+                    className="bg-gradient-to-r from-teal-600 to-emerald-500 bg-clip-text text-transparent"
+                    style={{ fontFamily: "'Pacifico', cursive" }}
+                  >
+                    Hired
                   </span>
-                  <br />
-                  Faster
                 </h1>
 
                 <p className="text-lg sm:text-xl text-gray-600 mb-8 max-w-lg leading-relaxed">
-                  AI-powered ATS resume builder + smart job matching. Land your dream role with personalized recommendations.
+                  Your resume is failing ATS. We fix that in 30 seconds.
+                  AI-powered optimization that gets you past every filter and into interviews.
                 </p>
 
-                {/* 3-Step Visual Flow */}
-                <div className="glass-card rounded-2xl p-6 mb-6">
-                  <div className="flex items-center justify-between gap-4">
-                    {/* Step 1: Upload */}
-                    <div className="flex-1 flex flex-col items-center text-center">
-                      <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-teal-500 to-teal-600 flex items-center justify-center text-white mb-3 shadow-lg shadow-teal-500/30">
-                        <i className="ri-upload-cloud-2-line text-2xl"></i>
-                      </div>
-                      <p className="text-sm font-bold text-gray-900">Upload</p>
-                      <p className="text-xs text-gray-500 mt-1">Your Resume</p>
-                    </div>
-
-                    {/* Arrow */}
-                    <div className="flex items-center justify-center -mt-8">
-                      <i className="ri-arrow-right-line text-2xl text-teal-400"></i>
-                    </div>
-
-                    {/* Step 2: Optimize */}
-                    <div className="flex-1 flex flex-col items-center text-center">
-                      <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center text-white mb-3 shadow-lg shadow-emerald-500/30">
-                        <i className="ri-sparkling-fill text-2xl"></i>
-                      </div>
-                      <p className="text-sm font-bold text-gray-900">Optimize</p>
-                      <p className="text-xs text-gray-500 mt-1">AI-Powered</p>
-                    </div>
-
-                    {/* Arrow */}
-                    <div className="flex items-center justify-center -mt-8">
-                      <i className="ri-arrow-right-line text-2xl text-emerald-400"></i>
-                    </div>
-
-                    {/* Step 3: Apply */}
-                    <div className="flex-1 flex flex-col items-center text-center">
-                      <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center text-white mb-3 shadow-lg shadow-green-500/30">
-                        <i className="ri-briefcase-4-line text-2xl"></i>
-                      </div>
-                      <p className="text-sm font-bold text-gray-900">Apply</p>
-                      <p className="text-xs text-gray-500 mt-1">Get Hired</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Get Started Button */}
+                {/* Primary CTA */}
                 <button
                   onClick={() => setIsOptimizeModalOpen(true)}
-                  className="w-full py-4 rounded-xl text-base font-semibold bg-gradient-to-r from-teal-600 to-emerald-500 text-white shadow-lg shadow-teal-500/25 hover:shadow-teal-500/40 hover:scale-[1.01] transition-all cursor-pointer flex items-center justify-center gap-2 whitespace-nowrap mb-6"
+                  className="w-full sm:w-auto px-10 py-4 rounded-xl text-base font-semibold bg-gradient-to-r from-teal-600 to-emerald-500 text-white shadow-lg shadow-teal-500/25 hover:shadow-teal-500/40 hover:scale-[1.01] transition-all cursor-pointer flex items-center justify-center gap-2 whitespace-nowrap mb-4"
                 >
-                  Get Started for Free
+                  <i className="ri-upload-cloud-2-line text-lg"></i>
+                  Upload → Get up to 94% ATS Match
                   <i className="ri-arrow-right-line text-lg"></i>
                 </button>
 
-                {/* Micro Stats */}
-                <div className="flex items-center gap-8">
-                  <div className="flex items-center gap-2 text-gray-600">
-                    <i className="ri-flashlight-fill text-amber-500 text-lg"></i>
-                    <span className="text-sm font-medium">2 min setup</span>
+                {/* Microcopy */}
+                <div className="flex flex-wrap items-center gap-6 mb-8">
+                  <div className="flex items-center gap-2 text-gray-500">
+                    <i className="ri-flashlight-fill text-amber-500"></i>
+                    <span className="text-sm font-medium">Results in under 30 seconds</span>
                   </div>
-                  <div className="flex items-center gap-2 text-gray-600">
-                    <i className="ri-focus-3-fill text-teal-500 text-lg"></i>
-                    <span className="text-sm font-medium">95% match rate</span>
+                  <div className="flex items-center gap-2 text-gray-500">
+                    <i className="ri-lock-unlock-line text-teal-500"></i>
+                    <span className="text-sm font-medium">No signup required</span>
                   </div>
-                  <div className="flex items-center gap-2 text-gray-600">
-                    <i className="ri-shield-check-fill text-green-500 text-lg"></i>
-                    <span className="text-sm font-medium">ATS safe</span>
+                </div>
+
+                {/* Core Value Strip */}
+                <div className="glass-card rounded-2xl p-5">
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="flex flex-col items-center text-center">
+                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-teal-500 to-teal-600 flex items-center justify-center text-white mb-2 shadow-lg shadow-teal-500/30">
+                        <i className="ri-bar-chart-fill text-xl"></i>
+                      </div>
+                      <p className="text-2xl font-bold text-teal-600">94%</p>
+                      <p className="text-xs text-gray-500 font-medium">ATS Match</p>
+                    </div>
+                    <div className="flex flex-col items-center text-center">
+                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center text-white mb-2 shadow-lg shadow-emerald-500/30">
+                        <i className="ri-key-2-fill text-xl"></i>
+                      </div>
+                      <p className="text-2xl font-bold text-emerald-600">6–12</p>
+                      <p className="text-xs text-gray-500 font-medium">Keywords Injected</p>
+                    </div>
+                    <div className="flex flex-col items-center text-center">
+                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center text-white mb-2 shadow-lg shadow-amber-500/30">
+                        <i className="ri-phone-fill text-xl"></i>
+                      </div>
+                      <p className="text-2xl font-bold text-amber-600">3×</p>
+                      <p className="text-xs text-gray-500 font-medium">Interview Callbacks</p>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Right Visual */}
+              {/* Right Visual — Animated Before/After with Floating Cards */}
               <div className="relative hidden lg:block">
                 <div className="relative">
-                  {/* Central Resume Card */}
+                  {/* Central Before/After Card */}
                   <div className="relative glass-card rounded-3xl p-8 max-w-md mx-auto z-10 float-slow">
-                    <div className="flex items-start gap-4 mb-6">
-                      <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center text-white text-2xl font-bold shadow-lg shadow-teal-500/30">
-                        AS
+                    {/* Before */}
+                    <div className="mb-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-2 h-2 rounded-full bg-red-400"></div>
+                        <span className="text-xs font-semibold text-red-500 uppercase tracking-wide">Before PickCV</span>
                       </div>
-                      <div className="flex-1">
-                        <h3 className="text-xl font-bold text-gray-900">Adithya Sharma</h3>
-                        <p className="text-teal-600 font-medium">Product Manager</p>
-                      </div>
-                      <div className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
-                        <i className="ri-check-line"></i>Hired
+                      <div className="rounded-xl p-3 border border-red-200/60" style={{ background: 'rgba(239,68,68,0.04)' }}>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm text-gray-600">ATS Score</span>
+                          <span className="text-lg font-bold text-red-500">38%</span>
+                        </div>
+                        <div className="w-full bg-red-100 rounded-full h-2">
+                          <div className="bg-red-400 h-2 rounded-full" style={{ width: '38%' }}></div>
+                        </div>
+                        <div className="mt-2 space-y-1">
+                          <div className="flex items-center gap-2 text-xs text-red-500"><i className="ri-close-circle-fill"></i><span>Missing 8 critical keywords</span></div>
+                          <div className="flex items-center gap-2 text-xs text-red-500"><i className="ri-close-circle-fill"></i><span>Weak action verbs</span></div>
+                        </div>
                       </div>
                     </div>
-                    <div className="space-y-4">
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <div className="w-2 h-2 rounded-full bg-teal-500"></div>
-                          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Experience</span>
-                        </div>
-                        <div className="rounded-xl p-3 glass">
-                          <p className="text-sm font-semibold text-gray-800">Senior PM at Razorpay</p>
-                          <p className="text-xs text-gray-500">2021 - Present</p>
-                        </div>
+                    {/* Arrow */}
+                    <div className="flex items-center justify-center my-1">
+                      <div className="w-9 h-9 rounded-full bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center text-white shadow-lg">
+                        <i className="ri-arrow-down-line text-lg"></i>
                       </div>
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-                          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Skills</span>
+                    </div>
+                    {/* After */}
+                    <div className="mt-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                        <span className="text-xs font-semibold text-green-600 uppercase tracking-wide">After PickCV</span>
+                      </div>
+                      <div className="rounded-xl p-3 border border-green-200/60" style={{ background: 'rgba(16,185,129,0.04)' }}>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm text-gray-600">ATS Score</span>
+                          <span className="text-lg font-bold text-green-600">94%</span>
                         </div>
-                        <div className="flex flex-wrap gap-2">
-                          <span className="px-3 py-1 bg-teal-100/80 text-teal-700 rounded-full text-xs font-medium">Strategy</span>
-                          <span className="px-3 py-1 bg-emerald-100/80 text-emerald-700 rounded-full text-xs font-medium">Analytics</span>
-                          <span className="px-3 py-1 bg-green-100/80 text-green-700 rounded-full text-xs font-medium">Leadership</span>
+                        <div className="w-full bg-green-100 rounded-full h-2">
+                          <div className="bg-green-500 h-2 rounded-full" style={{ width: '94%' }}></div>
+                        </div>
+                        <div className="mt-2 space-y-1">
+                          <div className="flex items-center gap-2 text-xs text-green-600"><i className="ri-check-fill"></i><span>12 keywords injected</span></div>
+                          <div className="flex items-center gap-2 text-xs text-green-600"><i className="ri-check-fill"></i><span>ATS-optimized format</span></div>
                         </div>
                       </div>
                     </div>
                     <div className="absolute -top-4 -right-4 bg-gradient-to-r from-teal-600 to-emerald-500 text-white px-4 py-2 rounded-full text-sm font-semibold shadow-lg shadow-teal-500/30 flex items-center gap-2 animate-pulse">
-                      <i className="ri-sparkling-fill"></i>AI Enhanced
-                    </div>
-                    <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-gray-900 text-white px-5 py-2 rounded-full text-sm font-semibold shadow-xl flex items-center gap-2 whitespace-nowrap">
-                      <i className="ri-briefcase-fill text-amber-400"></i>₹24 LPA Offer Received
+                      <i className="ri-sparkling-fill"></i>AI Optimized
                     </div>
                   </div>
 
-                  {/* Floating Step Cards */}
+                  {/* Floating Step Cards (animated) */}
                   {steps.map((step, index) => {
                     const positions = [
                       '-top-4 -left-16',
@@ -211,6 +204,7 @@ export default function Hero() {
                     );
                   })}
 
+                  {/* SVG Connector Lines */}
                   <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 0 }}>
                     <defs>
                       <linearGradient id="lineGrad" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -251,27 +245,26 @@ export default function Hero() {
               {/* Mobile Visual */}
               <div className="lg:hidden flex flex-col items-center gap-6">
                 <div className="glass-card rounded-2xl p-6 max-w-sm w-full relative">
-                  <div className="flex items-start gap-4 mb-4">
-                    <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center text-white text-xl font-bold">AS</div>
-                    <div className="flex-1">
-                      <h3 className="text-lg font-bold text-gray-900">Adithya Sharma</h3>
-                      <p className="text-teal-600 text-sm font-medium">Product Manager</p>
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1">Your ATS Score</p>
+                      <div className="flex items-center gap-3">
+                        <span className="text-red-400 text-lg font-bold line-through">38%</span>
+                        <i className="ri-arrow-right-line text-gray-400"></i>
+                        <span className="text-green-600 text-2xl font-bold">94%</span>
+                      </div>
                     </div>
-                    <div className="bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs font-bold">Hired</div>
+                    <div className="bg-green-100 text-green-700 px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1">
+                      <i className="ri-check-line"></i>Optimized
+                    </div>
                   </div>
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    <span className="px-3 py-1 bg-teal-100/80 text-teal-700 rounded-full text-xs font-medium">Strategy</span>
-                    <span className="px-3 py-1 bg-emerald-100/80 text-emerald-700 rounded-full text-xs font-medium">Analytics</span>
-                    <span className="px-3 py-1 bg-green-100/80 text-green-700 rounded-full text-xs font-medium">Leadership</span>
-                  </div>
-                  <div className="pt-4 border-t border-white/50 flex items-center justify-between">
-                    <span className="text-xs text-gray-500">Job Match</span>
-                    <span className="text-sm font-bold text-teal-600">98% Match</span>
-                  </div>
-                  <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-gray-900 text-white px-4 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap">
-                    <i className="ri-briefcase-fill text-amber-400"></i>₹24 LPA Offer
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-xs text-green-600"><i className="ri-check-fill"></i><span>12 keywords injected</span></div>
+                    <div className="flex items-center gap-2 text-xs text-green-600"><i className="ri-check-fill"></i><span>Achievement-driven bullets</span></div>
+                    <div className="flex items-center gap-2 text-xs text-green-600"><i className="ri-check-fill"></i><span>ATS-optimized format</span></div>
                   </div>
                 </div>
+                {/* Mobile Step Cards */}
                 <div className="grid grid-cols-2 gap-3 w-full max-w-sm mt-4">
                   {steps.map((step, index) => (
                     <div key={index} onClick={() => setActiveStep(index)}
