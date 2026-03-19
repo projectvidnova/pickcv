@@ -1,0 +1,186 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  GCP_PROJECT_ID: pickcv-prod-001
+  GCP_REGION: us-central1
+  FIREBASE_PROJECT_ID: studio-1324640898-76b00
+
+jobs:
+  # ─────────────────────────────────────────────
+  # Deploy to Production
+  # ─────────────────────────────────────────────
+  deploy-production:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      CLOUD_RUN_SERVICE: pickcv-backend
+      CLOUD_SQL_INSTANCE: pickcv-prod-001:us-central1:pickcv-postgres
+      HOSTING_URL: https://studio-1324640898-76b00.web.app
+      API_URL: https://pickcv-backend-318698650933.us-central1.run.app/api
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud (OIDC)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/318698650933/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+          service_account: pickcv-staging-deployer@pickcv-prod-001.iam.gserviceaccount.com
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Validate production configuration
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY_PROD }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY_PROD }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID_PROD }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET_PROD }}
+          DB_PASSWORD: ${{ secrets.PROD_DB_PASSWORD }}
+          ALLOWED_ORIGINS: ${{ secrets.PROD_ALLOWED_ORIGINS }}
+          FRONTEND_URL: ${{ secrets.PROD_FRONTEND_URL }}
+        run: |
+          set -euo pipefail
+          for var_name in GEMINI_API_KEY SECRET_KEY GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET DB_PASSWORD ALLOWED_ORIGINS FRONTEND_URL; do
+            val="${!var_name}"
+            if [ -z "$val" ] || [ "$val" = "-" ]; then
+              echo "::error::Missing required secret: $var_name"
+              exit 1
+            fi
+          done
+
+      - name: Deploy backend to Cloud Run
+        id: backend
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY_PROD }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY_PROD }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID_PROD }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET_PROD }}
+          DB_PASSWORD: ${{ secrets.PROD_DB_PASSWORD }}
+          ALLOWED_ORIGINS: ${{ secrets.PROD_ALLOWED_ORIGINS }}
+          FRONTEND_URL: ${{ secrets.PROD_FRONTEND_URL }}
+        run: |
+          gcloud run deploy "$CLOUD_RUN_SERVICE" \
+            --source ./backend \
+            --region "$GCP_REGION" \
+            --project "$GCP_PROJECT_ID" \
+            --allow-unauthenticated \
+            --service-account "pickcv-backend-sa@pickcv-prod-001.iam.gserviceaccount.com" \
+            --add-cloudsql-instances "$CLOUD_SQL_INSTANCE" \
+            --memory 512Mi \
+            --cpu 1 \
+            --max-instances 10 \
+            --timeout 300 \
+            --set-env-vars "ENVIRONMENT=production,GEMINI_API_KEY=$GEMINI_API_KEY,SECRET_KEY=$SECRET_KEY,ALLOWED_ORIGINS=$ALLOWED_ORIGINS,FRONTEND_URL=$FRONTEND_URL,GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET,GOOGLE_REDIRECT_URI=$HOSTING_URL/auth/callback,DATABASE_URL=postgresql+asyncpg://postgres:$DB_PASSWORD@/pickcv?host=/cloudsql/$CLOUD_SQL_INSTANCE,STORAGE_BACKEND=local,RESUME_DOWNLOAD_PRICE=49,SUBSCRIPTION_MONTHLY_PRICE=149,SUBSCRIPTION_YEARLY_PRICE=999,FREE_DOWNLOADS_LIMIT=1" \
+            --set-secrets "ZOHO_PAYMENTS_ACCOUNT_ID=ZOHO_PAYMENTS_ACCOUNT_ID:latest,ZOHO_PAYMENTS_API_KEY=ZOHO_PAYMENTS_API_KEY:latest,ZOHO_PAYMENTS_OAUTH_TOKEN=ZOHO_PAYMENTS_OAUTH_TOKEN:latest,ZOHO_PAYMENTS_REFRESH_TOKEN=ZOHO_PAYMENTS_REFRESH_TOKEN:latest,ZOHO_PAYMENTS_SIGNING_KEY=ZOHO_PAYMENTS_SIGNING_KEY:latest,ZOHO_PAYMENTS_CLIENT_ID=ZOHO_PAYMENTS_CLIENT_ID:latest,ZOHO_PAYMENTS_CLIENT_SECRET=ZOHO_PAYMENTS_CLIENT_SECRET:latest"
+
+          gcloud run services update "$CLOUD_RUN_SERVICE" \
+            --region "$GCP_REGION" \
+            --project "$GCP_PROJECT_ID" \
+            --no-invoker-iam-check
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build frontend
+        working-directory: frontend
+        env:
+          VITE_API_URL: ${{ env.API_URL }}
+          VITE_GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID_PROD }}
+        run: |
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+          npm run build
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Deploy frontend to Firebase Hosting
+        run: firebase deploy --only hosting:production --project "$FIREBASE_PROJECT_ID" --non-interactive
+
+  # ─────────────────────────────────────────────
+  # Deploy to Staging (same code, staging infra)
+  # ─────────────────────────────────────────────
+  deploy-staging:
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      CLOUD_RUN_SERVICE: pickcv-backend-staging
+      CLOUD_SQL_INSTANCE: pickcv-prod-001:us-central1:pickcv-postgres-staging
+      HOSTING_URL: https://pickcv-staging.web.app
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud (OIDC)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/318698650933/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+          service_account: pickcv-staging-deployer@pickcv-prod-001.iam.gserviceaccount.com
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Deploy backend to Cloud Run
+        id: backend
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY_STAGING }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY_STAGING }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID_STAGING }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET_STAGING }}
+          DB_PASSWORD: ${{ secrets.STAGING_DB_PASSWORD }}
+        run: |
+          gcloud run deploy "$CLOUD_RUN_SERVICE" \
+            --source ./backend \
+            --region "$GCP_REGION" \
+            --project "$GCP_PROJECT_ID" \
+            --allow-unauthenticated \
+            --service-account "pickcv-backend-sa@pickcv-prod-001.iam.gserviceaccount.com" \
+            --add-cloudsql-instances "$CLOUD_SQL_INSTANCE" \
+            --memory 512Mi \
+            --cpu 1 \
+            --max-instances 10 \
+            --timeout 300 \
+            --set-env-vars "ENVIRONMENT=staging,GEMINI_API_KEY=$GEMINI_API_KEY,SECRET_KEY=$SECRET_KEY,ALLOWED_ORIGINS=$HOSTING_URL,FRONTEND_URL=$HOSTING_URL,GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET,GOOGLE_REDIRECT_URI=$HOSTING_URL/auth/callback,DATABASE_URL=postgresql+asyncpg://postgres:$DB_PASSWORD@/pickcv_staging?host=/cloudsql/$CLOUD_SQL_INSTANCE,STORAGE_BACKEND=local,RESUME_DOWNLOAD_PRICE=49,SUBSCRIPTION_MONTHLY_PRICE=149,SUBSCRIPTION_YEARLY_PRICE=999,FREE_DOWNLOADS_LIMIT=1" \
+            --set-secrets "ZOHO_PAYMENTS_ACCOUNT_ID=ZOHO_PAYMENTS_ACCOUNT_ID:latest,ZOHO_PAYMENTS_API_KEY=ZOHO_PAYMENTS_API_KEY:latest,ZOHO_PAYMENTS_OAUTH_TOKEN=ZOHO_PAYMENTS_OAUTH_TOKEN:latest,ZOHO_PAYMENTS_REFRESH_TOKEN=ZOHO_PAYMENTS_REFRESH_TOKEN:latest,ZOHO_PAYMENTS_SIGNING_KEY=ZOHO_PAYMENTS_SIGNING_KEY:latest,ZOHO_PAYMENTS_CLIENT_ID=ZOHO_PAYMENTS_CLIENT_ID:latest,ZOHO_PAYMENTS_CLIENT_SECRET=ZOHO_PAYMENTS_CLIENT_SECRET:latest"
+
+          BACKEND_URL=$(gcloud run services describe "$CLOUD_RUN_SERVICE" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --format='value(status.url)')
+          echo "backend_url=$BACKEND_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build frontend
+        working-directory: frontend
+        env:
+          VITE_API_URL: ${{ steps.backend.outputs.backend_url }}/api
+          VITE_GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID_STAGING }}
+          VITE_GOOGLE_REDIRECT_URI: https://pickcv-staging.web.app/auth/callback
+        run: |
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+          npm run build
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Deploy frontend to Firebase Hosting
+        run: firebase deploy --only hosting:staging --project "$FIREBASE_PROJECT_ID" --non-interactive
