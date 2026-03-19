@@ -97,3 +97,4 @@ coverage/
 tmp/
 temp/
 *.tmp
+backend/start_server.sh

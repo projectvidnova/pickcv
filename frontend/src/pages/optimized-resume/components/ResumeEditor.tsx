@@ -4,6 +4,7 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import PaymentModal from '../../../components/PaymentModal';
 import paymentService, { PlanInfo, SubscriptionInfo } from '../../../services/paymentService';
+import { authFetch } from '../../../services/authFetch';
 
 interface ResumeEditorProps {
   data: ResumeData;
@@ -51,30 +52,26 @@ export default function ResumeEditor({ data, onDataChange, templateId, children 
       setPlans(access.plans);
     } catch (error) {
       console.error('Error checking payment access:', error);
-      // If check fails, allow download (graceful degradation)
-      setHasPaymentAccess(true);
+      // On error, block access (fail-closed)
+      setHasPaymentAccess(false);
     }
   };
 
   const saveToDatabase = async () => {
     setIsSaving(true);
     try {
-      const token = localStorage.getItem('access_token');
       const optimizationData = sessionStorage.getItem('optimizationData');
       
-      if (!token || !optimizationData) return;
+      if (!optimizationData) return;
       
       const parsedData = JSON.parse(optimizationData);
       const resumeId = parsedData.resumeId;
       
       if (!resumeId) return;
 
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/resume/${resumeId}/save-edited`, {
+      const response = await authFetch(`${import.meta.env.VITE_API_URL}/resume/${resumeId}/save-edited`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...data,
           template_id: templateId,
@@ -317,6 +314,7 @@ export default function ResumeEditor({ data, onDataChange, templateId, children 
         <button
           onClick={handleDownloadPDF}
           disabled={isDownloading || isClaimingFree}
+          data-download-btn
           className="px-4 py-2 rounded-lg bg-gradient-to-r from-teal-600 to-emerald-500 text-white text-sm font-semibold shadow-lg shadow-teal-500/25 hover:shadow-teal-500/40 hover:scale-[1.02] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isClaimingFree ? (

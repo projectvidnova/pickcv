@@ -3,6 +3,8 @@
  * Handles Zoho Payment Gateway integration with subscription/plan support
  */
 
+import { authFetch } from './authFetch';
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
 // ─── Interfaces ──────────────────────────────────────────────
@@ -85,46 +87,32 @@ export interface FreeDownloadResult {
 class PaymentService {
   private baseUrl = `${API_BASE_URL}/payments`;
 
-  private getHeaders(): Record<string, string> {
-    const token = localStorage.getItem('access_token');
-    return {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    };
-  }
-
   /** Get payment gateway configuration */
   async getConfig(): Promise<PaymentConfig> {
-    const response = await fetch(`${this.baseUrl}/config`, {
-      headers: this.getHeaders(),
-    });
+    const response = await authFetch(`${this.baseUrl}/config`);
     if (!response.ok) throw new Error('Failed to fetch payment config');
     return response.json();
   }
 
   /** Get available pricing plans */
   async getPlans(): Promise<PlanInfo[]> {
-    const response = await fetch(`${this.baseUrl}/plans`, {
-      headers: this.getHeaders(),
-    });
+    const response = await authFetch(`${this.baseUrl}/plans`);
     if (!response.ok) throw new Error('Failed to fetch plans');
     return response.json();
   }
 
   /** Comprehensive access check for a resume */
   async checkAccess(resumeId: number): Promise<PaymentAccess> {
-    const response = await fetch(`${this.baseUrl}/check-access/${resumeId}`, {
-      headers: this.getHeaders(),
-    });
+    const response = await authFetch(`${this.baseUrl}/check-access/${resumeId}`);
     if (!response.ok) throw new Error('Failed to check payment access');
     return response.json();
   }
 
   /** Claim the one-time free download */
   async useFreeDownload(resumeId: number): Promise<FreeDownloadResult> {
-    const response = await fetch(`${this.baseUrl}/use-free-download`, {
+    const response = await authFetch(`${this.baseUrl}/use-free-download`, {
       method: 'POST',
-      headers: this.getHeaders(),
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ resume_id: resumeId }),
     });
     if (!response.ok) {
@@ -142,9 +130,9 @@ class PaymentService {
     const body: Record<string, unknown> = { plan_type: planType };
     if (resumeId) body.resume_id = resumeId;
 
-    const response = await fetch(`${this.baseUrl}/create-session`, {
+    const response = await authFetch(`${this.baseUrl}/create-session`, {
       method: 'POST',
-      headers: this.getHeaders(),
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
     if (!response.ok) {
@@ -160,9 +148,9 @@ class PaymentService {
     paymentId: string,
     signature: string
   ): Promise<PaymentVerifyResult> {
-    const response = await fetch(`${this.baseUrl}/verify`, {
+    const response = await authFetch(`${this.baseUrl}/verify`, {
       method: 'POST',
-      headers: this.getHeaders(),
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         payments_session_id: sessionId,
         payment_id: paymentId,
@@ -178,18 +166,14 @@ class PaymentService {
 
   /** Get user's active subscription */
   async getSubscription(): Promise<{ has_subscription: boolean; subscription: SubscriptionInfo | null }> {
-    const response = await fetch(`${this.baseUrl}/subscription`, {
-      headers: this.getHeaders(),
-    });
+    const response = await authFetch(`${this.baseUrl}/subscription`);
     if (!response.ok) throw new Error('Failed to fetch subscription');
     return response.json();
   }
 
   /** Get user's payment history */
   async getHistory(): Promise<PaymentHistoryItem[]> {
-    const response = await fetch(`${this.baseUrl}/history`, {
-      headers: this.getHeaders(),
-    });
+    const response = await authFetch(`${this.baseUrl}/history`);
     if (!response.ok) throw new Error('Failed to fetch payment history');
     return response.json();
   }

@@ -4,6 +4,9 @@ import { RESUME_TEMPLATES, getDefaultTheme } from './themes';
 import TemplatePicker from './TemplatePicker';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
+import PaymentModal from '../../../components/PaymentModal';
+import paymentService, { PlanInfo, SubscriptionInfo } from '../../../services/paymentService';
+import { authFetch } from '../../../services/authFetch';
 
 /* ══════════════════════════════════════════════
    Editable Text — click-to-edit with contentEditable
@@ -154,6 +157,17 @@ export default function InlineResumeEditor({
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle');
   const resumeRef = useRef<HTMLDivElement>(null);
 
+  // Payment gating state
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [hasPaymentAccess, setHasPaymentAccess] = useState(false);
+  const [accessType, setAccessType] = useState<string | null>(null);
+  const [freeDownloadsRemaining, setFreeDownloadsRemaining] = useState(0);
+  const [activeSubscription, setActiveSubscription] = useState<SubscriptionInfo | null>(null);
+  const [plans, setPlans] = useState<PlanInfo[]>([]);
+  const [resumeId, setResumeId] = useState<number | null>(null);
+  const [isClaimingFree, setIsClaimingFree] = useState(false);
+  const [paymentLoading, setPaymentLoading] = useState(true);
+
   const [sections, setSections] = useState<ResumeSection[]>([
     { id: 'summary', label: 'Professional Summary', icon: 'ri-file-text-line', visible: true },
     { id: 'experience', label: 'Work Experience', icon: 'ri-briefcase-line', visible: true },
@@ -162,6 +176,34 @@ export default function InlineResumeEditor({
   ]);
 
   const visibleSections = sections.filter((s) => s.visible);
+
+  // Check payment access on mount
+  useEffect(() => {
+    const checkAccess = async () => {
+      try {
+        const raw = sessionStorage.getItem('optimizationData');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed.resumeId) {
+            setResumeId(parsed.resumeId);
+            const access = await paymentService.checkAccess(parsed.resumeId);
+            setHasPaymentAccess(access.has_access);
+            setAccessType(access.access_type);
+            setFreeDownloadsRemaining(access.free_downloads_remaining);
+            setActiveSubscription(access.active_subscription);
+            setPlans(access.plans);
+          }
+        }
+      } catch (error) {
+        console.error('Error checking payment access:', error);
+        // On error, block access (fail-closed)
+        setHasPaymentAccess(false);
+      } finally {
+        setPaymentLoading(false);
+      }
+    };
+    checkAccess();
+  }, []);
 
   /* Switch template → pick first color of that template */
   const switchTemplate = (id: TemplateId) => {
@@ -248,15 +290,14 @@ export default function InlineResumeEditor({
     setIsSaving(true);
     setSaveStatus('idle');
     try {
-      const token = localStorage.getItem('access_token');
       const raw = sessionStorage.getItem('optimizationData');
-      if (!token || !raw) { setIsSaving(false); return; }
+      if (!raw) { setIsSaving(false); return; }
       const parsed = JSON.parse(raw);
       if (!parsed.resumeId) { setIsSaving(false); return; }
 
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/resume/${parsed.resumeId}/save-edited`, {
+      const res = await authFetch(`${import.meta.env.VITE_API_URL}/resume/${parsed.resumeId}/save-edited`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...data, template_id: `${templateId}-${theme.id}` }),
       });
       setSaveStatus(res.ok ? 'saved' : 'error');
@@ -268,8 +309,48 @@ export default function InlineResumeEditor({
     }
   };
 
-  /* ─── download PDF ─── */
+  /* ─── download PDF (with payment gate) ─── */
   const handleDownloadPDF = async () => {
+    // Case 1: Already has access (subscription, per-resume payment, or gateway not configured)
+    if (hasPaymentAccess && accessType !== 'free') {
+      await performDownload();
+      return;
+    }
+
+    // Case 2: Free download available — claim it
+    if (hasPaymentAccess && accessType === 'free' && freeDownloadsRemaining > 0 && resumeId) {
+      setIsClaimingFree(true);
+      try {
+        const result = await paymentService.useFreeDownload(resumeId);
+        if (result.success) {
+          setFreeDownloadsRemaining(result.free_downloads_remaining);
+          setHasPaymentAccess(true);
+          setAccessType('per_resume');
+          await performDownload();
+        }
+      } catch (error) {
+        console.error('Free download claim failed:', error);
+        setShowPaymentModal(true);
+      } finally {
+        setIsClaimingFree(false);
+      }
+      return;
+    }
+
+    // Case 3: Payment required — show pricing modal
+    if (resumeId) {
+      setShowPaymentModal(true);
+    }
+  };
+
+  const handlePaymentSuccess = (subscriptionActivated?: boolean) => {
+    setHasPaymentAccess(true);
+    setAccessType(subscriptionActivated ? 'subscription' : 'per_resume');
+    setShowPaymentModal(false);
+    performDownload();
+  };
+
+  const performDownload = async () => {
     setIsDownloading(true);
     try {
       await saveToDatabase();
@@ -929,12 +1010,36 @@ export default function InlineResumeEditor({
 
             <button
               onClick={handleDownloadPDF}
-              disabled={isDownloading}
+              disabled={isDownloading || isClaimingFree || paymentLoading}
               className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-white shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all disabled:opacity-50"
               style={{ backgroundColor: theme.primary }}
             >
-              <i className={`${isDownloading ? 'ri-loader-4-line animate-spin' : 'ri-download-2-line'}`} />
-              {isDownloading ? 'Exporting...' : 'Download PDF'}
+              {paymentLoading ? (
+                <>
+                  <i className="ri-loader-4-line animate-spin" />
+                  Checking...
+                </>
+              ) : isClaimingFree ? (
+                <>
+                  <i className="ri-loader-4-line animate-spin" />
+                  Activating Free Download...
+                </>
+              ) : !hasPaymentAccess ? (
+                <>
+                  <i className="ri-lock-line" />
+                  Pay & Download
+                </>
+              ) : accessType === 'free' && freeDownloadsRemaining > 0 ? (
+                <>
+                  <i className="ri-gift-line" />
+                  Download Free ({freeDownloadsRemaining} left)
+                </>
+              ) : (
+                <>
+                  <i className={`${isDownloading ? 'ri-loader-4-line animate-spin' : 'ri-download-2-line'}`} />
+                  {isDownloading ? 'Exporting...' : activeSubscription ? 'Download PDF ✨' : 'Download PDF'}
+                </>
+              )}
             </button>
           </div>
         </div>
@@ -948,6 +1053,17 @@ export default function InlineResumeEditor({
       {/* Click-outside to close section picker */}
       {showAddSection && (
         <div className="fixed inset-0 z-40" onClick={() => setShowAddSection(false)} />
+      )}
+
+      {/* Payment Modal */}
+      {resumeId && (
+        <PaymentModal
+          isOpen={showPaymentModal}
+          resumeId={resumeId}
+          plans={plans}
+          onClose={() => setShowPaymentModal(false)}
+          onPaymentSuccess={handlePaymentSuccess}
+        />
       )}
     </div>
   );

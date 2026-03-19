@@ -1,5 +1,5 @@
 """Authentication routes."""
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -129,6 +129,49 @@ async def login(
     )
     
     return {"access_token": access_token, "token_type": "bearer"}
+
+
+@router.post("/refresh")
+async def refresh_token(request: Request, db: AsyncSession = Depends(get_db)):
+    """Refresh an expired access token using a valid refresh token."""
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or expired refresh token",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    
+    body = await request.json()
+    refresh_tok = body.get("refresh_token")
+    if not refresh_tok:
+        raise credentials_exception
+    
+    payload = auth_service.decode_access_token(refresh_tok)
+    if payload is None or payload.get("type") != "refresh":
+        raise credentials_exception
+    
+    user_id_str = payload.get("sub")
+    if user_id_str is None:
+        raise credentials_exception
+    
+    try:
+        user_id = int(user_id_str)
+    except (ValueError, TypeError):
+        raise credentials_exception
+    
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise credentials_exception
+    
+    # Issue new access token and refresh token
+    new_access_token = auth_service.create_access_token(user.id)
+    new_refresh_token = auth_service.create_refresh_token(user.id)
+    
+    return {
+        "access_token": new_access_token,
+        "refresh_token": new_refresh_token,
+        "token_type": "bearer"
+    }
 
 
 @router.post("/verify-email")

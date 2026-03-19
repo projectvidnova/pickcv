@@ -708,6 +708,10 @@ export default function OptimizedResumePage() {
               {/* Actions */}
               <div className="space-y-2.5">
                 <button
+                  onClick={() => {
+                    const btn = document.querySelector('[data-download-btn]') as HTMLButtonElement;
+                    if (btn) btn.click();
+                  }}
                   className="w-full py-3 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-500 text-white text-sm font-semibold shadow-lg shadow-teal-500/25 hover:shadow-teal-500/40 hover:scale-[1.02] transition-all whitespace-nowrap cursor-pointer"
                 >
                   <i className="ri-download-2-line mr-2"></i>

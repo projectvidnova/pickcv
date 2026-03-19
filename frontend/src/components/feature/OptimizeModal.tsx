@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { authFetch } from '../../services/authFetch';
 
 interface OptimizeModalProps {
   isOpen: boolean;
@@ -110,11 +111,8 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
       }
 
       console.log('Uploading resume with token:', token.substring(0, 20) + '...');
-      const uploadResponse = await fetch(`${import.meta.env.VITE_API_URL}/resume/upload`, {
+      const uploadResponse = await authFetch(`${import.meta.env.VITE_API_URL}/resume/upload`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
         body: formData
       });
 
@@ -155,14 +153,11 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
       // ── Step 3: AI optimization (the long call) ──
       setProcessingStep(3);
 
-      const optimizeResponse = await fetch(
+      const optimizeResponse = await authFetch(
         `${import.meta.env.VITE_API_URL}/resume/${resumeId}/optimize-for-job`,
         {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-            'Content-Type': 'application/json'
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             job_title: jobTitle,
             job_description: jobDescription,
