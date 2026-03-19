@@ -1,5 +1,6 @@
 """Gemini AI service for resume analysis and optimization."""
 import google.genai as genai
+from google.genai import types
 from config import settings
 from typing import Dict, List, Optional
 import json
@@ -10,6 +11,75 @@ logger = logging.getLogger(__name__)
 
 # Configure Gemini with API key
 client = genai.Client(api_key=settings.gemini_api_key)
+
+# Reusable config that forces Gemini to return valid JSON
+JSON_CONFIG = types.GenerateContentConfig(
+    response_mime_type="application/json",
+    temperature=0.7,
+)
+
+
+def _robust_parse_json(text: str) -> Dict:
+    """Parse JSON from Gemini output with multiple fallback strategies.
+    
+    Handles: markdown code blocks, BOM chars, trailing commas,
+    control characters inside strings, etc.
+    """
+    raw = text.strip()
+
+    # 1. Strip markdown code fences if present
+    if '```' in raw:
+        m = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', raw)
+        if m:
+            raw = m.group(1).strip()
+        else:
+            raw = raw.replace('```json', '').replace('```', '').strip()
+
+    # 2. Try direct parse first (fast path)
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        pass
+
+    # 3. Light cleanup: trailing commas before } or ]
+    cleaned = re.sub(r',\s*([}\]])', r'\1', raw)
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+
+    # 4. Extract the outermost JSON object with brace matching
+    start = cleaned.find('{')
+    if start != -1:
+        depth = 0
+        in_string = False
+        escape = False
+        for i in range(start, len(cleaned)):
+            c = cleaned[i]
+            if escape:
+                escape = False
+                continue
+            if c == '\\':
+                escape = True
+                continue
+            if c == '"':
+                in_string = not in_string
+                continue
+            if in_string:
+                continue
+            if c == '{':
+                depth += 1
+            elif c == '}':
+                depth -= 1
+                if depth == 0:
+                    candidate = cleaned[start:i + 1]
+                    try:
+                        return json.loads(candidate)
+                    except json.JSONDecodeError:
+                        break
+
+    # 5. Nothing worked
+    raise ValueError(f"Could not parse JSON from Gemini response (length={len(text)}): {text[:300]}...")
 
 
 class GeminiService:
@@ -58,12 +128,13 @@ class GeminiService:
         try:
             response = self.client.models.generate_content(
                 model=self.model_name,
-                contents=prompt
+                contents=prompt,
+                config=JSON_CONFIG,
             )
-            # Parse JSON response
-            result = json.loads(response.text.strip())
+            result = _robust_parse_json(response.text)
             return result
         except Exception as e:
+            logger.error(f"Resume analysis failed: {e}")
             return {
                 "ats_score": 0,
                 "error": str(e)
@@ -297,49 +368,31 @@ Return ONLY the job description text, no extra commentary."""
         - NEVER fabricate personal details — only extract from the original resume
         """
         
-        try:
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=prompt
-            )
-            # Extract JSON from response, handling markdown code blocks
-            response_text = response.text.strip()
-            
-            # Remove markdown code blocks if present
-            if '```' in response_text:
-                # Extract content between code blocks
-                json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', response_text)
-                if json_match:
-                    response_text = json_match.group(1).strip()
-                else:
-                    # Fallback: remove all code block markers
-                    response_text = response_text.replace('```json', '').replace('```', '').strip()
-            
-            # Try to parse JSON
+        max_retries = 2
+        last_error = None
+        
+        for attempt in range(max_retries + 1):
             try:
-                result = json.loads(response_text)
-            except json.JSONDecodeError as json_err:
-                # Log the problematic response for debugging
-                logger.error(f"JSON parsing failed. Response text: {response_text[:500]}...")
-                logger.error(f"JSON error: {str(json_err)}")
-                
-                # Try to fix common JSON issues
-                # Replace single quotes with double quotes
-                response_text = response_text.replace("'", '"')
-                # Remove trailing commas before closing braces/brackets
-                response_text = re.sub(r',(\s*[}\]])', r'\1', response_text)
-                
-                try:
-                    result = json.loads(response_text)
-                except json.JSONDecodeError:
-                    # If still fails, return fallback structure
-                    raise ValueError(f"Failed to parse Gemini response as JSON: {str(json_err)}")
-            
-            return result
-        except Exception as e:
-            logger.error(f"Optimization failed: {str(e)}")
-            return {
-                "error": str(e),
+                response = self.client.models.generate_content(
+                    model=self.model_name,
+                    contents=prompt,
+                    config=JSON_CONFIG,
+                )
+                result = _robust_parse_json(response.text)
+                return result
+            except (ValueError, json.JSONDecodeError) as e:
+                last_error = e
+                logger.warning(f"Optimization JSON parse attempt {attempt + 1}/{max_retries + 1} failed: {e}")
+                if attempt < max_retries:
+                    continue  # retry — Gemini may produce valid JSON on next attempt
+            except Exception as e:
+                last_error = e
+                logger.error(f"Optimization failed (attempt {attempt + 1}): {e}")
+                break  # non-parse errors are not retryable
+
+        logger.error(f"Optimization failed after {max_retries + 1} attempts: {last_error}")
+        return {
+                "error": str(last_error),
                 "optimized_resume": resume_text,
                 "changes_made": [],
                 "name": "",
@@ -415,11 +468,13 @@ Return ONLY the job description text, no extra commentary."""
         try:
             response = self.client.models.generate_content(
                 model=self.model_name,
-                contents=prompt
+                contents=prompt,
+                config=JSON_CONFIG,
             )
-            result = json.loads(response.text.strip())
+            result = _robust_parse_json(response.text)
             return result
         except Exception as e:
+            logger.error(f"Comparison analysis failed: {e}")
             return {
                 "error": str(e),
                 "detailed_changes": []
