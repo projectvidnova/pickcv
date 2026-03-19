@@ -1,7 +1,7 @@
 """Pydantic schemas for request/response validation."""
 from pydantic import BaseModel, EmailStr, Field
-from typing import Optional, List
-from datetime import datetime
+from typing import Optional, List, Dict, Any
+from datetime import datetime, date
 
 
 # User Schemas
@@ -199,6 +199,14 @@ class CollegeResponse(BaseModel):
     total_students: Optional[int]
     onboarding_completed: bool
     created_at: datetime
+    # Phase 1 fields
+    subscription_tier: Optional[str] = "free"
+    max_students: Optional[int] = 500
+    academic_year: Optional[str] = None
+    placement_season_start: Optional[date] = None
+    placement_season_end: Optional[date] = None
+    autonomy_status: Optional[str] = None
+    affiliated_university: Optional[str] = None
     
     class Config:
         from_attributes = True
@@ -252,6 +260,24 @@ class CollegeStudentResponse(BaseModel):
     phone: Optional[str] = None
     full_name: Optional[str] = None
     profile_picture_url: Optional[str] = None
+    # Phase 1: Enhanced student fields
+    department_id: Optional[int] = None
+    department_name: Optional[str] = None
+    roll_number: Optional[str] = None
+    degree_type: Optional[str] = None
+    current_semester: Optional[int] = None
+    admission_year: Optional[int] = None
+    github_url: Optional[str] = None
+    portfolio_url: Optional[str] = None
+    resume_score: Optional[float] = None
+    resume_status: Optional[str] = "none"
+    interview_readiness_score: Optional[float] = 0
+    placement_status: Optional[str] = "not_started"
+    placed_company: Optional[str] = None
+    placed_role: Optional[str] = None
+    placed_salary_lpa: Optional[float] = None
+    skill_details: List[Dict[str, Any]] = []       # [{skill_name, proficiency, source}]
+    coe_groups: List[Dict[str, Any]] = []           # [{coe_name, coe_code, role}]
     
     class Config:
         from_attributes = True
@@ -262,6 +288,13 @@ class StudentUploadItem(BaseModel):
     name: Optional[str] = None
     branch: Optional[str] = None
     graduation_year: Optional[int] = None
+    roll_number: Optional[str] = None
+    department_code: Optional[str] = None
+    degree_type: Optional[str] = None
+    current_semester: Optional[int] = None
+    cgpa: Optional[float] = None
+    admission_year: Optional[int] = None
+    phone: Optional[str] = None
 
 
 class StudentUploadResponse(BaseModel):
@@ -276,8 +309,11 @@ class StudentUploadResponse(BaseModel):
 class ShareProfilesRequest(BaseModel):
     student_ids: List[int]
     recruiter_email: EmailStr
+    recruiter_name: Optional[str] = None
+    recruiter_company: Optional[str] = None
     message: Optional[str] = None
     expires_in_days: int = Field(default=7, ge=1, le=90)
+    filter_criteria: Optional[Dict[str, Any]] = None
 
 
 class ShareProfilesResponse(BaseModel):
@@ -295,6 +331,13 @@ class CollegeStatsResponse(BaseModel):
     avg_cgpa: Optional[float]
     placement_ready_percent: float
     top_skills: List[dict]
+    # Phase 1 enhanced stats
+    department_breakdown: List[Dict[str, Any]] = []    # [{dept, count, avg_cgpa}]
+    placement_stats: Dict[str, Any] = {}               # {placed, preparing, opted_out, avg_salary}
+    resume_stats: Dict[str, Any] = {}                  # {none, uploaded, optimized, avg_score}
+    skill_heatmap: List[Dict[str, Any]] = []           # [{skill, category, count, proficiency_dist}]
+    coe_stats: List[Dict[str, Any]] = []               # [{coe_name, member_count, avg_score}]
+    alerts_count: int = 0
 
 
 # ============= ADMIN MODULE SCHEMAS =============
@@ -380,3 +423,301 @@ class UserProfileUpdateRequest(BaseModel):
     work_mode: Optional[str] = None
     preferred_locations: Optional[List[str]] = None
     skills: Optional[List[SkillItem]] = None
+
+
+# ============= PHASE 1: DEPARTMENT SCHEMAS =============
+
+class DepartmentCreate(BaseModel):
+    name: str = Field(..., min_length=2)
+    code: str = Field(..., min_length=1, max_length=20)
+    degree_type: str = Field(..., min_length=2)         # B.Tech, M.Tech, BCA
+    duration_semesters: int = Field(default=8, ge=2, le=12)
+
+
+class DepartmentUpdate(BaseModel):
+    name: Optional[str] = None
+    code: Optional[str] = None
+    degree_type: Optional[str] = None
+    duration_semesters: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
+class DepartmentResponse(BaseModel):
+    id: int
+    college_id: int
+    name: str
+    code: Optional[str]
+    degree_type: Optional[str]
+    duration_semesters: int
+    is_active: bool
+    student_count: int = 0
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+# ============= PHASE 1: CURRICULUM SCHEMAS =============
+
+class CourseCreate(BaseModel):
+    department_id: int
+    semester_number: int = Field(..., ge=1, le=12)
+    course_name: str = Field(..., min_length=2)
+    course_code: Optional[str] = None
+    credits: int = Field(default=3, ge=1, le=10)
+    course_type: str = Field(default="core")            # core, elective, lab, project, internship
+    description: Optional[str] = None
+    skill_ids: List[int] = []                           # skill_taxonomy IDs this course teaches
+
+
+class CourseUpdate(BaseModel):
+    course_name: Optional[str] = None
+    course_code: Optional[str] = None
+    credits: Optional[int] = None
+    course_type: Optional[str] = None
+    description: Optional[str] = None
+    skill_ids: Optional[List[int]] = None
+
+
+class CourseResponse(BaseModel):
+    id: int
+    department_id: int
+    semester_number: int
+    course_name: str
+    course_code: Optional[str]
+    credits: int
+    course_type: str
+    description: Optional[str]
+    skills: List[Dict[str, Any]] = []                   # [{skill_id, skill_name, expected_level}]
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class CurriculumSemesterView(BaseModel):
+    """Grouped view of courses by semester."""
+    semester_number: int
+    courses: List[CourseResponse]
+    total_credits: int
+    skills_covered: List[str]
+
+
+class CurriculumOverview(BaseModel):
+    """Full curriculum for a department."""
+    department_id: int
+    department_name: str
+    degree_type: str
+    total_semesters: int
+    semesters: List[CurriculumSemesterView]
+    total_skills_mapped: int
+
+
+# ============= PHASE 1: SKILL SCHEMAS =============
+
+class SkillTaxonomyResponse(BaseModel):
+    id: int
+    name: str
+    name_lower: str
+    category: Optional[str]
+    subcategory: Optional[str]
+    is_verified: bool
+    aliases: List[str] = []
+    demand_score: float = 0
+    
+    class Config:
+        from_attributes = True
+
+
+class SkillTaxonomyCreate(BaseModel):
+    name: str = Field(..., min_length=1)
+    category: Optional[str] = None
+    subcategory: Optional[str] = None
+    aliases: List[str] = []
+
+
+class StudentSkillCreate(BaseModel):
+    skill_id: int
+    proficiency: str = Field(default="beginner")        # beginner, intermediate, advanced, expert
+    source: str = Field(default="self")                 # resume, curriculum, self, certification
+
+
+class StudentSkillResponse(BaseModel):
+    id: int
+    student_id: int
+    skill_id: int
+    skill_name: str
+    skill_category: Optional[str]
+    proficiency: str
+    source: str
+    verified: bool
+    
+    class Config:
+        from_attributes = True
+
+
+class SkillHeatmapItem(BaseModel):
+    skill_id: int
+    skill_name: str
+    category: str
+    subcategory: Optional[str] = None
+    student_count: int
+    beginner_count: int = 0
+    intermediate_count: int = 0
+    advanced_count: int = 0
+    expert_count: int = 0
+    demand_score: float = 0
+
+
+class SkillGapItem(BaseModel):
+    """Gap between curriculum skills and student actual skills."""
+    skill_name: str
+    expected_from_curriculum: int                       # How many students should have it
+    actually_have: int                                  # How many actually do
+    gap_percent: float                                  # % of students missing it
+
+
+class SkillAnalyticsResponse(BaseModel):
+    college_id: int
+    total_students: int
+    total_skills_tracked: int
+    heatmap: List[SkillHeatmapItem]
+    top_skills: List[Dict[str, Any]]                    # Top 20 skills by student count
+    skill_gaps: List[SkillGapItem]                      # Where curriculum expects but students lack
+    department_skill_distribution: List[Dict[str, Any]]
+    demand_alignment_score: float = 0                   # % of student skills matching high-demand
+
+
+# ============= PHASE 1: COE SCHEMAS =============
+
+class COEGroupCreate(BaseModel):
+    name: str = Field(..., min_length=2)
+    code: str = Field(..., min_length=1, max_length=50)
+    description: Optional[str] = None
+    focus_skill_ids: List[int] = []                     # skill_taxonomy IDs
+    faculty_lead_name: Optional[str] = None
+    faculty_lead_email: Optional[EmailStr] = None
+    max_capacity: Optional[int] = None
+
+
+class COEGroupUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    focus_skill_ids: Optional[List[int]] = None
+    faculty_lead_name: Optional[str] = None
+    faculty_lead_email: Optional[str] = None
+    max_capacity: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
+class COEGroupResponse(BaseModel):
+    id: int
+    college_id: int
+    name: str
+    code: Optional[str] = None
+    description: Optional[str]
+    focus_skills: List[Dict[str, Any]] = []             # [{skill_id, skill_name}]
+    faculty_lead_name: Optional[str]
+    faculty_lead_email: Optional[str]
+    max_capacity: Optional[int]
+    is_active: bool
+    member_count: int = 0
+    active_count: int = 0
+    avg_resume_score: Optional[float] = None
+    avg_cgpa: Optional[float] = None
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class COEMembershipCreate(BaseModel):
+    student_ids: List[int]                              # Batch add
+    role: str = Field(default="member")                 # member, lead, mentor
+
+
+class COEMembershipResponse(BaseModel):
+    id: int
+    coe_id: int
+    student_id: int
+    student_name: Optional[str]
+    student_email: str
+    role: str
+    status: str
+    joined_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+# ============= PHASE 1: ALERT SCHEMAS =============
+
+class CollegeAlertResponse(BaseModel):
+    id: int
+    alert_type: str
+    severity: str
+    title: str
+    message: str
+    entity_type: Optional[str]
+    entity_id: Optional[int]
+    is_read: bool
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class AlertDismissRequest(BaseModel):
+    alert_ids: List[int]
+
+
+# ============= PHASE 1: STUDENT BULK UPDATE =============
+
+class StudentProfileUpdate(BaseModel):
+    """Update a single student's enhanced profile."""
+    roll_number: Optional[str] = None
+    department_id: Optional[int] = None
+    degree_type: Optional[str] = None
+    current_semester: Optional[int] = None
+    cgpa: Optional[float] = None
+    admission_year: Optional[int] = None
+    phone: Optional[str] = None
+    linkedin_url: Optional[str] = None
+    github_url: Optional[str] = None
+    portfolio_url: Optional[str] = None
+    placement_status: Optional[str] = None
+
+
+class StudentBulkUpdateItem(BaseModel):
+    student_id: int
+    updates: StudentProfileUpdate
+
+
+class StudentBulkUpdateRequest(BaseModel):
+    students: List[StudentBulkUpdateItem]
+
+
+# ============= PHASE 1: AUDIT LOG SCHEMAS =============
+
+class CollegeAuditLogResponse(BaseModel):
+    id: int
+    actor_type: str
+    action: str
+    entity_type: Optional[str]
+    entity_id: Optional[int]
+    details: Optional[Dict[str, Any]]
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+# ============= PHASE 1: PAGINATION =============
+
+class PaginatedResponse(BaseModel):
+    """Standard paginated response wrapper for scale."""
+    items: List[Any]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int

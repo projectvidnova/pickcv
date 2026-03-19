@@ -125,12 +125,26 @@ export default function AdminColleges() {
             <div className="hidden sm:block h-6 w-px bg-gray-600"></div>
             <span className="hidden sm:block text-sm text-gray-400">Admin Dashboard</span>
           </div>
-          <button
-            onClick={handleLogout}
-            className="px-4 py-2 rounded-lg bg-gray-700/50 text-gray-300 text-sm font-medium hover:bg-gray-700 hover:text-white transition-colors flex items-center gap-2 cursor-pointer">
-            <i className="ri-logout-box-line"></i>
-            Logout
-          </button>
+          <div className="flex items-center gap-3">
+            <Link
+              to={resolvePath('/admin/colleges')}
+              className="px-4 py-2 rounded-lg bg-teal-500/20 text-teal-300 text-sm font-medium border border-teal-500/30 flex items-center gap-2">
+              <i className="ri-building-4-line"></i>
+              <span className="hidden sm:inline">Colleges</span>
+            </Link>
+            <Link
+              to={resolvePath('/admin/payments')}
+              className="px-4 py-2 rounded-lg text-gray-400 text-sm font-medium hover:text-white hover:bg-gray-700/50 transition-colors flex items-center gap-2">
+              <i className="ri-money-rupee-circle-line"></i>
+              <span className="hidden sm:inline">Payments</span>
+            </Link>
+            <button
+              onClick={handleLogout}
+              className="px-4 py-2 rounded-lg bg-gray-700/50 text-gray-300 text-sm font-medium hover:bg-gray-700 hover:text-white transition-colors flex items-center gap-2 cursor-pointer">
+              <i className="ri-logout-box-line"></i>
+              <span className="hidden sm:inline">Logout</span>
+            </button>
+          </div>
         </div>
       </header>
 

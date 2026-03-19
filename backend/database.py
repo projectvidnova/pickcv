@@ -17,6 +17,9 @@ async_session_maker = async_sessionmaker(
     expire_on_commit=False,
 )
 
+# Alias for routes that use AsyncSessionLocal
+AsyncSessionLocal = async_session_maker
+
 # Base class for models
 Base = declarative_base()
 

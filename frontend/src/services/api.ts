@@ -886,11 +886,27 @@ class ApiService {
   }
 
   /**
-   * Get list of students for this college
+   * Get list of students for this college (with Phase 1 filters)
    */
-  async getCollegeStudents() {
+  async getCollegeStudents(filters?: {
+    department_id?: number;
+    graduation_year?: number;
+    status?: string;
+    placement_status?: string;
+    page?: number;
+    page_size?: number;
+  }) {
     try {
-      const response = await fetch(`${this.baseUrl}/college/students`, {
+      const params = new URLSearchParams();
+      if (filters?.department_id) params.append('department_id', String(filters.department_id));
+      if (filters?.graduation_year) params.append('graduation_year', String(filters.graduation_year));
+      if (filters?.status) params.append('status', filters.status);
+      if (filters?.placement_status) params.append('placement_status', filters.placement_status);
+      if (filters?.page) params.append('page', String(filters.page));
+      if (filters?.page_size) params.append('page_size', String(filters.page_size));
+      
+      const qs = params.toString();
+      const response = await fetch(`${this.baseUrl}/college/students${qs ? '?' + qs : ''}`, {
         method: 'GET',
         headers: { 'Authorization': `Bearer ${this.collegeToken}` },
       });
@@ -955,6 +971,410 @@ class ApiService {
     } catch (error) {
       console.error('Error fetching student resumes:', error);
       return [];
+    }
+  }
+
+  // ===== PHASE 1: DEPARTMENT API METHODS =====
+
+  async getDepartments() {
+    try {
+      const response = await fetch(`${this.baseUrl}/college/departments`, {
+        headers: { 'Authorization': `Bearer ${this.collegeToken}` },
+      });
+      if (!response.ok) throw new Error('Failed to fetch departments');
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to fetch departments' };
+    }
+  }
+
+  async createDepartment(data: { name: string; code: string; degree_type: string; duration_semesters?: number }) {
+    try {
+      const response = await fetch(`${this.baseUrl}/college/departments`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.collegeToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to create department');
+      }
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to create department' };
+    }
+  }
+
+  async updateDepartment(departmentId: number, data: Record<string, any>) {
+    try {
+      const response = await fetch(`${this.baseUrl}/college/departments/${departmentId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${this.collegeToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+      if (!response.ok) throw new Error('Failed to update department');
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to update department' };
+    }
+  }
+
+  async deleteDepartment(departmentId: number) {
+    try {
+      const response = await fetch(`${this.baseUrl}/college/departments/${departmentId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${this.collegeToken}` },
+      });
+      if (!response.ok) throw new Error('Failed to delete department');
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to delete department' };
+    }
+  }
+
+  // ===== PHASE 1: CURRICULUM API METHODS =====
+
+  async getCurriculum(departmentId: number) {
+    try {
+      const response = await fetch(`${this.baseUrl}/college/departments/${departmentId}/curriculum`, {
+        headers: { 'Authorization': `Bearer ${this.collegeToken}` },
+      });
+      if (!response.ok) throw new Error('Failed to fetch curriculum');
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to fetch curriculum' };
+    }
+  }
+
+  async createCourse(departmentId: number, data: {
+    department_id: number;
+    semester_number: number;
+    course_name: string;
+    course_code?: string;
+    credits?: number;
+    course_type?: string;
+    skill_ids?: number[];
+  }) {
+    try {
+      const response = await fetch(`${this.baseUrl}/college/departments/${departmentId}/courses`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.collegeToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to create course');
+      }
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to create course' };
+    }
+  }
+
+  async updateCourse(courseId: number, data: Record<string, any>) {
+    try {
+      const response = await fetch(`${this.baseUrl}/college/courses/${courseId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${this.collegeToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+      if (!response.ok) throw new Error('Failed to update course');
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to update course' };
+    }
+  }
+
+  async deleteCourse(courseId: number) {
+    try {
+      const response = await fetch(`${this.baseUrl}/college/courses/${courseId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${this.collegeToken}` },
+      });
+      if (!response.ok) throw new Error('Failed to delete course');
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to delete course' };
+    }
+  }
+
+  // ===== PHASE 1: COE API METHODS =====
+
+  async getCOEGroups(activeOnly = true) {
+    try {
+      const response = await fetch(`${this.baseUrl}/college/coe?active_only=${activeOnly}`, {
+        headers: { 'Authorization': `Bearer ${this.collegeToken}` },
+      });
+      if (!response.ok) throw new Error('Failed to fetch COE groups');
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to fetch COE groups' };
+    }
+  }
+
+  async createCOEGroup(data: {
+    name: string;
+    code: string;
+    description?: string;
+    focus_skill_ids?: number[];
+    faculty_lead_name?: string;
+    faculty_lead_email?: string;
+    max_capacity?: number;
+  }) {
+    try {
+      const response = await fetch(`${this.baseUrl}/college/coe`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.collegeToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to create COE group');
+      }
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to create COE group' };
+    }
+  }
+
+  async updateCOEGroup(coeId: number, data: Record<string, any>) {
+    try {
+      const response = await fetch(`${this.baseUrl}/college/coe/${coeId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${this.collegeToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+      if (!response.ok) throw new Error('Failed to update COE group');
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to update COE group' };
+    }
+  }
+
+  async getCOEMembers(coeId: number, status?: string) {
+    try {
+      const params = status ? `?status=${status}` : '';
+      const response = await fetch(`${this.baseUrl}/college/coe/${coeId}/members${params}`, {
+        headers: { 'Authorization': `Bearer ${this.collegeToken}` },
+      });
+      if (!response.ok) throw new Error('Failed to fetch COE members');
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to fetch COE members' };
+    }
+  }
+
+  async addCOEMembers(coeId: number, studentIds: number[], role = 'member') {
+    try {
+      const response = await fetch(`${this.baseUrl}/college/coe/${coeId}/members`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.collegeToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ student_ids: studentIds, role }),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to add members');
+      }
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to add members' };
+    }
+  }
+
+  async removeCOEMember(coeId: number, studentId: number) {
+    try {
+      const response = await fetch(`${this.baseUrl}/college/coe/${coeId}/members/${studentId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${this.collegeToken}` },
+      });
+      if (!response.ok) throw new Error('Failed to remove member');
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to remove member' };
+    }
+  }
+
+  // ===== PHASE 1: SKILL ANALYTICS API METHODS =====
+
+  async searchSkills(query: string, limit = 20) {
+    try {
+      const response = await fetch(`${this.baseUrl}/skills/search?q=${encodeURIComponent(query)}&limit=${limit}`);
+      if (!response.ok) throw new Error('Search failed');
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Search failed' };
+    }
+  }
+
+  async getSkillCategories() {
+    try {
+      const response = await fetch(`${this.baseUrl}/skills/taxonomy`);
+      if (!response.ok) throw new Error('Failed to fetch categories');
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to fetch categories' };
+    }
+  }
+
+  async getSkillAnalytics(departmentId?: number) {
+    try {
+      const params = departmentId ? `?department_id=${departmentId}` : '';
+      const response = await fetch(`${this.baseUrl}/college/skills/analytics${params}`, {
+        headers: { 'Authorization': `Bearer ${this.collegeToken}` },
+      });
+      if (!response.ok) throw new Error('Failed to fetch skill analytics');
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to fetch skill analytics' };
+    }
+  }
+
+  async getSkillHeatmap(departmentId?: number, graduationYear?: number) {
+    try {
+      const params = new URLSearchParams();
+      if (departmentId) params.append('department_id', String(departmentId));
+      if (graduationYear) params.append('graduation_year', String(graduationYear));
+      const qs = params.toString();
+      const response = await fetch(`${this.baseUrl}/college/skills/heatmap${qs ? '?' + qs : ''}`, {
+        headers: { 'Authorization': `Bearer ${this.collegeToken}` },
+      });
+      if (!response.ok) throw new Error('Failed to fetch skill heatmap');
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to fetch skill heatmap' };
+    }
+  }
+
+  async getSkillGaps(departmentId?: number) {
+    try {
+      const params = departmentId ? `?department_id=${departmentId}` : '';
+      const response = await fetch(`${this.baseUrl}/college/skills/gaps${params}`, {
+        headers: { 'Authorization': `Bearer ${this.collegeToken}` },
+      });
+      if (!response.ok) throw new Error('Failed to fetch skill gaps');
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to fetch skill gaps' };
+    }
+  }
+
+  async getStudentSkills(studentId: number) {
+    try {
+      const response = await fetch(`${this.baseUrl}/college/skills/students/${studentId}/skills`, {
+        headers: { 'Authorization': `Bearer ${this.collegeToken}` },
+      });
+      if (!response.ok) throw new Error('Failed to fetch student skills');
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to fetch student skills' };
+    }
+  }
+
+  // ===== PHASE 1: STUDENT PROFILE UPDATE =====
+
+  async updateStudentProfile(studentId: number, data: Record<string, any>) {
+    try {
+      const response = await fetch(`${this.baseUrl}/college/students/${studentId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${this.collegeToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+      if (!response.ok) throw new Error('Failed to update student');
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to update student' };
+    }
+  }
+
+  async bulkUpdateStudents(students: Array<{ student_id: number; updates: Record<string, any> }>) {
+    try {
+      const response = await fetch(`${this.baseUrl}/college/students/bulk-update`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${this.collegeToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ students }),
+      });
+      if (!response.ok) throw new Error('Bulk update failed');
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Bulk update failed' };
+    }
+  }
+
+  // ===== PHASE 1: ALERTS =====
+
+  async getCollegeAlerts(unreadOnly = false, alertType?: string) {
+    try {
+      const params = new URLSearchParams();
+      if (unreadOnly) params.append('unread_only', 'true');
+      if (alertType) params.append('alert_type', alertType);
+      const qs = params.toString();
+      const response = await fetch(`${this.baseUrl}/college/alerts${qs ? '?' + qs : ''}`, {
+        headers: { 'Authorization': `Bearer ${this.collegeToken}` },
+      });
+      if (!response.ok) throw new Error('Failed to fetch alerts');
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to fetch alerts' };
+    }
+  }
+
+  async dismissAlerts(alertIds: number[]) {
+    try {
+      const response = await fetch(`${this.baseUrl}/college/alerts/dismiss`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.collegeToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ alert_ids: alertIds }),
+      });
+      if (!response.ok) throw new Error('Failed to dismiss alerts');
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to dismiss alerts' };
+    }
+  }
+
+  // ===== PHASE 1: AUDIT LOG =====
+
+  async getAuditLog(page = 1, pageSize = 50, action?: string) {
+    try {
+      const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+      if (action) params.append('action', action);
+      const response = await fetch(`${this.baseUrl}/college/audit-log?${params}`, {
+        headers: { 'Authorization': `Bearer ${this.collegeToken}` },
+      });
+      if (!response.ok) throw new Error('Failed to fetch audit log');
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to fetch audit log' };
     }
   }
 
@@ -1055,6 +1475,42 @@ class ApiService {
       return { success: true, data: await response.json() };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Failed to fetch admin stats' };
+    }
+  }
+
+  /**
+   * Get all payments (admin) with optional status filter and pagination
+   */
+  async getAdminPayments(statusFilter?: string, page: number = 1, perPage: number = 50) {
+    try {
+      const params = new URLSearchParams();
+      if (statusFilter) params.set('status_filter', statusFilter);
+      params.set('page', String(page));
+      params.set('per_page', String(perPage));
+      const response = await fetch(`${this.baseUrl}/admin/payments?${params}`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${this.adminToken}` },
+      });
+      if (!response.ok) throw new Error('Failed to fetch payments');
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to fetch payments' };
+    }
+  }
+
+  /**
+   * Get payment statistics (admin)
+   */
+  async getAdminPaymentStats() {
+    try {
+      const response = await fetch(`${this.baseUrl}/admin/payments/stats`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${this.adminToken}` },
+      });
+      if (!response.ok) throw new Error('Failed to fetch payment stats');
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to fetch payment stats' };
     }
   }
 }

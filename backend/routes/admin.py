@@ -1,13 +1,15 @@
-"""Admin module routes — login, college management."""
-from fastapi import APIRouter, Depends, HTTPException, status
+"""Admin module routes — login, college management, payment oversight."""
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, and_
+from sqlalchemy.orm import joinedload
 from datetime import datetime, timezone
+from typing import Optional
 import logging
 
 from database import get_db
-from models import Admin, College, CollegeStudent
+from models import Admin, College, CollegeStudent, Payment, Subscription, User, Resume
 from schemas import (
     AdminLoginRequest, AdminLoginResponse,
     AdminCollegeResponse, AdminRejectRequest, AdminStatsResponse,
@@ -191,3 +193,129 @@ async def get_admin_stats(
         approved=approved,
         rejected=rejected,
     )
+
+
+# ─── Payments Management ─────────────────────────────────────
+
+@router.get("/payments")
+async def list_all_payments(
+    status_filter: Optional[str] = Query(None, description="Filter by status: pending, succeeded, failed"),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=200),
+    admin: Admin = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all payments across all users (admin view)."""
+    query = (
+        select(Payment)
+        .options(joinedload(Payment.user), joinedload(Payment.resume))
+        .order_by(Payment.created_at.desc())
+    )
+
+    if status_filter and status_filter in ("pending", "succeeded", "failed", "refunded"):
+        query = query.where(Payment.status == status_filter)
+
+    # Count total before pagination
+    count_query = select(func.count(Payment.id))
+    if status_filter and status_filter in ("pending", "succeeded", "failed", "refunded"):
+        count_query = count_query.where(Payment.status == status_filter)
+    total_count = (await db.execute(count_query)).scalar() or 0
+
+    # Paginate
+    offset = (page - 1) * per_page
+    query = query.offset(offset).limit(per_page)
+
+    result = await db.execute(query)
+    payments = result.unique().scalars().all()
+
+    items = []
+    for p in payments:
+        items.append({
+            "id": p.id,
+            "user_id": p.user_id,
+            "user_email": p.user.email if p.user else None,
+            "user_name": p.user.full_name if p.user else None,
+            "resume_id": p.resume_id,
+            "resume_title": p.resume.title if p.resume else None,
+            "zoho_session_id": p.zoho_session_id,
+            "zoho_payment_id": p.zoho_payment_id,
+            "amount": p.amount,
+            "currency": p.currency,
+            "status": p.status,
+            "description": p.description,
+            "reference_number": p.reference_number,
+            "product_type": p.product_type,
+            "created_at": p.created_at.isoformat() if p.created_at else None,
+            "paid_at": p.paid_at.isoformat() if p.paid_at else None,
+        })
+
+    return {
+        "items": items,
+        "total": total_count,
+        "page": page,
+        "per_page": per_page,
+        "pages": (total_count + per_page - 1) // per_page,
+    }
+
+
+@router.get("/payments/stats")
+async def payment_stats(
+    admin: Admin = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Aggregate payment statistics for the admin dashboard."""
+    total = (await db.execute(select(func.count(Payment.id)))).scalar() or 0
+    succeeded = (await db.execute(
+        select(func.count(Payment.id)).where(Payment.status == "succeeded")
+    )).scalar() or 0
+    failed = (await db.execute(
+        select(func.count(Payment.id)).where(Payment.status == "failed")
+    )).scalar() or 0
+    pending = (await db.execute(
+        select(func.count(Payment.id)).where(Payment.status == "pending")
+    )).scalar() or 0
+
+    total_revenue_result = await db.execute(
+        select(func.coalesce(func.sum(Payment.amount), 0)).where(Payment.status == "succeeded")
+    )
+    total_revenue = float(total_revenue_result.scalar() or 0)
+
+    # Subscription stats
+    from datetime import datetime, timezone as tz
+    now = datetime.now(tz.utc)
+    active_subscriptions = (await db.execute(
+        select(func.count(Subscription.id)).where(
+            and_(Subscription.status == "active", Subscription.expires_at > now)
+        )
+    )).scalar() or 0
+
+    monthly_subs = (await db.execute(
+        select(func.count(Subscription.id)).where(
+            and_(Subscription.status == "active", Subscription.plan_type == "monthly", Subscription.expires_at > now)
+        )
+    )).scalar() or 0
+
+    yearly_subs = (await db.execute(
+        select(func.count(Subscription.id)).where(
+            and_(Subscription.status == "active", Subscription.plan_type == "yearly", Subscription.expires_at > now)
+        )
+    )).scalar() or 0
+
+    free_downloads = (await db.execute(
+        select(func.count(Payment.id)).where(
+            and_(Payment.product_type == "free_download", Payment.status == "succeeded")
+        )
+    )).scalar() or 0
+
+    return {
+        "total_payments": total,
+        "succeeded": succeeded,
+        "failed": failed,
+        "pending": pending,
+        "total_revenue": total_revenue,
+        "currency": "INR",
+        "active_subscriptions": active_subscriptions,
+        "monthly_subscriptions": monthly_subs,
+        "yearly_subscriptions": yearly_subs,
+        "free_downloads_used": free_downloads,
+    }

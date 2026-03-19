@@ -321,3 +321,21 @@ CREATE INDEX IF NOT EXISTS idx_shared_profiles_college_id ON shared_profiles(col
 INSERT INTO admins (email, password_hash, name, role)
 SELECT 'admin@pickcv.com', '$2b$12$W7Bl8Usjaa5aFBnBRbQXve8LsYHfyzAkcGwHwGcU7JLqO1Jzyiuye', 'PickCV Admin', 'admin'
 WHERE NOT EXISTS (SELECT 1 FROM admins WHERE email = 'admin@pickcv.com');
+
+-- ============= 16. SUBSCRIPTIONS TABLE =============
+CREATE TABLE IF NOT EXISTS subscriptions (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    plan_type VARCHAR(50) NOT NULL,            -- monthly, yearly
+    status VARCHAR(50) DEFAULT 'active',       -- active, expired, cancelled
+    payment_id INTEGER REFERENCES payments(id) ON DELETE SET NULL,
+    starts_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    cancelled_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_subscriptions_user_id ON subscriptions(user_id);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_status ON subscriptions(status);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_expires_at ON subscriptions(expires_at);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_payment_id ON subscriptions(payment_id);

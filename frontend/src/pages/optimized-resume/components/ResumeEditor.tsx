@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ResumeData } from '../types';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
+import PaymentModal from '../../../components/PaymentModal';
+import paymentService, { PlanInfo, SubscriptionInfo } from '../../../services/paymentService';
 
 interface ResumeEditorProps {
   data: ResumeData;
@@ -14,6 +16,45 @@ export default function ResumeEditor({ data, onDataChange, templateId, children 
   const [isEditing, setIsEditing] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [hasPaymentAccess, setHasPaymentAccess] = useState(false);
+  const [accessType, setAccessType] = useState<string | null>(null);
+  const [freeDownloadsRemaining, setFreeDownloadsRemaining] = useState(0);
+  const [activeSubscription, setActiveSubscription] = useState<SubscriptionInfo | null>(null);
+  const [plans, setPlans] = useState<PlanInfo[]>([]);
+  const [resumeId, setResumeId] = useState<number | null>(null);
+  const [isClaimingFree, setIsClaimingFree] = useState(false);
+
+  // Get resume ID from session storage on mount
+  useEffect(() => {
+    try {
+      const optimizationData = sessionStorage.getItem('optimizationData');
+      if (optimizationData) {
+        const parsed = JSON.parse(optimizationData);
+        if (parsed.resumeId) {
+          setResumeId(parsed.resumeId);
+          checkPaymentAccess(parsed.resumeId);
+        }
+      }
+    } catch (error) {
+      console.error('Error reading optimization data:', error);
+    }
+  }, []);
+
+  const checkPaymentAccess = async (rid: number) => {
+    try {
+      const access = await paymentService.checkAccess(rid);
+      setHasPaymentAccess(access.has_access);
+      setAccessType(access.access_type);
+      setFreeDownloadsRemaining(access.free_downloads_remaining);
+      setActiveSubscription(access.active_subscription);
+      setPlans(access.plans);
+    } catch (error) {
+      console.error('Error checking payment access:', error);
+      // If check fails, allow download (graceful degradation)
+      setHasPaymentAccess(true);
+    }
+  };
 
   const saveToDatabase = async () => {
     setIsSaving(true);
@@ -52,6 +93,48 @@ export default function ResumeEditor({ data, onDataChange, templateId, children 
   };
 
   const handleDownloadPDF = async () => {
+    // Case 1: Already has access (subscription, per-resume payment, or gateway not configured)
+    if (hasPaymentAccess && accessType !== 'free') {
+      await performDownload();
+      return;
+    }
+
+    // Case 2: Free download available — claim it
+    if (hasPaymentAccess && accessType === 'free' && freeDownloadsRemaining > 0 && resumeId) {
+      setIsClaimingFree(true);
+      try {
+        const result = await paymentService.useFreeDownload(resumeId);
+        if (result.success) {
+          setFreeDownloadsRemaining(result.free_downloads_remaining);
+          setHasPaymentAccess(true);
+          setAccessType('per_resume'); // After free claim, treat as direct access
+          await performDownload();
+        }
+      } catch (error) {
+        console.error('Free download claim failed:', error);
+        // Fallback to payment modal
+        setShowPaymentModal(true);
+      } finally {
+        setIsClaimingFree(false);
+      }
+      return;
+    }
+
+    // Case 3: Payment required — show pricing modal
+    if (resumeId) {
+      setShowPaymentModal(true);
+    }
+  };
+
+  const handlePaymentSuccess = (subscriptionActivated?: boolean) => {
+    setHasPaymentAccess(true);
+    setAccessType(subscriptionActivated ? 'subscription' : 'per_resume');
+    setShowPaymentModal(false);
+    // Automatically start download after successful payment
+    performDownload();
+  };
+
+  const performDownload = async () => {
     setIsDownloading(true);
     try {
       // Save to database first
@@ -233,11 +316,35 @@ export default function ResumeEditor({ data, onDataChange, templateId, children 
         </button>
         <button
           onClick={handleDownloadPDF}
-          disabled={isDownloading}
+          disabled={isDownloading || isClaimingFree}
           className="px-4 py-2 rounded-lg bg-gradient-to-r from-teal-600 to-emerald-500 text-white text-sm font-semibold shadow-lg shadow-teal-500/25 hover:shadow-teal-500/40 hover:scale-[1.02] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <i className={`${isDownloading ? 'ri-loader-4-line animate-spin' : 'ri-download-2-line'} mr-2`}></i>
-          {isDownloading ? 'Downloading...' : 'Download PDF'}
+          {isClaimingFree ? (
+            <>
+              <i className="ri-loader-4-line animate-spin mr-2"></i>
+              Activating Free Download...
+            </>
+          ) : !hasPaymentAccess ? (
+            <>
+              <i className="ri-lock-line mr-2"></i>
+              Pay & Download
+            </>
+          ) : accessType === 'free' && freeDownloadsRemaining > 0 ? (
+            <>
+              <i className="ri-gift-line mr-2"></i>
+              Download Free
+            </>
+          ) : activeSubscription ? (
+            <>
+              <i className={`${isDownloading ? 'ri-loader-4-line animate-spin' : 'ri-download-2-line'} mr-2`}></i>
+              {isDownloading ? 'Downloading...' : 'Download PDF ✨'}
+            </>
+          ) : (
+            <>
+              <i className={`${isDownloading ? 'ri-loader-4-line animate-spin' : 'ri-download-2-line'} mr-2`}></i>
+              {isDownloading ? 'Downloading...' : 'Download PDF'}
+            </>
+          )}
         </button>
       </div>
 
@@ -253,6 +360,36 @@ export default function ResumeEditor({ data, onDataChange, templateId, children 
             <i className="ri-edit-box-line text-teal-600"></i>
             Edit Resume Content
           </h3>
+
+          {/* Payment Required Banner */}
+          {!hasPaymentAccess && (
+            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2">
+              <i className="ri-lock-line text-amber-600"></i>
+              <span className="text-sm text-amber-800">
+                Payment required to download PDF. You can still edit and save your resume for free.
+              </span>
+            </div>
+          )}
+
+          {/* Free Download Banner */}
+          {hasPaymentAccess && accessType === 'free' && freeDownloadsRemaining > 0 && (
+            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2">
+              <i className="ri-gift-line text-green-600"></i>
+              <span className="text-sm text-green-800">
+                🎉 You have <strong>{freeDownloadsRemaining} free download{freeDownloadsRemaining > 1 ? 's' : ''}</strong> available! Click "Download Free" to get your resume.
+              </span>
+            </div>
+          )}
+
+          {/* Subscription Banner */}
+          {activeSubscription && (
+            <div className="mb-4 p-3 bg-teal-50 border border-teal-200 rounded-lg flex items-center gap-2">
+              <i className="ri-vip-crown-line text-teal-600"></i>
+              <span className="text-sm text-teal-800">
+                ✨ <strong>{activeSubscription.plan_type === 'yearly' ? 'Annual' : 'Monthly'} Plan</strong> active — unlimited downloads for {activeSubscription.days_remaining} more days.
+              </span>
+            </div>
+          )}
 
           {/* Personal Info */}
           <div className="mb-6">
@@ -544,6 +681,17 @@ export default function ResumeEditor({ data, onDataChange, templateId, children 
             </div>
           </div>
         </div>
+      )}
+
+      {/* Payment Modal */}
+      {resumeId && plans.length > 0 && (
+        <PaymentModal
+          isOpen={showPaymentModal}
+          onClose={() => setShowPaymentModal(false)}
+          onPaymentSuccess={handlePaymentSuccess}
+          resumeId={resumeId}
+          plans={plans}
+        />
       )}
     </div>
   );

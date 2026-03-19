@@ -8,6 +8,10 @@ from fastapi.responses import JSONResponse
 
 from config import settings
 from routes import resume, jobs, auth, analysis, college, admin
+from routes import departments as departments_routes
+from routes import coe as coe_routes
+from routes import skills as skills_routes
+from routes import payments as payments_routes
 from security import get_security_headers
 
 # Configure logging
@@ -97,6 +101,15 @@ app.include_router(jobs.router, prefix="/api/jobs", tags=["Jobs"])
 app.include_router(college.router, prefix="/api/college", tags=["College"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 
+# Phase 1: New college dashboard routers
+app.include_router(departments_routes.router, prefix="/api", tags=["College - Departments"])
+app.include_router(coe_routes.router, prefix="/api", tags=["College - COE Groups"])
+app.include_router(skills_routes.public_router, prefix="/api", tags=["Skills - Taxonomy"])
+app.include_router(skills_routes.college_router, prefix="/api", tags=["College - Skill Analytics"])
+
+# Payments
+app.include_router(payments_routes.router, prefix="/api/payments", tags=["Payments"])
+
 
 # ============= HEALTH CHECKS =============
 @app.get("/")
@@ -131,7 +144,11 @@ async def startup_event():
     
     # Auto-create database tables
     from database import engine, Base
-    from models import User, Admin, College, CollegeStudent, SharedProfile  # noqa: F401 - Import to register models
+    from models import User, Admin, College, CollegeStudent, SharedProfile, Payment  # noqa: F401 - Import to register models
+    from models import (  # noqa: F401 - Phase 1 models
+        SkillTaxonomy, Department, CurriculumCourse, CourseSkillMapping,
+        StudentSkill, COEGroup, COEMembership, CollegeAlert, CollegeAuditLog
+    )
     from sqlalchemy import text
     
     try:

@@ -1,5 +1,5 @@
 """Database models for PickCV application - Production Ready."""
-from sqlalchemy import Column, Integer, String, DateTime, Text, Float, ForeignKey, Boolean, Date, ARRAY
+from sqlalchemy import Column, Integer, String, DateTime, Text, Float, ForeignKey, Boolean, Date, ARRAY, UniqueConstraint, Index, CheckConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -358,9 +358,21 @@ class College(Base):
     approved_at = Column(DateTime(timezone=True))
     approved_by = Column(Integer, ForeignKey("admins.id", ondelete="SET NULL"))
     
+    # Phase 1: Enhanced college fields
+    subscription_tier = Column(String(50), default="free")       # free, basic, premium, enterprise
+    max_students = Column(Integer, default=500)
+    academic_year = Column(String(20))                           # "2025-26"
+    placement_season_start = Column(Date)
+    placement_season_end = Column(Date)
+    autonomy_status = Column(String(50))                         # autonomous, affiliated, deemed
+    affiliated_university = Column(String(500))
+    
     # Relationships
     students = relationship("CollegeStudent", back_populates="college", cascade="all, delete-orphan")
     shared_profiles = relationship("SharedProfile", back_populates="college", cascade="all, delete-orphan")
+    departments = relationship("Department", back_populates="college", cascade="all, delete-orphan")
+    coe_groups = relationship("COEGroup", back_populates="college", cascade="all, delete-orphan")
+    alerts = relationship("CollegeAlert", back_populates="college", cascade="all, delete-orphan")
 
 
 class CollegeStudent(Base):
@@ -381,6 +393,32 @@ class CollegeStudent(Base):
     status = Column(String(20), default="invited", index=True)
     invitation_token = Column(String(255))
     
+    # Phase 1: Enhanced student profile
+    department_id = Column(Integer, ForeignKey("departments.id", ondelete="SET NULL"), index=True)
+    roll_number = Column(String(50))
+    degree_type = Column(String(100))                              # B.Tech, M.Tech, BCA, MBA
+    current_semester = Column(Integer, default=1)
+    cgpa = Column(Float)
+    admission_year = Column(Integer)
+    
+    # Contact & external profiles
+    phone = Column(String(20))
+    linkedin_url = Column(String(500))
+    github_url = Column(String(500))
+    portfolio_url = Column(String(500))
+    
+    # Resume & readiness tracking (denormalized for fast queries at scale)
+    resume_score = Column(Float)                                   # Latest ATS score
+    resume_status = Column(String(30), default="none")             # none, uploaded, optimized
+    interview_readiness_score = Column(Float, default=0)           # 0-100 computed
+    
+    # Placement tracking
+    placement_status = Column(String(30), default="not_started", index=True)  # not_started, preparing, applying, interviewing, placed, opted_out
+    placed_company = Column(String(255))
+    placed_role = Column(String(255))
+    placed_salary_lpa = Column(Float)
+    placed_at = Column(DateTime(timezone=True))
+    
     # Timestamps
     invited_at = Column(DateTime(timezone=True))
     registered_at = Column(DateTime(timezone=True))
@@ -388,9 +426,19 @@ class CollegeStudent(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
+    # Composite indexes for scale
+    __table_args__ = (
+        Index('idx_cs_college_dept', 'college_id', 'department_id'),
+        Index('idx_cs_college_year', 'college_id', 'graduation_year'),
+        Index('idx_cs_college_roll', 'college_id', 'roll_number'),
+    )
+    
     # Relationships
     college = relationship("College", back_populates="students")
     user = relationship("User")
+    department = relationship("Department", back_populates="students")
+    skills = relationship("StudentSkill", back_populates="student", cascade="all, delete-orphan")
+    coe_memberships = relationship("COEMembership", back_populates="student", cascade="all, delete-orphan")
 
 
 class SharedProfile(Base):
@@ -406,6 +454,262 @@ class SharedProfile(Base):
     expires_at = Column(DateTime(timezone=True), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
+    # Phase 1: Enhanced share tracking
+    view_count = Column(Integer, default=0)
+    last_viewed_at = Column(DateTime(timezone=True))
+    recruiter_name = Column(String(255))
+    recruiter_company = Column(String(255))
+    is_active = Column(Boolean, default=True)
+    filter_criteria = Column(JSONB)  # {"skills": [...], "min_cgpa": 7.0, "coe": "AI_ML"}
+    
     # Relationships
     college = relationship("College", back_populates="shared_profiles")
+
+
+# ============= PHASE 1: NEW MODELS =============
+
+class SkillTaxonomy(Base):
+    """Master skill catalog — normalized, prevents duplication at scale."""
+    __tablename__ = "skill_taxonomy"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)                    # Display: "Python"
+    name_lower = Column(String(255), unique=True, nullable=False, index=True)  # Lookup: "python"
+    category = Column(String(100), index=True)                    # Programming Language, Framework, etc.
+    subcategory = Column(String(100))                             # Backend, Frontend, Data Science
+    is_verified = Column(Boolean, default=True)
+    aliases = Column(ARRAY(String(255)))                          # ["py", "python3"]
+    demand_score = Column(Float, default=0)                       # 0-100, from job market data
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationships
+    student_skills = relationship("StudentSkill", back_populates="skill")
+    course_mappings = relationship("CourseSkillMapping", back_populates="skill")
+
+
+class Department(Base):
+    """Department within a college — e.g. CSE, ECE, ME."""
+    __tablename__ = "departments"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    college_id = Column(Integer, ForeignKey("colleges.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(255), nullable=False)                    # "Computer Science and Engineering"
+    code = Column(String(20))                                     # "CSE", "ECE"
+    degree_type = Column(String(100))                             # "B.Tech", "M.Tech", "BCA"
+    duration_semesters = Column(Integer, default=8)               # 8 for B.Tech, 4 for M.Tech
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    __table_args__ = (
+        UniqueConstraint('college_id', 'code', 'degree_type', name='uq_dept_college_code_degree'),
+    )
+    
+    # Relationships
+    college = relationship("College", back_populates="departments")
+    students = relationship("CollegeStudent", back_populates="department")
+    courses = relationship("CurriculumCourse", back_populates="department", cascade="all, delete-orphan")
+
+
+class CurriculumCourse(Base):
+    """Course mapped to semester + department."""
+    __tablename__ = "curriculum_courses"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    department_id = Column(Integer, ForeignKey("departments.id", ondelete="CASCADE"), nullable=False, index=True)
+    semester_number = Column(Integer, nullable=False)
+    course_name = Column(String(500), nullable=False)
+    course_code = Column(String(50))
+    credits = Column(Integer, default=3)
+    course_type = Column(String(50), default="core")              # core, elective, lab, project, internship
+    description = Column(Text)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    __table_args__ = (
+        UniqueConstraint('department_id', 'course_code', name='uq_course_dept_code'),
+        CheckConstraint('semester_number >= 1 AND semester_number <= 12', name='ck_semester_range'),
+        Index('idx_curriculum_courses_sem', 'department_id', 'semester_number'),
+    )
+    
+    # Relationships
+    department = relationship("Department", back_populates="courses")
+    skill_mappings = relationship("CourseSkillMapping", back_populates="course", cascade="all, delete-orphan")
+
+
+class CourseSkillMapping(Base):
+    """Maps courses to skills they teach."""
+    __tablename__ = "course_skill_mapping"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    course_id = Column(Integer, ForeignKey("curriculum_courses.id", ondelete="CASCADE"), nullable=False, index=True)
+    skill_id = Column(Integer, ForeignKey("skill_taxonomy.id", ondelete="CASCADE"), nullable=False, index=True)
+    expected_level = Column(String(50), default="intermediate")   # beginner, intermediate, advanced
+    
+    __table_args__ = (
+        UniqueConstraint('course_id', 'skill_id', name='uq_course_skill'),
+    )
+    
+    # Relationships
+    course = relationship("CurriculumCourse", back_populates="skill_mappings")
+    skill = relationship("SkillTaxonomy", back_populates="course_mappings")
+
+
+class StudentSkill(Base):
+    """Individual skill record per student — from resume, curriculum, self-declared, etc."""
+    __tablename__ = "student_skills"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    student_id = Column(Integer, ForeignKey("college_students.id", ondelete="CASCADE"), nullable=False, index=True)
+    skill_id = Column(Integer, ForeignKey("skill_taxonomy.id", ondelete="CASCADE"), nullable=False, index=True)
+    proficiency = Column(String(50), default="beginner")          # beginner, intermediate, advanced, expert
+    source = Column(String(50), default="self")                   # resume, curriculum, self, certification, project
+    verified = Column(Boolean, default=False)
+    last_assessed = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    __table_args__ = (
+        UniqueConstraint('student_id', 'skill_id', 'source', name='uq_student_skill_source'),
+    )
+    
+    # Relationships
+    student = relationship("CollegeStudent", back_populates="skills")
+    skill = relationship("SkillTaxonomy", back_populates="student_skills")
+
+
+class COEGroup(Base):
+    """Center of Excellence group within a college."""
+    __tablename__ = "coe_groups"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    college_id = Column(Integer, ForeignKey("colleges.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(255), nullable=False)                    # "AI/ML Center of Excellence"
+    code = Column(String(50))                                     # "AI_ML", "WEB_DEV"
+    description = Column(Text)
+    focus_skills = Column(ARRAY(Integer))                         # skill_taxonomy IDs
+    faculty_lead_name = Column(String(255))
+    faculty_lead_email = Column(String(255))
+    max_capacity = Column(Integer)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    __table_args__ = (
+        UniqueConstraint('college_id', 'code', name='uq_coe_college_code'),
+    )
+    
+    # Relationships
+    college = relationship("College", back_populates="coe_groups")
+    memberships = relationship("COEMembership", back_populates="coe_group", cascade="all, delete-orphan")
+
+
+class COEMembership(Base):
+    """Student membership in a COE group."""
+    __tablename__ = "coe_memberships"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    coe_id = Column(Integer, ForeignKey("coe_groups.id", ondelete="CASCADE"), nullable=False, index=True)
+    student_id = Column(Integer, ForeignKey("college_students.id", ondelete="CASCADE"), nullable=False, index=True)
+    joined_at = Column(DateTime(timezone=True), server_default=func.now())
+    role = Column(String(50), default="member")                   # member, lead, mentor
+    status = Column(String(50), default="active")                 # active, inactive, graduated
+    
+    __table_args__ = (
+        UniqueConstraint('coe_id', 'student_id', name='uq_coe_student'),
+    )
+    
+    # Relationships
+    coe_group = relationship("COEGroup", back_populates="memberships")
+    student = relationship("CollegeStudent", back_populates="coe_memberships")
+
+
+class CollegeAlert(Base):
+    """Alerts for college dashboard — red flags, opportunities, milestones."""
+    __tablename__ = "college_alerts"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    college_id = Column(Integer, ForeignKey("colleges.id", ondelete="CASCADE"), nullable=False, index=True)
+    alert_type = Column(String(50), nullable=False)               # red_flag, opportunity, milestone, deadline
+    severity = Column(String(20), default="info")                 # critical, warning, info
+    title = Column(String(500), nullable=False)
+    message = Column(Text, nullable=False)
+    entity_type = Column(String(50))                              # student, coe, batch, recruiter
+    entity_id = Column(Integer)
+    is_read = Column(Boolean, default=False)
+    is_dismissed = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    read_at = Column(DateTime(timezone=True))
+    expires_at = Column(DateTime(timezone=True))
+    
+    # Relationships
+    college = relationship("College", back_populates="alerts")
+
+
+class CollegeAuditLog(Base):
+    """Audit log for college dashboard actions — security & compliance."""
+    __tablename__ = "college_audit_log"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    college_id = Column(Integer, ForeignKey("colleges.id", ondelete="CASCADE"), nullable=False, index=True)
+    actor_type = Column(String(50), nullable=False)               # college_admin, faculty, system
+    actor_id = Column(Integer)
+    action = Column(String(100), nullable=False)                  # student_uploaded, coe_created, share_sent
+    entity_type = Column(String(50))                              # student, coe, share, department
+    entity_id = Column(Integer)
+    details = Column(JSONB)
+    ip_address = Column(String(45))
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
+# ============= PAYMENT MODELS =============
+
+class Payment(Base):
+    """Payment records for resume downloads via Zoho Payments."""
+    __tablename__ = "payments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    resume_id = Column(Integer, ForeignKey("resumes.id", ondelete="SET NULL"), index=True)
+
+    # Zoho Payments references
+    zoho_session_id = Column(String(100), unique=True, index=True)       # payments_session_id
+    zoho_payment_id = Column(String(100), unique=True, index=True)       # payment_id from widget response
+
+    # Payment details
+    amount = Column(Float, nullable=False)                               # e.g. 49.0
+    currency = Column(String(10), default="INR")
+    status = Column(String(50), default="pending", index=True)           # pending, succeeded, failed, refunded
+    description = Column(String(500))
+    reference_number = Column(String(100))                               # internal ref
+
+    # Product info
+    product_type = Column(String(50), default="resume_download")         # resume_download, subscription, etc.
+
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    paid_at = Column(DateTime(timezone=True))
+    expires_at = Column(DateTime(timezone=True))
+
+    # Relationships
+    user = relationship("User", backref="payments")
+    resume = relationship("Resume", backref="payments")
+
+
+class Subscription(Base):
+    """User subscription plans for unlimited resume downloads."""
+    __tablename__ = "subscriptions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    plan_type = Column(String(50), nullable=False)               # monthly, yearly
+    status = Column(String(50), default="active", index=True)    # active, expired, cancelled
+    payment_id = Column(Integer, ForeignKey("payments.id", ondelete="SET NULL"), index=True)
+
+    starts_at = Column(DateTime(timezone=True), server_default=func.now())
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    cancelled_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    # Relationships
+    user = relationship("User", backref="subscriptions")
+    payment = relationship("Payment", backref="subscription")
 

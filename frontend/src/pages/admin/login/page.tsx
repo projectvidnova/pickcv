@@ -57,21 +57,6 @@ export default function AdminLogin() {
           </div>
 
           {/* Demo Credentials Banner */}
-          <div className="bg-teal-500/10 border border-teal-500/20 rounded-xl p-4 mb-6">
-            <div className="flex items-start gap-3">
-              <i className="ri-information-line text-teal-400 text-lg mt-0.5 shrink-0"></i>
-              <div>
-                <p className="text-teal-300 text-sm font-medium mb-1">Demo Credentials</p>
-                <p className="text-gray-400 text-xs">
-                  Email: <span className="text-teal-300 font-mono">admin@pickcv.com</span>
-                </p>
-                <p className="text-gray-400 text-xs">
-                  Password: <span className="text-teal-300 font-mono">admin123</span>
-                </p>
-              </div>
-            </div>
-          </div>
-
           {error && (
             <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 mb-6">
               <div className="flex items-center gap-3">

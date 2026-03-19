@@ -1,21 +1,28 @@
 """College module routes — registration, login, student management, sharing."""
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, and_, distinct
 from datetime import datetime, timezone, timedelta
 import secrets
 import logging
 
 from database import get_db
-from models import College, CollegeStudent, User, Resume, SharedProfile
+from models import (
+    College, CollegeStudent, User, Resume, SharedProfile,
+    Department, StudentSkill, SkillTaxonomy, COEGroup, COEMembership,
+    CollegeAlert, CollegeAuditLog, UserSkill
+)
 from schemas import (
     CollegeRegisterRequest, CollegeLoginRequest, CollegeResponse,
     CollegeProfileUpdate, CollegeStudentResponse, StudentUploadResponse,
     ShareProfilesRequest, ShareProfilesResponse, CollegeStatsResponse,
-    StudentUploadItem, StudentResumeInfo,
+    StudentUploadItem, StudentResumeInfo, StudentProfileUpdate,
+    StudentBulkUpdateRequest, CollegeAlertResponse, AlertDismissRequest,
+    CollegeAuditLogResponse,
 )
 from services.auth_service import auth_service
 from services.college_service import college_service
+from services.skill_analytics_service import sync_student_skills_from_user, get_skill_heatmap
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -248,19 +255,73 @@ async def invite_students(
 
 @router.get("/students", response_model=list[CollegeStudentResponse])
 async def list_students(
+    department_id: int = Query(None),
+    graduation_year: int = Query(None),
+    status_filter: str = Query(None, alias="status"),
+    placement_status: str = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
     college: College = Depends(get_current_college_auth),
     db: AsyncSession = Depends(get_db),
 ):
-    """List all students for this college with enriched user data."""
-    result = await db.execute(
-        select(CollegeStudent)
-        .where(CollegeStudent.college_id == college.id)
-        .order_by(CollegeStudent.created_at.desc())
-    )
+    """List all students for this college with enriched user data. Supports filtering and pagination."""
+    query = select(CollegeStudent).where(CollegeStudent.college_id == college.id)
+    
+    # Apply filters
+    if department_id:
+        query = query.where(CollegeStudent.department_id == department_id)
+    if graduation_year:
+        query = query.where(CollegeStudent.graduation_year == graduation_year)
+    if status_filter:
+        query = query.where(CollegeStudent.status == status_filter)
+    if placement_status:
+        query = query.where(CollegeStudent.placement_status == placement_status)
+    
+    # Pagination
+    query = query.order_by(CollegeStudent.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
+    
+    result = await db.execute(query)
     students = result.scalars().all()
 
     enriched = []
     for s in students:
+        # Get department name
+        dept_name = None
+        if s.department_id:
+            dept = await db.get(Department, s.department_id)
+            dept_name = dept.name if dept else None
+        
+        # Get student skills
+        skill_details = []
+        skill_names = []
+        skills_result = await db.execute(
+            select(StudentSkill, SkillTaxonomy)
+            .join(SkillTaxonomy, SkillTaxonomy.id == StudentSkill.skill_id)
+            .where(StudentSkill.student_id == s.id)
+            .order_by(SkillTaxonomy.name)
+        )
+        for ss, st in skills_result.all():
+            skill_details.append({
+                "skill_name": st.name,
+                "proficiency": ss.proficiency,
+                "source": ss.source,
+            })
+            skill_names.append(st.name)
+        
+        # Get COE memberships
+        coe_info = []
+        coe_result = await db.execute(
+            select(COEMembership, COEGroup)
+            .join(COEGroup, COEGroup.id == COEMembership.coe_id)
+            .where(and_(COEMembership.student_id == s.id, COEMembership.status == "active"))
+        )
+        for cm, cg in coe_result.all():
+            coe_info.append({
+                "coe_name": cg.name,
+                "coe_code": cg.code,
+                "role": cm.role,
+            })
+        
         resp = CollegeStudentResponse(
             id=s.id,
             email=s.email,
@@ -273,6 +334,28 @@ async def list_students(
             registered_at=s.registered_at,
             ready_at=s.ready_at,
             created_at=s.created_at,
+            # Phase 1 enhanced fields from college_student record
+            department_id=s.department_id,
+            department_name=dept_name,
+            roll_number=s.roll_number,
+            degree_type=s.degree_type,
+            current_semester=s.current_semester,
+            cgpa=s.cgpa,
+            admission_year=s.admission_year,
+            phone=s.phone,
+            linkedin_url=s.linkedin_url,
+            github_url=s.github_url,
+            portfolio_url=s.portfolio_url,
+            resume_score=s.resume_score,
+            resume_status=s.resume_status or "none",
+            interview_readiness_score=s.interview_readiness_score or 0,
+            placement_status=s.placement_status or "not_started",
+            placed_company=s.placed_company,
+            placed_role=s.placed_role,
+            placed_salary_lpa=s.placed_salary_lpa,
+            skills=skill_names,
+            skill_details=skill_details,
+            coe_groups=coe_info,
         )
 
         # Enrich with user data if linked
@@ -280,9 +363,9 @@ async def list_students(
             user_result = await db.execute(select(User).where(User.id == s.user_id))
             user = user_result.scalar_one_or_none()
             if user:
-                resp.full_name = user.full_name
-                resp.phone = user.phone
-                resp.linkedin_url = user.linkedin_url
+                resp.full_name = user.full_name or s.name
+                resp.phone = resp.phone or user.phone
+                resp.linkedin_url = resp.linkedin_url or user.linkedin_url
                 resp.profile_picture_url = user.profile_picture_url
 
                 # Fetch resumes
@@ -307,8 +390,18 @@ async def list_students(
                     )
                     for r in user_resumes
                 ]
+                
+                # Update denormalized resume_score from best resume
+                if user_resumes:
+                    best_score = max((r.ats_score or 0) for r in user_resumes)
+                    if best_score > 0 and best_score != s.resume_score:
+                        s.resume_score = best_score
+                        s.resume_status = "optimized" if any(r.is_optimized for r in user_resumes) else "uploaded"
 
         enriched.append(resp)
+
+    # Commit any denormalized updates
+    await db.commit()
 
     return enriched
 
@@ -362,46 +455,172 @@ async def get_student_stats(
     db: AsyncSession = Depends(get_db),
 ):
     """Get aggregated student statistics for the college dashboard."""
+    cid = college.id
+    
     # Count by status
     total_result = await db.execute(
-        select(func.count(CollegeStudent.id)).where(CollegeStudent.college_id == college.id)
+        select(func.count(CollegeStudent.id)).where(CollegeStudent.college_id == cid)
     )
     total = total_result.scalar() or 0
 
     invited_result = await db.execute(
         select(func.count(CollegeStudent.id)).where(
-            CollegeStudent.college_id == college.id,
-            CollegeStudent.status == "invited",
+            CollegeStudent.college_id == cid, CollegeStudent.status == "invited",
         )
     )
     invited = invited_result.scalar() or 0
 
     registered_result = await db.execute(
         select(func.count(CollegeStudent.id)).where(
-            CollegeStudent.college_id == college.id,
-            CollegeStudent.status == "registered",
+            CollegeStudent.college_id == cid, CollegeStudent.status == "registered",
         )
     )
     registered = registered_result.scalar() or 0
 
     ready_result = await db.execute(
         select(func.count(CollegeStudent.id)).where(
-            CollegeStudent.college_id == college.id,
-            CollegeStudent.status == "ready",
+            CollegeStudent.college_id == cid, CollegeStudent.status == "ready",
         )
     )
     ready = ready_result.scalar() or 0
 
     placement_ready_percent = (ready / total * 100) if total > 0 else 0.0
+    
+    # Phase 1: Real avg CGPA
+    avg_cgpa_result = await db.execute(
+        select(func.avg(CollegeStudent.cgpa))
+        .where(and_(CollegeStudent.college_id == cid, CollegeStudent.cgpa.isnot(None)))
+    )
+    avg_cgpa = avg_cgpa_result.scalar()
+    avg_cgpa = round(avg_cgpa, 2) if avg_cgpa else None
+    
+    # Phase 1: Department breakdown
+    dept_result = await db.execute(
+        select(
+            Department.name,
+            Department.code,
+            func.count(CollegeStudent.id).label("count"),
+            func.avg(CollegeStudent.cgpa).label("avg_cgpa"),
+        )
+        .outerjoin(CollegeStudent, CollegeStudent.department_id == Department.id)
+        .where(Department.college_id == cid)
+        .group_by(Department.id, Department.name, Department.code)
+        .order_by(Department.name)
+    )
+    department_breakdown = [
+        {
+            "department": row.name,
+            "code": row.code,
+            "count": row.count,
+            "avg_cgpa": round(row.avg_cgpa, 2) if row.avg_cgpa else None,
+        }
+        for row in dept_result.all()
+    ]
+    
+    # Phase 1: Placement stats
+    placement_counts = {}
+    for ps in ["not_started", "preparing", "applying", "interviewing", "placed", "opted_out"]:
+        r = await db.execute(
+            select(func.count(CollegeStudent.id))
+            .where(and_(CollegeStudent.college_id == cid, CollegeStudent.placement_status == ps))
+        )
+        placement_counts[ps] = r.scalar() or 0
+    
+    avg_salary_result = await db.execute(
+        select(func.avg(CollegeStudent.placed_salary_lpa))
+        .where(and_(CollegeStudent.college_id == cid, CollegeStudent.placed_salary_lpa.isnot(None)))
+    )
+    avg_salary = avg_salary_result.scalar()
+    
+    placement_stats = {
+        **placement_counts,
+        "avg_salary_lpa": round(avg_salary, 2) if avg_salary else None,
+        "placement_rate": round((placement_counts["placed"] / total * 100), 1) if total > 0 else 0,
+    }
+    
+    # Phase 1: Resume stats
+    resume_counts = {}
+    for rs in ["none", "uploaded", "optimized"]:
+        r = await db.execute(
+            select(func.count(CollegeStudent.id))
+            .where(and_(CollegeStudent.college_id == cid, CollegeStudent.resume_status == rs))
+        )
+        resume_counts[rs] = r.scalar() or 0
+    
+    avg_score_result = await db.execute(
+        select(func.avg(CollegeStudent.resume_score))
+        .where(and_(CollegeStudent.college_id == cid, CollegeStudent.resume_score.isnot(None)))
+    )
+    avg_resume_score = avg_score_result.scalar()
+    resume_stats = {
+        **resume_counts,
+        "avg_score": round(avg_resume_score, 1) if avg_resume_score else None,
+    }
+    
+    # Phase 1: Top skills from student_skills
+    top_skills_result = await db.execute(
+        select(
+            SkillTaxonomy.name,
+            SkillTaxonomy.category,
+            func.count(distinct(StudentSkill.student_id)).label("count"),
+        )
+        .join(StudentSkill, StudentSkill.skill_id == SkillTaxonomy.id)
+        .join(CollegeStudent, CollegeStudent.id == StudentSkill.student_id)
+        .where(CollegeStudent.college_id == cid)
+        .group_by(SkillTaxonomy.id, SkillTaxonomy.name, SkillTaxonomy.category)
+        .order_by(func.count(distinct(StudentSkill.student_id)).desc())
+        .limit(20)
+    )
+    top_skills = [
+        {"name": row.name, "category": row.category, "count": row.count}
+        for row in top_skills_result.all()
+    ]
+    
+    # Phase 1: COE stats
+    coe_result = await db.execute(
+        select(
+            COEGroup.name,
+            COEGroup.code,
+            func.count(COEMembership.id).label("member_count"),
+            func.avg(CollegeStudent.resume_score).label("avg_score"),
+        )
+        .outerjoin(COEMembership, COEMembership.coe_id == COEGroup.id)
+        .outerjoin(CollegeStudent, CollegeStudent.id == COEMembership.student_id)
+        .where(and_(COEGroup.college_id == cid, COEGroup.is_active == True))
+        .group_by(COEGroup.id, COEGroup.name, COEGroup.code)
+        .order_by(COEGroup.name)
+    )
+    coe_stats = [
+        {
+            "coe_name": row.name,
+            "coe_code": row.code,
+            "member_count": row.member_count,
+            "avg_resume_score": round(row.avg_score, 1) if row.avg_score else None,
+        }
+        for row in coe_result.all()
+    ]
+    
+    # Alert count
+    alerts_result = await db.execute(
+        select(func.count(CollegeAlert.id))
+        .where(and_(CollegeAlert.college_id == cid, CollegeAlert.is_read == False))
+    )
+    alerts_count = alerts_result.scalar() or 0
 
     return CollegeStatsResponse(
         total_students=total,
         invited=invited,
         registered=registered,
         ready=ready,
-        avg_cgpa=None,  # Would need education data to compute
+        avg_cgpa=avg_cgpa,
         placement_ready_percent=round(placement_ready_percent, 1),
-        top_skills=[],  # Would need skills extraction from resumes
+        top_skills=top_skills,
+        department_breakdown=department_breakdown,
+        placement_stats=placement_stats,
+        resume_stats=resume_stats,
+        skill_heatmap=[],  # Use /college/skills/heatmap for full data
+        coe_stats=coe_stats,
+        alerts_count=alerts_count,
     )
 
 
@@ -432,11 +651,29 @@ async def share_profiles(
         college_id=college.id,
         share_token=share_token,
         recruiter_email=data.recruiter_email,
+        recruiter_name=data.recruiter_name,
+        recruiter_company=data.recruiter_company,
         message=data.message,
         student_ids=data.student_ids,
         expires_at=expires_at,
+        filter_criteria=data.filter_criteria,
     )
     db.add(shared)
+    
+    # Audit log
+    db.add(CollegeAuditLog(
+        college_id=college.id,
+        actor_type="college_admin",
+        actor_id=college.id,
+        action="profiles_shared",
+        entity_type="share",
+        details={
+            "recruiter_email": data.recruiter_email,
+            "student_count": len(data.student_ids),
+            "expires_in_days": data.expires_in_days,
+        },
+    ))
+    
     await db.commit()
     await db.refresh(shared)
 
@@ -448,3 +685,154 @@ async def share_profiles(
         expires_at=expires_at,
         student_count=len(data.student_ids),
     )
+
+
+# ─── Phase 1: Student Profile Update ─────────────────────────
+
+@router.put("/students/{student_id}", response_model=CollegeStudentResponse)
+async def update_student_profile(
+    student_id: int,
+    data: StudentProfileUpdate,
+    college: College = Depends(get_current_college_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update a single student's enhanced profile fields."""
+    student = await db.get(CollegeStudent, student_id)
+    if not student or student.college_id != college.id:
+        raise HTTPException(status_code=404, detail="Student not found")
+    
+    update_data = data.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(student, key, value)
+    
+    await db.commit()
+    await db.refresh(student)
+    
+    return CollegeStudentResponse(
+        id=student.id,
+        email=student.email,
+        name=student.name,
+        branch=student.branch,
+        graduation_year=student.graduation_year,
+        user_id=student.user_id,
+        status=student.status,
+        invited_at=student.invited_at,
+        registered_at=student.registered_at,
+        ready_at=student.ready_at,
+        created_at=student.created_at,
+        department_id=student.department_id,
+        roll_number=student.roll_number,
+        degree_type=student.degree_type,
+        current_semester=student.current_semester,
+        cgpa=student.cgpa,
+        admission_year=student.admission_year,
+        phone=student.phone,
+        linkedin_url=student.linkedin_url,
+        github_url=student.github_url,
+        portfolio_url=student.portfolio_url,
+        resume_score=student.resume_score,
+        resume_status=student.resume_status or "none",
+        placement_status=student.placement_status or "not_started",
+        placed_company=student.placed_company,
+        placed_role=student.placed_role,
+        placed_salary_lpa=student.placed_salary_lpa,
+    )
+
+
+@router.put("/students/bulk-update")
+async def bulk_update_students(
+    data: StudentBulkUpdateRequest,
+    college: College = Depends(get_current_college_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """Bulk update student profiles (e.g., assign departments, semesters, CGPA from CSV)."""
+    updated = 0
+    errors = []
+    
+    for item in data.students:
+        student = await db.get(CollegeStudent, item.student_id)
+        if not student or student.college_id != college.id:
+            errors.append({"student_id": item.student_id, "error": "Not found"})
+            continue
+        
+        update_fields = item.updates.model_dump(exclude_unset=True)
+        for key, value in update_fields.items():
+            setattr(student, key, value)
+        updated += 1
+    
+    db.add(CollegeAuditLog(
+        college_id=college.id,
+        actor_type="college_admin",
+        actor_id=college.id,
+        action="students_bulk_updated",
+        entity_type="student",
+        details={"updated": updated, "errors": len(errors)},
+    ))
+    
+    await db.commit()
+    
+    return {"updated": updated, "errors": errors}
+
+
+# ─── Phase 1: Alerts ─────────────────────────────────────────
+
+@router.get("/alerts", response_model=list[CollegeAlertResponse])
+async def list_alerts(
+    unread_only: bool = Query(False),
+    alert_type: str = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    college: College = Depends(get_current_college_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get college alerts."""
+    query = select(CollegeAlert).where(CollegeAlert.college_id == college.id)
+    
+    if unread_only:
+        query = query.where(CollegeAlert.is_read == False)
+    if alert_type:
+        query = query.where(CollegeAlert.alert_type == alert_type)
+    
+    query = query.order_by(CollegeAlert.created_at.desc()).limit(limit)
+    
+    result = await db.execute(query)
+    return result.scalars().all()
+
+
+@router.post("/alerts/dismiss")
+async def dismiss_alerts(
+    data: AlertDismissRequest,
+    college: College = Depends(get_current_college_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """Mark alerts as read/dismissed."""
+    for alert_id in data.alert_ids:
+        alert = await db.get(CollegeAlert, alert_id)
+        if alert and alert.college_id == college.id:
+            alert.is_read = True
+            alert.is_dismissed = True
+            alert.read_at = datetime.now(timezone.utc)
+    
+    await db.commit()
+    return {"dismissed": len(data.alert_ids)}
+
+
+# ─── Phase 1: Audit Log ─────────────────────────────────────
+
+@router.get("/audit-log", response_model=list[CollegeAuditLogResponse])
+async def get_audit_log(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    action_filter: str = Query(None, alias="action"),
+    college: College = Depends(get_current_college_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get audit log for the college dashboard."""
+    query = select(CollegeAuditLog).where(CollegeAuditLog.college_id == college.id)
+    
+    if action_filter:
+        query = query.where(CollegeAuditLog.action == action_filter)
+    
+    query = query.order_by(CollegeAuditLog.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
+    
+    result = await db.execute(query)
+    return result.scalars().all()

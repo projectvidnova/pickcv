@@ -22,6 +22,7 @@ const CollegePendingApproval = lazy(() => import('../pages/college/pending-appro
 const CollegeDashboard = lazy(() => import('../pages/college-dashboard/page'));
 const AdminLogin = lazy(() => import('../pages/admin/login/page'));
 const AdminColleges = lazy(() => import('../pages/admin/colleges/page'));
+const AdminPayments = lazy(() => import('../pages/admin/payments/page'));
 const NotFound = lazy(() => import('../pages/NotFound'));
 
 // ─── Admin portal routes (admin.pickcv.com) ───
@@ -38,6 +39,10 @@ const adminRoutes: RouteObject[] = [
     path: '/colleges',
     element: <AdminColleges />,
   },
+  {
+    path: '/payments',
+    element: <AdminPayments />,
+  },
   // Legacy paths still work
   {
     path: '/admin/login',
@@ -46,6 +51,10 @@ const adminRoutes: RouteObject[] = [
   {
     path: '/admin/colleges',
     element: <Navigate to="/colleges" replace />,
+  },
+  {
+    path: '/admin/payments',
+    element: <Navigate to="/payments" replace />,
   },
   {
     path: '*',
@@ -184,6 +193,10 @@ const mainRoutes: RouteObject[] = [
   {
     path: '/admin/colleges',
     element: <AdminColleges />,
+  },
+  {
+    path: '/admin/payments',
+    element: <AdminPayments />,
   },
   {
     path: '*',
