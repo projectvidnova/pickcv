@@ -74,6 +74,21 @@ async def add_security_headers(request: Request, call_next):
 
 
 # ============= ERROR HANDLERS =============
+def _add_cors_headers(response: JSONResponse, request: Request) -> JSONResponse:
+    """Ensure CORS headers are present on error responses.
+    
+    Exception handlers bypass CORSMiddleware, so the browser sees
+    a missing Access-Control-Allow-Origin and reports a CORS error
+    instead of the real 500.
+    """
+    origin = request.headers.get("origin", "")
+    if origin and origin in settings.origins_list:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Vary"] = "Origin"
+    return response
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     """Handle uncaught exceptions."""
@@ -81,16 +96,17 @@ async def global_exception_handler(request: Request, exc: Exception):
     
     if settings.is_production:
         # Don't expose internal details in production
-        return JSONResponse(
+        resp = JSONResponse(
             status_code=500,
             content={"detail": "Internal server error"}
         )
     else:
-        # Show error details in development
-        return JSONResponse(
+        # Show error details in development/staging
+        resp = JSONResponse(
             status_code=500,
             content={"detail": str(exc)}
         )
+    return _add_cors_headers(resp, request)
 
 
 # ============= ROUTERS =============
