@@ -8,17 +8,7 @@ interface AuthModalProps {
   onClose: () => void;
 }
 
-const MOCK_GOOGLE_USERS = [
-  { name: 'Adithya Kumar', email: 'adithya.kumar@gmail.com', phone: '' },
-  { name: 'Priya Verma', email: 'priya.verma@gmail.com', phone: '' },
-  { name: 'Rahul Sharma', email: 'rahul.sharma@gmail.com', phone: '' },
-];
-
-const MOCK_LINKEDIN_USERS = [
-  { name: 'Neha Patel', email: 'neha.patel@outlook.com', phone: '' },
-  { name: 'Arjun Reddy', email: 'arjun.reddy@outlook.com', phone: '' },
-  { name: 'Kavitha Nair', email: 'kavitha.nair@outlook.com', phone: '' },
-];
+type ModalView = 'form' | 'verification-sent';
 
 export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const navigate = useNavigate();
@@ -32,6 +22,11 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const [linkedinLoading, setLinkedinLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [modalView, setModalView] = useState<ModalView>('form');
+  const [registeredEmail, setRegisteredEmail] = useState('');
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendSuccess, setResendSuccess] = useState(false);
+  const [showResendOnError, setShowResendOnError] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -68,22 +63,26 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   };
 
   const handleLinkedInSignIn = () => {
-    setLinkedinLoading(true);
-    setTimeout(() => {
-      const user = MOCK_LINKEDIN_USERS[0];
-      setLinkedinLoading(false);
-      onClose();
-      navigate('/onboarding', {
-        state: {
-          fromLinkedIn: true,
-          prefill: {
-            name: user.name,
-            email: user.email,
-            phone: user.phone,
-          },
-        },
-      });
-    }, 1800);
+    // LinkedIn OAuth not yet configured — coming soon
+    setError('LinkedIn sign-in is coming soon. Please use Google or email.');
+  };
+
+  const handleResendVerification = async (email: string) => {
+    setResendLoading(true);
+    setResendSuccess(false);
+    try {
+      const result = await apiService.resendVerification(email);
+      if (result.success) {
+        setResendSuccess(true);
+        setTimeout(() => setResendSuccess(false), 5000);
+      } else {
+        setError(result.error || 'Failed to resend. Please try again.');
+      }
+    } catch {
+      setError('Failed to resend verification email.');
+    } finally {
+      setResendLoading(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -106,7 +105,15 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
             },
           });
         } else {
-          setError(result.error || 'Login failed');
+          const msg = result.error || 'Login failed';
+          setError(msg);
+          // Detect "verify your email" errors and show resend button
+          if (msg.toLowerCase().includes('verify')) {
+            setShowResendOnError(true);
+            setRegisteredEmail(formData.email);
+          } else {
+            setShowResendOnError(false);
+          }
         }
       } else {
         // Register
@@ -116,10 +123,10 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
           formData.name
         );
         if (result.success) {
-          // Show verification message
+          // Show verification-sent screen inside the modal
           setError(null);
-          onClose();
-          alert('✅ Registration successful! Please check your email for a verification link. You must verify your email before you can login.');
+          setRegisteredEmail(formData.email);
+          setModalView('verification-sent');
         } else {
           setError(result.error || 'Registration failed');
         }
@@ -138,6 +145,10 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const toggleMode = () => {
     setIsLogin(!isLogin);
     setFormData({ name: '', email: '', password: '' });
+    setError(null);
+    setModalView('form');
+    setShowResendOnError(false);
+    setResendSuccess(false);
   };
 
   const strengthLabels = ['', 'Weak', 'Fair', 'Good', 'Strong'];
@@ -172,6 +183,50 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         </button>
 
         <div className="px-8 pt-8 pb-7">
+          {/* ─── Verification-Sent View ─── */}
+          {modalView === 'verification-sent' ? (
+            <div className="text-center py-4">
+              <div className="mx-auto mb-5 h-16 w-16 rounded-full bg-teal-50 flex items-center justify-center">
+                <svg className="h-8 w-8 text-teal-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
+                </svg>
+              </div>
+              <h2 className="text-xl font-bold text-gray-900 mb-2">Check your email</h2>
+              <p className="text-sm text-gray-500 mb-1">
+                We've sent a verification link to
+              </p>
+              <p className="text-sm font-semibold text-teal-600 mb-6">{registeredEmail}</p>
+              <p className="text-xs text-gray-400 mb-6">
+                Click the link in the email to verify your account, then come back to sign in. The link expires in 24 hours.
+              </p>
+
+              {resendSuccess && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-sm text-emerald-700 mb-4">
+                  ✅ Verification email resent! Check your inbox.
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => handleResendVerification(registeredEmail)}
+                disabled={resendLoading}
+                className="text-sm text-teal-600 hover:text-teal-700 font-medium cursor-pointer disabled:opacity-50 mb-5"
+              >
+                {resendLoading ? 'Resending…' : "Didn't get the email? Resend"}
+              </button>
+
+              <div className="border-t border-gray-100 pt-5">
+                <button
+                  type="button"
+                  onClick={() => { setModalView('form'); setIsLogin(true); setError(null); }}
+                  className="w-full py-3 rounded-xl font-semibold text-white bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-600 hover:to-emerald-600 transition-all shadow-md cursor-pointer"
+                >
+                  Go to Sign In
+                </button>
+              </div>
+            </div>
+          ) : (
+          <>
           {/* Header */}
           <div className="text-center mb-7">
             <div className="inline-flex items-center justify-center mb-5">
@@ -312,7 +367,20 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
             {error && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700 mb-3">
-                {error}
+                <p>{error}</p>
+                {showResendOnError && (
+                  <button
+                    type="button"
+                    onClick={() => handleResendVerification(registeredEmail)}
+                    disabled={resendLoading}
+                    className="mt-2 text-teal-600 hover:text-teal-700 font-semibold text-xs underline underline-offset-2 cursor-pointer disabled:opacity-50"
+                  >
+                    {resendLoading ? 'Resending…' : 'Resend verification email'}
+                  </button>
+                )}
+                {showResendOnError && resendSuccess && (
+                  <p className="mt-1 text-emerald-600 text-xs font-medium">✅ Verification email resent!</p>
+                )}
               </div>
             )}
 
@@ -350,6 +418,8 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
             and{' '}
             <a href="#" className="text-gray-500 hover:text-gray-700 underline underline-offset-2 whitespace-nowrap" rel="nofollow">Privacy Policy</a>
           </p>
+          </>
+          )}
         </div>
       </div>
     </div>

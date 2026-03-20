@@ -1,5 +1,5 @@
 """Authentication routes."""
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status, BackgroundTasks
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -57,7 +57,7 @@ async def get_current_user(
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
+async def register(user_data: UserCreate, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
     """Register a new user and send verification email."""
     # Check if user already exists
     result = await db.execute(select(User).where(User.email == user_data.email))
@@ -85,8 +85,10 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     # Generate verification token
     verification_token = auth_service.create_verification_token(new_user.id)
     
-    # Send verification email (in dev: prints to console, in prod: sends via SMTP)
-    email_service.send_verification_email(new_user.email, verification_token)
+    # Send verification email in the background (non-blocking)
+    background_tasks.add_task(
+        email_service.send_verification_email, new_user.email, verification_token, settings.frontend_url
+    )
     
     # Update college student status if this email was invited by a college
     try:
@@ -175,7 +177,7 @@ async def refresh_token(request: Request, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/verify-email")
-async def verify_email(token: str, db: AsyncSession = Depends(get_db)):
+async def verify_email(token: str, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
     """Verify user email with token."""
     # Decode verification token
     user_id = auth_service.decode_verification_token(token)
@@ -206,11 +208,14 @@ async def verify_email(token: str, db: AsyncSession = Depends(get_db)):
     
     await db.commit()
     
+    # Send welcome email in background (non-blocking)
+    background_tasks.add_task(email_service.send_welcome_email, user.email, user.full_name)
+    
     return {"message": "Email verified successfully. You can now login."}
 
 
 @router.post("/resend-verification")
-async def resend_verification(email: str, db: AsyncSession = Depends(get_db)):
+async def resend_verification(email: str, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
     """Resend verification email."""
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
@@ -227,8 +232,10 @@ async def resend_verification(email: str, db: AsyncSession = Depends(get_db)):
     # Generate new verification token
     verification_token = auth_service.create_verification_token(user.id)
     
-    # Send verification email (in dev: prints to console, in prod: sends via SMTP)
-    email_service.send_verification_email(user.email, verification_token)
+    # Send verification email in background (non-blocking)
+    background_tasks.add_task(
+        email_service.send_verification_email, user.email, verification_token, settings.frontend_url
+    )
     
     return {"message": "Verification email sent. Check your inbox."}
 

@@ -127,8 +127,10 @@ export default function ResumeEditor({ data, onDataChange, templateId, children 
     setHasPaymentAccess(true);
     setAccessType(subscriptionActivated ? 'subscription' : 'per_resume');
     setShowPaymentModal(false);
-    // Automatically start download after successful payment
-    performDownload();
+    // Wait for modal to fully unmount before capturing the DOM for download
+    setTimeout(() => {
+      performDownload();
+    }, 300);
   };
 
   const performDownload = async () => {
@@ -138,7 +140,11 @@ export default function ResumeEditor({ data, onDataChange, templateId, children 
       await saveToDatabase();
 
       const resumeElement = document.getElementById('resume-preview');
-      if (!resumeElement) return;
+      if (!resumeElement) {
+        alert('Resume preview not found. Please scroll to your resume and click Download again.');
+        setIsDownloading(false);
+        return;
+      }
 
       // Create canvas from HTML
       const canvas = await html2canvas(resumeElement, {

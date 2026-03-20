@@ -79,7 +79,7 @@ class CreateSessionRequest(BaseModel):
 
 class CreateSessionResponse(BaseModel):
     payments_session_id: str
-    amount: str
+    amount: float
     currency: str
     reference_number: str
     description: str
@@ -494,7 +494,7 @@ async def create_payment_session(
 
     return CreateSessionResponse(
         payments_session_id=session_id,
-        amount=str(amount),
+        amount=amount,
         currency="INR",
         reference_number=ref,
         description=description,
@@ -593,6 +593,20 @@ async def verify_payment(
             )
 
         await db.commit()
+
+        # Send payment confirmation email
+        try:
+            from services.email_service import email_service
+            email_service.send_payment_confirmation_email(
+                recipient_email=current_user.email,
+                full_name=current_user.full_name,
+                amount=payment.amount,
+                plan_type=payment.product_type,
+                payment_id=data.payment_id,
+            )
+        except Exception as e:
+            logger.warning("Payment confirmation email failed for user %s: %s", current_user.id, e)
+
         return VerifyPaymentResponse(
             status="succeeded",
             payment_id=data.payment_id,

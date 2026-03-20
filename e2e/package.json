@@ -1,0 +1,20 @@
+{
+  "name": "pickcv-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "description": "End-to-end smoke tests for PickCV staging",
+  "scripts": {
+    "test": "playwright test",
+    "test:api": "playwright test --project=api",
+    "test:ui": "playwright test --project=ui",
+    "test:headed": "playwright test --project=ui --headed",
+    "report": "playwright show-report",
+    "cleanup": "ts-node scripts/cleanup.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.0",
+    "@types/node": "^22.10.0"
+  }
+}

@@ -84,8 +84,8 @@ jobs:
             --cpu 1 \
             --max-instances 10 \
             --timeout 300 \
-            --set-env-vars "ENVIRONMENT=production,GEMINI_API_KEY=$GEMINI_API_KEY,SECRET_KEY=$SECRET_KEY,ALLOWED_ORIGINS=$ALLOWED_ORIGINS,FRONTEND_URL=$FRONTEND_URL,GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET,GOOGLE_REDIRECT_URI=$HOSTING_URL/auth/callback,DATABASE_URL=postgresql+asyncpg://postgres:$DB_PASSWORD@/pickcv?host=/cloudsql/$CLOUD_SQL_INSTANCE,STORAGE_BACKEND=local,RESUME_DOWNLOAD_PRICE=49,SUBSCRIPTION_MONTHLY_PRICE=149,SUBSCRIPTION_YEARLY_PRICE=999,FREE_DOWNLOADS_LIMIT=1" \
-            --set-secrets "ZOHO_PAYMENTS_ACCOUNT_ID=ZOHO_PAYMENTS_ACCOUNT_ID:latest,ZOHO_PAYMENTS_API_KEY=ZOHO_PAYMENTS_API_KEY:latest,ZOHO_PAYMENTS_OAUTH_TOKEN=ZOHO_PAYMENTS_OAUTH_TOKEN:latest,ZOHO_PAYMENTS_REFRESH_TOKEN=ZOHO_PAYMENTS_REFRESH_TOKEN:latest,ZOHO_PAYMENTS_SIGNING_KEY=ZOHO_PAYMENTS_SIGNING_KEY:latest,ZOHO_PAYMENTS_CLIENT_ID=ZOHO_PAYMENTS_CLIENT_ID:latest,ZOHO_PAYMENTS_CLIENT_SECRET=ZOHO_PAYMENTS_CLIENT_SECRET:latest"
+            --set-env-vars "ENVIRONMENT=production,GEMINI_API_KEY=$GEMINI_API_KEY,SECRET_KEY=$SECRET_KEY,ALLOWED_ORIGINS=$ALLOWED_ORIGINS,FRONTEND_URL=$FRONTEND_URL,GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET,GOOGLE_REDIRECT_URI=$HOSTING_URL/auth/callback,DATABASE_URL=postgresql+asyncpg://postgres:$DB_PASSWORD@/pickcv?host=/cloudsql/$CLOUD_SQL_INSTANCE,STORAGE_BACKEND=local,RESUME_DOWNLOAD_PRICE=49,SUBSCRIPTION_MONTHLY_PRICE=149,SUBSCRIPTION_YEARLY_PRICE=999,FREE_DOWNLOADS_LIMIT=1,SENDER_EMAIL=noreply@pickcv.com" \
+            --set-secrets "ZOHO_PAYMENTS_ACCOUNT_ID=ZOHO_PAYMENTS_ACCOUNT_ID:latest,ZOHO_PAYMENTS_API_KEY=ZOHO_PAYMENTS_API_KEY:latest,ZOHO_PAYMENTS_OAUTH_TOKEN=ZOHO_PAYMENTS_OAUTH_TOKEN:latest,ZOHO_PAYMENTS_REFRESH_TOKEN=ZOHO_PAYMENTS_REFRESH_TOKEN:latest,ZOHO_PAYMENTS_SIGNING_KEY=ZOHO_PAYMENTS_SIGNING_KEY:latest,ZOHO_PAYMENTS_CLIENT_ID=ZOHO_PAYMENTS_CLIENT_ID:latest,ZOHO_PAYMENTS_CLIENT_SECRET=ZOHO_PAYMENTS_CLIENT_SECRET:latest,SENDGRID_API_KEY=SENDGRID_API_KEY:latest"
 
           gcloud run services update "$CLOUD_RUN_SERVICE" \
             --region "$GCP_REGION" \
@@ -158,8 +158,8 @@ jobs:
             --cpu 1 \
             --max-instances 10 \
             --timeout 300 \
-            --set-env-vars "ENVIRONMENT=staging,GEMINI_API_KEY=$GEMINI_API_KEY,SECRET_KEY=$SECRET_KEY,ALLOWED_ORIGINS=$HOSTING_URL,FRONTEND_URL=$HOSTING_URL,GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET,GOOGLE_REDIRECT_URI=$HOSTING_URL/auth/callback,DATABASE_URL=postgresql+asyncpg://postgres:$DB_PASSWORD@/pickcv_staging?host=/cloudsql/$CLOUD_SQL_INSTANCE,STORAGE_BACKEND=local,RESUME_DOWNLOAD_PRICE=49,SUBSCRIPTION_MONTHLY_PRICE=149,SUBSCRIPTION_YEARLY_PRICE=999,FREE_DOWNLOADS_LIMIT=1" \
-            --set-secrets "ZOHO_PAYMENTS_ACCOUNT_ID=ZOHO_PAYMENTS_ACCOUNT_ID:latest,ZOHO_PAYMENTS_API_KEY=ZOHO_PAYMENTS_API_KEY:latest,ZOHO_PAYMENTS_OAUTH_TOKEN=ZOHO_PAYMENTS_OAUTH_TOKEN:latest,ZOHO_PAYMENTS_REFRESH_TOKEN=ZOHO_PAYMENTS_REFRESH_TOKEN:latest,ZOHO_PAYMENTS_SIGNING_KEY=ZOHO_PAYMENTS_SIGNING_KEY:latest,ZOHO_PAYMENTS_CLIENT_ID=ZOHO_PAYMENTS_CLIENT_ID:latest,ZOHO_PAYMENTS_CLIENT_SECRET=ZOHO_PAYMENTS_CLIENT_SECRET:latest"
+            --set-env-vars "ENVIRONMENT=staging,GEMINI_API_KEY=$GEMINI_API_KEY,SECRET_KEY=$SECRET_KEY,ALLOWED_ORIGINS=$HOSTING_URL,FRONTEND_URL=$HOSTING_URL,GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET,GOOGLE_REDIRECT_URI=$HOSTING_URL/auth/callback,DATABASE_URL=postgresql+asyncpg://postgres:$DB_PASSWORD@/pickcv_staging?host=/cloudsql/$CLOUD_SQL_INSTANCE,STORAGE_BACKEND=local,RESUME_DOWNLOAD_PRICE=49,SUBSCRIPTION_MONTHLY_PRICE=149,SUBSCRIPTION_YEARLY_PRICE=999,FREE_DOWNLOADS_LIMIT=1,SENDER_EMAIL=noreply@pickcv.com" \
+            --set-secrets "ZOHO_PAYMENTS_ACCOUNT_ID=ZOHO_PAYMENTS_ACCOUNT_ID:latest,ZOHO_PAYMENTS_API_KEY=ZOHO_PAYMENTS_API_KEY:latest,ZOHO_PAYMENTS_OAUTH_TOKEN=ZOHO_PAYMENTS_OAUTH_TOKEN:latest,ZOHO_PAYMENTS_REFRESH_TOKEN=ZOHO_PAYMENTS_REFRESH_TOKEN:latest,ZOHO_PAYMENTS_SIGNING_KEY=ZOHO_PAYMENTS_SIGNING_KEY:latest,ZOHO_PAYMENTS_CLIENT_ID=ZOHO_PAYMENTS_CLIENT_ID:latest,ZOHO_PAYMENTS_CLIENT_SECRET=ZOHO_PAYMENTS_CLIENT_SECRET:latest,SENDGRID_API_KEY=SENDGRID_API_KEY:latest"
 
           BACKEND_URL=$(gcloud run services describe "$CLOUD_RUN_SERVICE" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --format='value(status.url)')
           echo "backend_url=$BACKEND_URL" >> "$GITHUB_OUTPUT"
@@ -184,3 +184,81 @@ jobs:
 
       - name: Deploy frontend to Firebase Hosting
         run: firebase deploy --only hosting:staging --project "$FIREBASE_PROJECT_ID" --non-interactive
+
+    outputs:
+      backend_url: ${{ steps.backend.outputs.backend_url }}
+
+  # ─────────────────────────────────────────────
+  # E2E Smoke Tests (runs AFTER staging deploy)
+  # ─────────────────────────────────────────────
+  e2e-tests:
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    if: always() && needs.deploy-staging.result == 'success'
+    environment: staging
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install E2E dependencies
+        working-directory: e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Wait for staging to stabilize
+        run: |
+          echo "Waiting 30s for Cloud Run cold-start..."
+          sleep 30
+
+          # Verify backend is healthy
+          BACKEND_URL="${{ needs.deploy-staging.outputs.backend_url }}"
+          for i in 1 2 3 4 5; do
+            STATUS=$(curl -s -o /dev/null -w '%{http_code}' "$BACKEND_URL/health" || true)
+            if [ "$STATUS" = "200" ]; then
+              echo "✅ Backend is healthy"
+              break
+            fi
+            echo "⏳ Attempt $i: status=$STATUS, retrying in 10s..."
+            sleep 10
+          done
+
+      - name: Run E2E API tests
+        working-directory: e2e
+        env:
+          STAGING_API_URL: ${{ needs.deploy-staging.outputs.backend_url }}
+          STAGING_APP_URL: https://pickcv-staging.web.app
+          E2E_CLEANUP_SECRET: ${{ secrets.SECRET_KEY_STAGING }}
+        run: npx playwright test --project=api
+
+      - name: Run E2E UI smoke tests
+        if: always()
+        working-directory: e2e
+        env:
+          STAGING_API_URL: ${{ needs.deploy-staging.outputs.backend_url }}
+          STAGING_APP_URL: https://pickcv-staging.web.app
+          E2E_CLEANUP_SECRET: ${{ secrets.SECRET_KEY_STAGING }}
+        run: npx playwright test --project=ui
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-report
+          path: e2e/playwright-report/
+          retention-days: 14
+
+      - name: Upload test traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-traces
+          path: e2e/test-results/
+          retention-days: 7

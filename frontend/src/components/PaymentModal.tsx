@@ -41,6 +41,7 @@ export default function PaymentModal({
   const [selectedPlan, setSelectedPlan] = useState<string>('per_resume');
   const [status, setStatus] = useState<'idle' | 'loading' | 'processing' | 'verifying' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
+  const [pendingResult, setPendingResult] = useState<{ subscriptionActivated: boolean } | null>(null);
 
   const selectedPlanInfo = plans.find((p) => p.plan_type === selectedPlan) || plans[0];
 
@@ -61,11 +62,15 @@ export default function PaymentModal({
       // Step 2: Create payment session for selected plan
       const session: PaymentSession = await paymentService.createSession(
         selectedPlan,
-        selectedPlan === 'per_resume' ? resumeId : resumeId // pass resumeId for context
+        resumeId
       );
 
       // Step 3: Load Zoho widget script
       await paymentService.loadZohoScript();
+
+      if (!window.ZPayments) {
+        throw new Error('Payment widget failed to initialize. Please refresh and try again.');
+      }
 
       // Step 4: Initialize Zoho widget
       setStatus('processing');
@@ -75,9 +80,10 @@ export default function PaymentModal({
         otherOptions: { api_key: config.api_key },
       });
 
-      // Step 5: Open payment widget
+      // Step 5: Open payment widget (ensure amount is numeric)
+      const numericAmount = typeof session.amount === 'string' ? parseFloat(session.amount) : session.amount;
       const result = await zpayInstance.requestPaymentMethod({
-        amount: session.amount,
+        amount: numericAmount,
         currency_code: session.currency,
         payments_session_id: session.payments_session_id,
         description: selectedPlanInfo?.label || 'PickCV Payment',
@@ -91,12 +97,11 @@ export default function PaymentModal({
         result.signature
       );
 
-      if (verification.success || verification.status === 'succeeded') {
+      if (verification.status === 'succeeded' || verification.download_allowed) {
         setStatus('success');
-        setTimeout(() => {
-          onPaymentSuccess(verification.subscription_activated);
-          onClose();
-        }, 1500);
+        setPendingResult({ subscriptionActivated: !!verification.subscription_activated });
+        // Don't auto-trigger download here — let user click "Download Now"
+        // This avoids race condition with modal overlay blocking html2canvas
       } else {
         setErrorMessage(verification.message || 'Payment verification failed');
         setStatus('error');
@@ -110,7 +115,15 @@ export default function PaymentModal({
       setErrorMessage(error?.message || 'Payment failed. Please try again.');
       setStatus('error');
     }
-  }, [resumeId, selectedPlan, selectedPlanInfo, onPaymentSuccess, onClose]);
+  }, [resumeId, selectedPlan, selectedPlanInfo]);
+
+  /** User clicks "Download Now" after successful payment */
+  const handleDownloadNow = () => {
+    if (pendingResult) {
+      onPaymentSuccess(pendingResult.subscriptionActivated);
+    }
+    onClose();
+  };
 
   if (!isOpen) return null;
 
@@ -149,7 +162,14 @@ export default function PaymentModal({
                 <i className="ri-check-line text-3xl text-green-600"></i>
               </div>
               <h4 className="text-lg font-bold text-gray-900 mb-2">Payment Successful!</h4>
-              <p className="text-sm text-gray-600">Your download will start shortly...</p>
+              <p className="text-sm text-gray-600 mb-6">Your payment has been verified. Click below to download your resume.</p>
+              <button
+                onClick={handleDownloadNow}
+                className="w-full py-3.5 bg-gradient-to-r from-teal-600 to-emerald-500 text-white rounded-xl font-bold text-base shadow-lg shadow-teal-500/25 hover:shadow-teal-500/40 hover:scale-[1.02] transition-all flex items-center justify-center gap-2"
+              >
+                <i className="ri-download-2-line text-lg"></i>
+                Download Resume Now
+              </button>
             </div>
           ) : status === 'error' ? (
             <div className="text-center py-6">

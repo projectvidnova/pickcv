@@ -61,6 +61,7 @@ export interface PaymentVerifyResult {
   payment_id: string;
   status: string;
   message: string;
+  download_allowed?: boolean;
   subscription_activated?: boolean;
 }
 
@@ -181,10 +182,28 @@ class PaymentService {
   /** Load Zoho Payments widget script dynamically */
   loadZohoScript(): Promise<void> {
     return new Promise((resolve, reject) => {
-      if (document.querySelector('script[src*="zpayments.js"]')) {
+      // Already loaded and available
+      if (window.ZPayments) {
         resolve();
         return;
       }
+
+      // Script tag exists but ZPayments not ready — wait for it
+      const existingScript = document.querySelector('script[src*="zpayments.js"]');
+      if (existingScript) {
+        // Script was added but maybe still loading — listen for load event
+        const checkReady = () => {
+          if (window.ZPayments) { resolve(); return; }
+          setTimeout(checkReady, 100);
+        };
+        // Bail out after 10 seconds
+        const timeout = setTimeout(() => reject(new Error('Zoho Payments script timed out')), 10000);
+        existingScript.addEventListener('load', () => { clearTimeout(timeout); checkReady(); });
+        existingScript.addEventListener('error', () => { clearTimeout(timeout); reject(new Error('Failed to load Zoho Payments script')); });
+        checkReady();
+        return;
+      }
+
       const script = document.createElement('script');
       script.src = 'https://static.zohocdn.com/zpay/zpay-js/v1/zpayments.js';
       script.async = true;

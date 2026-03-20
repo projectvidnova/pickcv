@@ -12,6 +12,7 @@ const ResumeComparison = lazy(() => import('../pages/resume-comparison/page'));
 const ResumeBuilder = lazy(() => import('../pages/resume-builder/page'));
 const Profile = lazy(() => import('../pages/profile/page'));
 const AuthCallback = lazy(() => import('../pages/auth/callback'));
+const VerifyEmail = lazy(() => import('../pages/auth/verify-email'));
 const About = lazy(() => import('../pages/about/page'));
 const Careers = lazy(() => import('../pages/careers/page'));
 const Contact = lazy(() => import('../pages/contact/page'));
@@ -152,6 +153,10 @@ const mainRoutes: RouteObject[] = [
   {
     path: '/auth/callback',
     element: <AuthCallback />,
+  },
+  {
+    path: '/verify-email',
+    element: <VerifyEmail />,
   },
   {
     path: '/about',

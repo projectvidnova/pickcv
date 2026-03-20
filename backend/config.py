@@ -73,6 +73,7 @@ class Settings(BaseSettings):
     sender_email: str = os.getenv("SENDER_EMAIL", "noreply@pickcv.com")
     sender_password: str = os.getenv("SENDER_PASSWORD", "")
     resend_api_key: str = os.getenv("RESEND_API_KEY", "")
+    sendgrid_api_key: str = os.getenv("SENDGRID_API_KEY", "")
     
     # ============= FILE UPLOAD =============
     max_upload_size_mb: int = 50

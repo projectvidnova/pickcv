@@ -347,7 +347,10 @@ export default function InlineResumeEditor({
     setHasPaymentAccess(true);
     setAccessType(subscriptionActivated ? 'subscription' : 'per_resume');
     setShowPaymentModal(false);
-    performDownload();
+    // Wait for modal to fully unmount before capturing the DOM for download
+    setTimeout(() => {
+      performDownload();
+    }, 300);
   };
 
   const performDownload = async () => {
@@ -355,7 +358,11 @@ export default function InlineResumeEditor({
     try {
       await saveToDatabase();
       const el = resumeRef.current;
-      if (!el) return;
+      if (!el) {
+        alert('Resume preview not found. Please scroll to your resume and click Download again.');
+        setIsDownloading(false);
+        return;
+      }
 
       const canvas = await html2canvas(el, { scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff' });
       const imgData = canvas.toDataURL('image/png');
@@ -402,6 +409,7 @@ export default function InlineResumeEditor({
       pdf.save(`${data.name.replace(/\s+/g, '_')}_Resume.pdf`);
     } catch (err) {
       console.error('PDF download failed:', err);
+      alert('Failed to download PDF. Please try again.');
     } finally {
       setIsDownloading(false);
     }

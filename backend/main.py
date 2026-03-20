@@ -12,6 +12,7 @@ from routes import departments as departments_routes
 from routes import coe as coe_routes
 from routes import skills as skills_routes
 from routes import payments as payments_routes
+from routes import e2e as e2e_routes
 from security import get_security_headers
 
 # Configure logging
@@ -125,6 +126,11 @@ app.include_router(skills_routes.college_router, prefix="/api", tags=["College -
 
 # Payments
 app.include_router(payments_routes.router, prefix="/api/payments", tags=["Payments"])
+
+# E2E test routes — staging only
+if settings.environment == "staging":
+    app.include_router(e2e_routes.router, prefix="/api/e2e", tags=["E2E Testing"])
+    logger.info("E2E test routes enabled (staging environment)")
 
 
 # ============= HEALTH CHECKS =============
