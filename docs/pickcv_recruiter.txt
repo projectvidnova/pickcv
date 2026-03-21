@@ -1,0 +1,67 @@
+we are building PickCV recruiters feature, an AI-powered recruiter portal. we need to implement a full recruitment lifecycle.
+on the home page tools, we have one option for recruiters /companies.. on click of that it will navigate to a different page and there we will have all this.
+
+
+Core Entities & Relationships:
+
+User/Recruiter: Includes isApproved (Admin controlled), companyDetails.
+
+Job: Includes status (Open/Paused), rules (Auto-pause date), postedBy.
+
+Candidate/Application: Links User to Job, includes status (Applied, In-Review, Shortlisted, Interviewing, Offered).
+
+Interview: Links Application to Interviewers, includes roundNumber, googleMeetLink, feedback, isQualified.
+
+Interviewer: Team members invited by Recruiters.
+
+Please keep this architecture in mind for the following specific feature requests."
+
+2. Feature-Specific Instructions
+Break your development into these "Micro-Prompts" to get high-quality code.
+
+Phase 1: Registration & Admin Approval
+"Create a registration flow for Recruiters.
+
+Implement email verification logic.
+
+On verification, set status to PendingAdminApproval.
+
+Create an Admin Dashboard view that lists pending recruiters with an 'Approve' button that flips the isApproved boolean and sends a 'Welcome' email."
+
+Phase 2: Job Management & Rules
+"Build the Job Creation form.
+
+Include fields: Title, Description, Requirements, and a 'Configuration' section.
+
+Add a 'Pause Date' picker. Create a cron job or background function that checks if currentDate > pauseDate to update the job status to 'Paused'.
+
+Create a toggle for Recruiters to manually pause/resume jobs from their 'My Jobs' tab."
+
+Phase 3: Shortlisting & Interview Sequencing
+"Implement the Interview Configuration logic.
+
+When a recruiter moves a candidate to 'Shortlisted', show a 'Plan Interview' UI.
+
+Allow adding multiple rounds (Round 1, Round 2).
+
+Add a conditional toggle: 'Sequential Scheduling' (Send Round 2 only after Round 1 is marked Qualified) vs 'Bulk Scheduling' (Send all invites at once).
+
+Logic: If Sequential is ON, the 'Send Invite' trigger for Round N must wait for round[N-1].feedback.status === 'Qualified'."
+
+Phase 4: Interviewer Management & Google Meet
+"Create the Interviewer Invitation system.
+
+A Recruiter can invite team members via email.
+
+Once the team member accepts, they are added to the Interviewers table linked to that Recruiter’s company.
+
+Write a service function using Google Calendar API to generate a Meet link when an interview is scheduled, sending the calendar.events.insert request to both the candidate and the assigned interviewer(s)."
+
+Phase 5: Offer Letter Generation
+"Build the Offer Letter module.
+
+Create a CRUD for 'Offer Templates' where Recruiters can save Markdown or HTML templates with variables like {{candidate_name}} and {{salary}}.
+
+Create a 'Release Offer' action that populates a template, generates a PDF (using a library like jspdf or puppeteer), and updates the application status to 'Offered'.
+
+Add a Candidate View where they can click 'Accept' or 'Decline', which notifies the Recruiter."

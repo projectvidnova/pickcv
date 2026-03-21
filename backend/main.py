@@ -13,6 +13,7 @@ from routes import coe as coe_routes
 from routes import skills as skills_routes
 from routes import payments as payments_routes
 from routes import e2e as e2e_routes
+from routes import recruiter as recruiter_routes
 from security import get_security_headers
 
 # Configure logging
@@ -127,6 +128,9 @@ app.include_router(skills_routes.college_router, prefix="/api", tags=["College -
 # Payments
 app.include_router(payments_routes.router, prefix="/api/payments", tags=["Payments"])
 
+# Recruiter Portal (Phases 1-5)
+app.include_router(recruiter_routes.router, prefix="/api/recruiter", tags=["Recruiter"])
+
 # E2E test routes — staging only
 if settings.environment == "staging":
     app.include_router(e2e_routes.router, prefix="/api/e2e", tags=["E2E Testing"])
@@ -170,6 +174,10 @@ async def startup_event():
     from models import (  # noqa: F401 - Phase 1 models
         SkillTaxonomy, Department, CurriculumCourse, CourseSkillMapping,
         StudentSkill, COEGroup, COEMembership, CollegeAlert, CollegeAuditLog
+    )
+    from models import (  # noqa: F401 - Recruiter models
+        Recruiter, RecruiterJob, CandidateApplication, Interview,
+        Interviewer, OfferTemplate, Offer
     )
     from sqlalchemy import text
     

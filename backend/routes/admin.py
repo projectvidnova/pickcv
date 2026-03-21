@@ -1,5 +1,5 @@
 """Admin module routes — login, college management, payment oversight."""
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
@@ -9,12 +9,14 @@ from typing import Optional
 import logging
 
 from database import get_db
-from models import Admin, College, CollegeStudent, Payment, Subscription, User, Resume
+from models import Admin, College, CollegeStudent, Payment, Subscription, User, Resume, Recruiter
 from schemas import (
     AdminLoginRequest, AdminLoginResponse,
     AdminCollegeResponse, AdminRejectRequest, AdminStatsResponse,
 )
+from schemas.recruiter import AdminRecruiterResponse, AdminRecruiterRejectRequest
 from services.auth_service import auth_service
+from services.recruiter_service import recruiter_service
 
 logger = logging.getLogger(__name__)
 
@@ -319,3 +321,87 @@ async def payment_stats(
         "yearly_subscriptions": yearly_subs,
         "free_downloads_used": free_downloads,
     }
+
+
+# ─── Recruiter Management ────────────────────────────────────
+
+@router.get("/recruiters", response_model=list[AdminRecruiterResponse])
+async def list_recruiters(
+    status_filter: Optional[str] = Query(None, alias="status"),
+    admin: Admin = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all recruiter accounts for admin review."""
+    q = select(Recruiter)
+    if status_filter:
+        q = q.where(Recruiter.status == status_filter)
+    q = q.order_by(Recruiter.created_at.desc())
+    result = await db.execute(q)
+    return result.scalars().all()
+
+
+@router.get("/recruiters/{recruiter_id}", response_model=AdminRecruiterResponse)
+async def get_recruiter(
+    recruiter_id: int,
+    admin: Admin = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Recruiter).where(Recruiter.id == recruiter_id))
+    rec = result.scalar_one_or_none()
+    if not rec:
+        raise HTTPException(404, "Recruiter not found")
+    return rec
+
+
+@router.post("/recruiters/{recruiter_id}/approve")
+async def approve_recruiter(
+    recruiter_id: int,
+    background_tasks: BackgroundTasks,
+    admin: Admin = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Approve a recruiter account."""
+    result = await db.execute(select(Recruiter).where(Recruiter.id == recruiter_id))
+    rec = result.scalar_one_or_none()
+    if not rec:
+        raise HTTPException(404, "Recruiter not found")
+
+    if not rec.is_email_verified:
+        raise HTTPException(400, "Recruiter has not verified email yet")
+
+    rec.is_approved = True
+    rec.status = "approved"
+    rec.approved_at = datetime.now(timezone.utc)
+    await db.commit()
+
+    # Send welcome email
+    background_tasks.add_task(recruiter_service.send_welcome_email, rec)
+
+    return {"message": f"Recruiter {rec.full_name} approved"}
+
+
+@router.post("/recruiters/{recruiter_id}/reject")
+async def reject_recruiter(
+    recruiter_id: int,
+    data: AdminRecruiterRejectRequest,
+    background_tasks: BackgroundTasks,
+    admin: Admin = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Reject a recruiter account."""
+    result = await db.execute(select(Recruiter).where(Recruiter.id == recruiter_id))
+    rec = result.scalar_one_or_none()
+    if not rec:
+        raise HTTPException(404, "Recruiter not found")
+
+    rec.status = "rejected"
+    rec.rejection_reason = data.reason
+    rec.is_active = False
+    await db.commit()
+
+    # Send rejection email
+    background_tasks.add_task(
+        recruiter_service.send_rejection_email, rec, data.reason
+    )
+
+    return {"message": f"Recruiter {rec.full_name} rejected"}

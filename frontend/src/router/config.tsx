@@ -24,7 +24,24 @@ const CollegeDashboard = lazy(() => import('../pages/college-dashboard/page'));
 const AdminLogin = lazy(() => import('../pages/admin/login/page'));
 const AdminColleges = lazy(() => import('../pages/admin/colleges/page'));
 const AdminPayments = lazy(() => import('../pages/admin/payments/page'));
+const AdminRecruiters = lazy(() => import('../pages/admin/recruiters/page'));
 const NotFound = lazy(() => import('../pages/NotFound'));
+
+// ─── Recruiter portal pages ───
+const RecruiterLogin = lazy(() => import('../pages/recruiter/login/page'));
+const RecruiterRegister = lazy(() => import('../pages/recruiter/register/page'));
+const RecruiterVerifyEmail = lazy(() => import('../pages/recruiter/verify-email/page'));
+const RecruiterVerifyEmailSent = lazy(() => import('../pages/recruiter/verify-email-sent/page'));
+const RecruiterPendingApproval = lazy(() => import('../pages/recruiter/pending-approval/page'));
+const RecruiterDashboard = lazy(() => import('../pages/recruiter/dashboard/page'));
+const RecruiterJobs = lazy(() => import('../pages/recruiter/jobs/page'));
+const RecruiterNewJob = lazy(() => import('../pages/recruiter/jobs/new/page'));
+const RecruiterJobDetail = lazy(() => import('../pages/recruiter/jobs/[id]/page'));
+const RecruiterInterviewers = lazy(() => import('../pages/recruiter/interviewers/page'));
+const RecruiterOfferTemplates = lazy(() => import('../pages/recruiter/offer-templates/page'));
+const RecruiterOffers = lazy(() => import('../pages/recruiter/offers/page'));
+const RecruiterOfferView = lazy(() => import('../pages/recruiter/offer/[id]/page'));
+const RecruiterAcceptInvite = lazy(() => import('../pages/recruiter/accept-invite/page'));
 
 // ─── Admin portal routes (admin.pickcv.com) ───
 const adminRoutes: RouteObject[] = [
@@ -43,6 +60,10 @@ const adminRoutes: RouteObject[] = [
   {
     path: '/payments',
     element: <AdminPayments />,
+  },
+  {
+    path: '/recruiters',
+    element: <AdminRecruiters />,
   },
   // Legacy paths still work
   {
@@ -202,6 +223,71 @@ const mainRoutes: RouteObject[] = [
   {
     path: '/admin/payments',
     element: <AdminPayments />,
+  },
+  {
+    path: '/admin/recruiters',
+    element: <AdminRecruiters />,
+  },
+  // ─── Recruiter Portal Routes ───
+  {
+    path: '/recruiter/login',
+    element: <RecruiterLogin />,
+  },
+  {
+    path: '/recruiter/register',
+    element: <RecruiterRegister />,
+  },
+  {
+    path: '/recruiter/verify-email',
+    element: <RecruiterVerifyEmail />,
+  },
+  {
+    path: '/recruiter/verify-email-sent',
+    element: <RecruiterVerifyEmailSent />,
+  },
+  {
+    path: '/recruiter/pending-approval',
+    element: <RecruiterPendingApproval />,
+  },
+  {
+    path: '/recruiter/dashboard',
+    element: <RecruiterDashboard />,
+  },
+  {
+    path: '/recruiter/jobs',
+    element: <RecruiterJobs />,
+  },
+  {
+    path: '/recruiter/jobs/new',
+    element: <RecruiterNewJob />,
+  },
+  {
+    path: '/recruiter/jobs/:id',
+    element: <RecruiterJobDetail />,
+  },
+  {
+    path: '/recruiter/jobs/:id/edit',
+    element: <RecruiterNewJob />,
+  },
+  {
+    path: '/recruiter/interviewers',
+    element: <RecruiterInterviewers />,
+  },
+  {
+    path: '/recruiter/offer-templates',
+    element: <RecruiterOfferTemplates />,
+  },
+  {
+    path: '/recruiter/offers',
+    element: <RecruiterOffers />,
+  },
+  {
+    path: '/recruiter/offer/:id',
+    element: <RecruiterOfferView />,
+  },
+  {
+    path: '/recruiter/accept-invite',
+    element: <RecruiterAcceptInvite />,
   },
   {
     path: '*',

@@ -713,3 +713,245 @@ class Subscription(Base):
     user = relationship("User", backref="subscriptions")
     payment = relationship("Payment", backref="subscription")
 
+
+# ============= RECRUITER MODULE MODELS =============
+
+class Recruiter(Base):
+    """Recruiter / company user model."""
+    __tablename__ = "recruiters"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(255), unique=True, index=True, nullable=False)
+    hashed_password = Column(String(255), nullable=False)
+    full_name = Column(String(255), nullable=False)
+    phone = Column(String(20))
+
+    # Company details
+    company_name = Column(String(500), nullable=False)
+    company_website = Column(String(500))
+    company_logo_url = Column(String(500))
+    company_size = Column(String(50))         # 1-10, 11-50, 51-200, 201-500, 500+
+    industry = Column(String(255))
+    designation = Column(String(255))         # HR Manager, CTO, etc.
+
+    # Verification & approval
+    is_email_verified = Column(Boolean, default=False)
+    email_verified_at = Column(DateTime(timezone=True))
+    status = Column(String(30), default="pending_verification", index=True)
+    # pending_verification → pending_approval → approved / rejected
+    is_approved = Column(Boolean, default=False, index=True)
+    approved_at = Column(DateTime(timezone=True))
+    approved_by = Column(Integer, ForeignKey("admins.id", ondelete="SET NULL"))
+    rejection_reason = Column(Text)
+
+    is_active = Column(Boolean, default=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    last_login = Column(DateTime(timezone=True))
+
+    # Relationships
+    jobs = relationship("RecruiterJob", back_populates="recruiter", cascade="all, delete-orphan")
+    interviewers = relationship("Interviewer", back_populates="recruiter", cascade="all, delete-orphan")
+    offer_templates = relationship("OfferTemplate", back_populates="recruiter", cascade="all, delete-orphan")
+
+
+class RecruiterJob(Base):
+    """Job posted by a recruiter."""
+    __tablename__ = "recruiter_jobs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    recruiter_id = Column(Integer, ForeignKey("recruiters.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    title = Column(String(500), nullable=False, index=True)
+    description = Column(Text, nullable=False)
+    requirements = Column(Text)
+    responsibilities = Column(Text)
+    benefits = Column(Text)
+
+    # Classification
+    job_type = Column(String(50), index=True)             # Full-time, Part-time, Contract, Internship
+    experience_level = Column(String(50), index=True)     # Entry, Mid, Senior, Lead
+    location = Column(String(255))
+    remote_policy = Column(String(50))                    # Remote, Hybrid, On-site
+
+    # Compensation
+    salary_min = Column(Integer)
+    salary_max = Column(Integer)
+    currency = Column(String(10), default="INR")
+
+    # Skills / tags
+    required_skills = Column(ARRAY(String(255)))
+    preferred_skills = Column(ARRAY(String(255)))
+
+    # Status & rules
+    status = Column(String(30), default="open", index=True)  # open, paused, closed
+    pause_date = Column(DateTime(timezone=True))              # Auto-pause date
+    paused_at = Column(DateTime(timezone=True))
+    closed_at = Column(DateTime(timezone=True))
+
+    # Metrics
+    application_count = Column(Integer, default=0)
+    view_count = Column(Integer, default=0)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    recruiter = relationship("Recruiter", back_populates="jobs")
+    applications = relationship("CandidateApplication", back_populates="job", cascade="all, delete-orphan")
+
+
+class CandidateApplication(Base):
+    """Candidate's application to a recruiter job."""
+    __tablename__ = "candidate_applications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    job_id = Column(Integer, ForeignKey("recruiter_jobs.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    resume_id = Column(Integer, ForeignKey("resumes.id", ondelete="SET NULL"), index=True)
+
+    # Application lifecycle
+    status = Column(String(30), default="applied", index=True)
+    # applied → in_review → shortlisted → interviewing → offered → hired / rejected
+    cover_letter = Column(Text)
+    match_score = Column(Float)
+    recruiter_notes = Column(Text)
+
+    applied_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    reviewed_at = Column(DateTime(timezone=True))
+    shortlisted_at = Column(DateTime(timezone=True))
+    offered_at = Column(DateTime(timezone=True))
+    offer_response = Column(String(30))  # accepted, declined, pending
+    offer_responded_at = Column(DateTime(timezone=True))
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint('job_id', 'user_id', name='uq_candidate_job_user'),
+    )
+
+    # Relationships
+    job = relationship("RecruiterJob", back_populates="applications")
+    user = relationship("User", backref="candidate_applications")
+    resume = relationship("Resume", backref="candidate_applications")
+    interviews = relationship("Interview", back_populates="application", cascade="all, delete-orphan")
+    offer = relationship("Offer", back_populates="application", uselist=False, cascade="all, delete-orphan")
+
+
+class Interview(Base):
+    """Interview round for a candidate application."""
+    __tablename__ = "interviews"
+
+    id = Column(Integer, primary_key=True, index=True)
+    application_id = Column(Integer, ForeignKey("candidate_applications.id", ondelete="CASCADE"), nullable=False, index=True)
+    interviewer_id = Column(Integer, ForeignKey("interviewers.id", ondelete="SET NULL"), index=True)
+
+    round_number = Column(Integer, nullable=False, default=1)
+    round_title = Column(String(255))                         # "Technical Round 1", "HR Round"
+    interview_type = Column(String(50), default="video")      # video, phone, in_person
+
+    # Scheduling
+    scheduled_at = Column(DateTime(timezone=True))
+    duration_minutes = Column(Integer, default=60)
+    google_meet_link = Column(String(500))
+    google_event_id = Column(String(255))                     # For updating/deleting calendar event
+
+    # Feedback
+    status = Column(String(30), default="pending", index=True)
+    # pending → scheduled → completed → qualified / not_qualified / no_show
+    feedback = Column(Text)
+    rating = Column(Integer)                                   # 1-5
+    is_qualified = Column(Boolean)                             # True → proceed to next round
+
+    # Invite tracking
+    invite_sent = Column(Boolean, default=False)
+    invite_sent_at = Column(DateTime(timezone=True))
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint('application_id', 'round_number', name='uq_interview_app_round'),
+    )
+
+    # Relationships
+    application = relationship("CandidateApplication", back_populates="interviews")
+    interviewer = relationship("Interviewer", back_populates="interviews")
+
+
+class Interviewer(Base):
+    """Team member invited by a recruiter to conduct interviews."""
+    __tablename__ = "interviewers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    recruiter_id = Column(Integer, ForeignKey("recruiters.id", ondelete="CASCADE"), nullable=False, index=True)
+    email = Column(String(255), nullable=False, index=True)
+    full_name = Column(String(255))
+    designation = Column(String(255))
+    phone = Column(String(20))
+
+    # Invitation
+    invitation_token = Column(String(255), unique=True)
+    status = Column(String(30), default="invited", index=True)  # invited, accepted, declined
+    accepted_at = Column(DateTime(timezone=True))
+
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint('recruiter_id', 'email', name='uq_interviewer_recruiter_email'),
+    )
+
+    # Relationships
+    recruiter = relationship("Recruiter", back_populates="interviewers")
+    interviews = relationship("Interview", back_populates="interviewer")
+
+
+class OfferTemplate(Base):
+    """Offer letter template saved by a recruiter."""
+    __tablename__ = "offer_templates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    recruiter_id = Column(Integer, ForeignKey("recruiters.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    name = Column(String(255), nullable=False)
+    content = Column(Text, nullable=False)                    # HTML/Markdown with {{variables}}
+    variables = Column(ARRAY(String(255)))                    # ["candidate_name", "salary", "role"]
+    is_default = Column(Boolean, default=False)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    recruiter = relationship("Recruiter", back_populates="offer_templates")
+    offers = relationship("Offer", back_populates="template")
+
+
+class Offer(Base):
+    """Offer letter released to a candidate."""
+    __tablename__ = "offers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    application_id = Column(Integer, ForeignKey("candidate_applications.id", ondelete="CASCADE"), nullable=False, index=True)
+    template_id = Column(Integer, ForeignKey("offer_templates.id", ondelete="SET NULL"), index=True)
+
+    # Generated offer
+    rendered_content = Column(Text, nullable=False)           # Final HTML with variables replaced
+    variables_used = Column(JSONB)                            # {"candidate_name": "John", "salary": "12 LPA"}
+    pdf_url = Column(String(500))                             # S3/GCS path to generated PDF
+
+    # Status
+    status = Column(String(30), default="released", index=True)  # released, accepted, declined, withdrawn
+    released_at = Column(DateTime(timezone=True), server_default=func.now())
+    responded_at = Column(DateTime(timezone=True))
+    response_note = Column(Text)                              # Candidate's optional note
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    application = relationship("CandidateApplication", back_populates="offer")
+    template = relationship("OfferTemplate", back_populates="offers")
+
