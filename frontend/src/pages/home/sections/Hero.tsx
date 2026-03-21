@@ -56,7 +56,7 @@ export default function Hero() {
                   <br />
                   Get{' '}
                   <span
-                    className="bg-gradient-to-r from-teal-600 to-emerald-500 bg-clip-text text-transparent"
+                    className="bg-gradient-to-r from-teal-600 to-emerald-500 bg-clip-text text-transparent inline-block pb-2"
                     style={{ fontFamily: "'Pacifico', cursive" }}
                   >
                     Hired

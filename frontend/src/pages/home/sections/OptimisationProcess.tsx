@@ -1,6 +1,6 @@
 
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import OptimizeModal from '../../../components/feature/OptimizeModal';
 
 const steps = [
   {
@@ -167,6 +167,7 @@ const accentMap: Record<string, { badge: string; connector: string; glow: string
 
 export default function OptimisationProcess() {
   const [activeStep, setActiveStep] = useState<number | null>(null);
+  const [isOptimizeModalOpen, setIsOptimizeModalOpen] = useState(false);
 
   return (
     <section id="optimisation-process" className="py-20 lg:py-28 relative overflow-hidden mesh-bg-subtle">
@@ -285,18 +286,20 @@ export default function OptimisationProcess() {
 
         {/* CTA */}
         <div className="text-center mt-10">
-          <Link
-            to="/onboarding"
-            className="inline-flex items-center gap-3 bg-gradient-to-r from-teal-600 to-emerald-500 text-white px-10 py-4 rounded-2xl text-base font-semibold shadow-xl shadow-teal-500/25 hover:shadow-teal-500/40 hover:scale-105 transition-all whitespace-nowrap"
+          <button
+            onClick={() => setIsOptimizeModalOpen(true)}
+            className="inline-flex items-center gap-3 bg-gradient-to-r from-teal-600 to-emerald-500 text-white px-10 py-4 rounded-2xl text-base font-semibold shadow-xl shadow-teal-500/25 hover:shadow-teal-500/40 hover:scale-105 transition-all whitespace-nowrap cursor-pointer"
           >
             <i className="ri-upload-cloud-2-line"></i>
             Upload Your Resume Now
             <i className="ri-arrow-right-line"></i>
-          </Link>
+          </button>
           <p className="text-sm text-gray-500 mt-3">No sign-up required · Results in under 30 seconds</p>
         </div>
 
       </div>
+
+      <OptimizeModal isOpen={isOptimizeModalOpen} onClose={() => setIsOptimizeModalOpen(false)} />
     </section>
   );
 }

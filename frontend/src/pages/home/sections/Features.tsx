@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import OptimizeModal from '../../../components/feature/OptimizeModal';
 
 const features = [
   {
@@ -51,6 +51,7 @@ const features = [
 
 export default function Features() {
   const [hoveredFeature, setHoveredFeature] = useState<number | null>(null);
+  const [isOptimizeModalOpen, setIsOptimizeModalOpen] = useState(false);
 
   return (
     <section id="features" className="py-16 lg:py-24 relative overflow-hidden mesh-bg-subtle">
@@ -298,12 +299,18 @@ export default function Features() {
         {/* Bottom CTA */}
         <div className="text-center mt-12">
           <p className="text-gray-600 mb-6">Ready to get past ATS and into interviews?</p>
-          <Link to="/onboarding" className="bg-gray-900 text-white px-10 py-5 rounded-2xl text-lg font-semibold hover:bg-gray-800 transition-all hover:scale-105 flex items-center justify-center gap-3 mx-auto whitespace-nowrap shadow-2xl shadow-gray-900/20 w-fit">
-            Get Started Free
+          <button
+            onClick={() => setIsOptimizeModalOpen(true)}
+            className="bg-gray-900 text-white px-10 py-5 rounded-2xl text-lg font-semibold hover:bg-gray-800 transition-all hover:scale-105 flex items-center justify-center gap-3 mx-auto whitespace-nowrap shadow-2xl shadow-gray-900/20 w-fit cursor-pointer"
+          >
+            <i className="ri-upload-cloud-2-line text-xl"></i>
+            Upload & Get Started Free
             <i className="ri-arrow-right-line text-xl"></i>
-          </Link>
+          </button>
         </div>
       </div>
+
+      <OptimizeModal isOpen={isOptimizeModalOpen} onClose={() => setIsOptimizeModalOpen(false)} />
 
       <style>{`
         .perspective-1000 { perspective: 1000px; }
