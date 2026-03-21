@@ -210,7 +210,7 @@ jobs:
       - name: Install E2E dependencies
         working-directory: e2e
         run: |
-          npm ci
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
           npx playwright install --with-deps chromium
 
       - name: Wait for staging to stabilize
