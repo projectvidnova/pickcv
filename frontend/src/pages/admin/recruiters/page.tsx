@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { apiService } from '../../../services/api';
+import { resolvePath } from '../../../utils/subdomain';
 
 interface Recruiter {
   id: number;
@@ -28,7 +29,7 @@ export default function AdminRecruiters() {
 
   useEffect(() => {
     const token = localStorage.getItem('admin_token');
-    if (!token) { navigate('/admin/login'); return; }
+    if (!token) { navigate(resolvePath('/admin/login')); return; }
     load();
   }, [filter]);
 
@@ -43,7 +44,7 @@ export default function AdminRecruiters() {
       );
       if (!res.ok) throw new Error('Failed to fetch');
       setRecruiters(await res.json());
-    } catch { navigate('/admin/login'); }
+    } catch { navigate(resolvePath('/admin/login')); }
     setLoading(false);
   };
 
@@ -87,21 +88,46 @@ export default function AdminRecruiters() {
 
   return (
     <div className="min-h-screen bg-gray-900">
-      <nav className="border-b border-gray-800 bg-gray-900/80 backdrop-blur-xl sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <Link to="/admin/colleges" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center">
-              <i className="ri-shield-keyhole-fill text-white text-sm" />
-            </div>
-            <span className="text-lg font-bold text-white">PickCV Admin</span>
-          </Link>
-          <div className="flex items-center gap-6">
-            <Link to="/admin/colleges" className="text-gray-400 hover:text-white text-sm">Colleges</Link>
-            <Link to="/admin/recruiters" className="text-white text-sm font-medium">Recruiters</Link>
-            <Link to="/admin/payments" className="text-gray-400 hover:text-white text-sm">Payments</Link>
+      <header className="bg-gray-800/50 backdrop-blur-xl border-b border-gray-700/50 sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Link to={resolvePath('/admin/colleges')} className="flex items-center gap-2">
+              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center">
+                <i className="ri-shield-keyhole-fill text-white text-lg" />
+              </div>
+              <span className="text-xl font-bold text-white">PickCV</span>
+            </Link>
+            <div className="hidden sm:block h-6 w-px bg-gray-600" />
+            <span className="hidden sm:block text-sm text-gray-400">Admin Dashboard</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <Link
+              to={resolvePath('/admin/colleges')}
+              className="px-4 py-2 rounded-lg text-gray-400 text-sm font-medium hover:text-white hover:bg-gray-700/50 transition-colors flex items-center gap-2">
+              <i className="ri-building-4-line" />
+              <span className="hidden sm:inline">Colleges</span>
+            </Link>
+            <Link
+              to={resolvePath('/admin/recruiters')}
+              className="px-4 py-2 rounded-lg bg-teal-500/20 text-teal-300 text-sm font-medium border border-teal-500/30 flex items-center gap-2">
+              <i className="ri-briefcase-line" />
+              <span className="hidden sm:inline">Recruiters</span>
+            </Link>
+            <Link
+              to={resolvePath('/admin/payments')}
+              className="px-4 py-2 rounded-lg text-gray-400 text-sm font-medium hover:text-white hover:bg-gray-700/50 transition-colors flex items-center gap-2">
+              <i className="ri-money-rupee-circle-line" />
+              <span className="hidden sm:inline">Payments</span>
+            </Link>
+            <button
+              onClick={() => { localStorage.removeItem('admin_token'); navigate(resolvePath('/admin/login')); }}
+              className="px-4 py-2 rounded-lg bg-gray-700/50 text-gray-300 text-sm font-medium hover:bg-gray-700 hover:text-white transition-colors flex items-center gap-2 cursor-pointer">
+              <i className="ri-logout-box-line" />
+              <span className="hidden sm:inline">Logout</span>
+            </button>
           </div>
         </div>
-      </nav>
+      </header>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-6">

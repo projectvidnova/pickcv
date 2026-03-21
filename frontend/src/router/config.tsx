@@ -79,6 +79,10 @@ const adminRoutes: RouteObject[] = [
     element: <Navigate to="/payments" replace />,
   },
   {
+    path: '/admin/recruiters',
+    element: <Navigate to="/recruiters" replace />,
+  },
+  {
     path: '*',
     element: <NotFound />,
   },

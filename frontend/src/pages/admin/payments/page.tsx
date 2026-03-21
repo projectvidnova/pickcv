@@ -188,6 +188,13 @@ export default function AdminPayments() {
               <span className="hidden sm:inline">Colleges</span>
             </Link>
             <Link
+              to={resolvePath('/admin/recruiters')}
+              className="px-4 py-2 rounded-lg text-gray-400 text-sm font-medium hover:text-white hover:bg-gray-700/50 transition-colors flex items-center gap-2"
+            >
+              <i className="ri-briefcase-line"></i>
+              <span className="hidden sm:inline">Recruiters</span>
+            </Link>
+            <Link
               to={resolvePath('/admin/payments')}
               className="px-4 py-2 rounded-lg bg-teal-500/20 text-teal-300 text-sm font-medium border border-teal-500/30 flex items-center gap-2"
             >

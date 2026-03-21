@@ -38,6 +38,8 @@ export function isSubdomainPortal(): boolean {
 const adminPathMap: Record<string, string> = {
   '/admin/login': '/login',
   '/admin/colleges': '/colleges',
+  '/admin/recruiters': '/recruiters',
+  '/admin/payments': '/payments',
 };
 
 const institutionPathMap: Record<string, string> = {
