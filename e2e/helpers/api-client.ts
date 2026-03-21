@@ -128,7 +128,7 @@ export async function listResumes(
   request: APIRequestContext,
   token: string
 ) {
-  const resp = await request.get(`${STAGING_API_URL}/api/resume/list`, {
+  const resp = await request.get(`${STAGING_API_URL}/api/resume/`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   return { status: resp.status(), body: await resp.json() };
