@@ -15,7 +15,7 @@ from services.auth_service import auth_service
 from services.email_service import email_service
 from services.google_oauth_service import google_oauth_service
 from services.college_service import college_service
-from config import settings
+from config import settings, get_frontend_origin
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +57,7 @@ async def get_current_user(
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def register(user_data: UserCreate, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
+async def register(user_data: UserCreate, request: Request, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
     """Register a new user and send verification email."""
     # Check if user already exists
     result = await db.execute(select(User).where(User.email == user_data.email))
@@ -87,7 +87,7 @@ async def register(user_data: UserCreate, background_tasks: BackgroundTasks, db:
     
     # Send verification email in the background (non-blocking)
     background_tasks.add_task(
-        email_service.send_verification_email, new_user.email, verification_token, settings.frontend_url
+        email_service.send_verification_email, new_user.email, verification_token, get_frontend_origin(request)
     )
     
     # Update college student status if this email was invited by a college
@@ -177,7 +177,7 @@ async def refresh_token(request: Request, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/verify-email")
-async def verify_email(token: str, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
+async def verify_email(token: str, request: Request, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
     """Verify user email with token."""
     # Decode verification token
     user_id = auth_service.decode_verification_token(token)
@@ -209,13 +209,13 @@ async def verify_email(token: str, background_tasks: BackgroundTasks, db: AsyncS
     await db.commit()
     
     # Send welcome email in background (non-blocking)
-    background_tasks.add_task(email_service.send_welcome_email, user.email, user.full_name)
+    background_tasks.add_task(email_service.send_welcome_email, user.email, user.full_name, get_frontend_origin(request))
     
     return {"message": "Email verified successfully. You can now login."}
 
 
 @router.post("/resend-verification")
-async def resend_verification(email: str, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
+async def resend_verification(email: str, request: Request, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
     """Resend verification email."""
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
@@ -234,7 +234,7 @@ async def resend_verification(email: str, background_tasks: BackgroundTasks, db:
     
     # Send verification email in background (non-blocking)
     background_tasks.add_task(
-        email_service.send_verification_email, user.email, verification_token, settings.frontend_url
+        email_service.send_verification_email, user.email, verification_token, get_frontend_origin(request)
     )
     
     return {"message": "Verification email sent. Check your inbox."}
@@ -385,7 +385,7 @@ async def google_login():
 
 
 @router.get("/google/callback")
-async def google_callback(code: str, state: str, db: AsyncSession = Depends(get_db)):
+async def google_callback(code: str, state: str, request: Request, db: AsyncSession = Depends(get_db)):
     """Handle Google OAuth callback."""
     if not code:
         raise HTTPException(
@@ -450,7 +450,7 @@ async def google_callback(code: str, state: str, db: AsyncSession = Depends(get_
     refresh_token = auth_service.create_refresh_token(user.id)
     
     # Redirect to frontend with tokens and user info
-    frontend_url = settings.frontend_url
+    frontend_url = get_frontend_origin(request)
     redirect_url = f"{frontend_url}/auth/callback?access_token={access_token_jwt}&refresh_token={refresh_token}&user_id={user.id}&email={user.email}&name={user.full_name}"
     
     return RedirectResponse(url=redirect_url)

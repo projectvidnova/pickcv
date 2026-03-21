@@ -10,7 +10,7 @@ import logging
 import re
 from datetime import datetime, timezone, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, status
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials, OAuth2PasswordBearer
 from sqlalchemy import select, func, and_, or_, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,7 +35,7 @@ from schemas.recruiter import (
 )
 from services.auth_service import auth_service
 from services.recruiter_service import recruiter_service
-from config import settings
+from config import settings, get_frontend_origin
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +84,7 @@ async def get_approved_recruiter(
 @router.post("/register", response_model=RecruiterResponse, status_code=201)
 async def register(
     data: RecruiterRegisterRequest,
+    request: Request,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
@@ -108,9 +109,10 @@ async def register(
     await db.commit()
     await db.refresh(rec)
 
-    # Send verification email in background
+    # Send verification email in background — use the origin the request came from
+    frontend_origin = get_frontend_origin(request)
     token = recruiter_service.create_verification_token(rec.id)
-    background_tasks.add_task(recruiter_service.send_recruiter_verification_email, rec.email, token)
+    background_tasks.add_task(recruiter_service.send_recruiter_verification_email, rec.email, token, frontend_origin)
 
     return rec
 
@@ -118,6 +120,7 @@ async def register(
 @router.post("/verify-email")
 async def verify_email(
     token: str,
+    request: Request,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
@@ -141,7 +144,8 @@ async def verify_email(
     await db.commit()
 
     # Notify admin
-    background_tasks.add_task(recruiter_service.send_admin_approval_notification, rec)
+    frontend_origin = get_frontend_origin(request)
+    background_tasks.add_task(recruiter_service.send_admin_approval_notification, rec, frontend_origin)
 
     return {"message": "Email verified. Your account is pending admin approval."}
 
@@ -987,6 +991,7 @@ async def submit_feedback(
 @router.post("/interviewers", response_model=InterviewerResponse, status_code=201)
 async def invite_interviewer(
     data: InterviewerInviteRequest,
+    request: Request,
     background_tasks: BackgroundTasks,
     recruiter: Recruiter = Depends(get_approved_recruiter),
     db: AsyncSession = Depends(get_db),
@@ -1016,8 +1021,9 @@ async def invite_interviewer(
     await db.refresh(iv)
 
     # Send invite email
+    frontend_origin = get_frontend_origin(request)
     background_tasks.add_task(
-        recruiter_service.send_interviewer_invite, data.email, recruiter, token
+        recruiter_service.send_interviewer_invite, data.email, recruiter, token, frontend_origin
     )
 
     return InterviewerResponse(
@@ -1224,6 +1230,7 @@ async def delete_offer_template(
 @router.post("/offers/release", response_model=OfferResponse, status_code=201)
 async def release_offer(
     data: ReleaseOfferRequest,
+    request: Request,
     background_tasks: BackgroundTasks,
     recruiter: Recruiter = Depends(get_approved_recruiter),
     db: AsyncSession = Depends(get_db),
@@ -1282,8 +1289,9 @@ async def release_offer(
     job_q = await db.execute(select(RecruiterJob).where(RecruiterJob.id == app.job_id))
     job = job_q.scalar_one()
 
-    # Send offer email
-    offer_url = f"{settings.frontend_url}/recruiter/offer/{offer.id}"
+    # Send offer email — derive URL from the request origin
+    frontend_origin = get_frontend_origin(request)
+    offer_url = f"{frontend_origin}/recruiter/offer/{offer.id}"
     background_tasks.add_task(
         recruiter_service.send_offer_email,
         candidate.email,

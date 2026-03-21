@@ -32,8 +32,9 @@ class RecruiterService:
 
     # ─── Email helpers ────────────────────────────────────
 
-    def send_recruiter_verification_email(self, email: str, token: str):
-        verify_url = f"{settings.frontend_url}/recruiter/verify-email?token={token}"
+    def send_recruiter_verification_email(self, email: str, token: str, frontend_origin: str = ""):
+        base = frontend_origin or settings.frontend_url
+        verify_url = f"{base}/recruiter/verify-email?token={token}"
         body = f"""
         <h2 style="color:#1a1a2e; margin-bottom:16px;">Verify Your Recruiter Account</h2>
         <p style="color:#4a5568; line-height:1.6;">
@@ -55,8 +56,9 @@ class RecruiterService:
         """
         email_service.send_email(email, "Verify your PickCV recruiter account", body)
 
-    def send_admin_approval_notification(self, recruiter: Recruiter):
+    def send_admin_approval_notification(self, recruiter: Recruiter, frontend_origin: str = ""):
         """Notify admins that a new recruiter needs approval."""
+        base = frontend_origin or settings.frontend_url
         body = f"""
         <h2 style="color:#1a1a2e;">New Recruiter Pending Approval</h2>
         <table style="width:100%; border-collapse:collapse;">
@@ -67,7 +69,7 @@ class RecruiterService:
             <tr><td style="padding:8px; color:#64748b;">Designation</td><td style="padding:8px;">{recruiter.designation or 'N/A'}</td></tr>
         </table>
         <div style="text-align:center; margin:24px 0;">
-            <a href="{settings.frontend_url}/admin/recruiters"
+            <a href="{base}/admin/recruiters"
                style="background:#0d9488; color:#fff; text-decoration:none;
                       padding:12px 28px; border-radius:8px; font-weight:600;
                       display:inline-block;">
@@ -77,7 +79,8 @@ class RecruiterService:
         """
         email_service.send_email("admin@pickcv.com", "New recruiter pending approval", body)
 
-    def send_welcome_email(self, recruiter: Recruiter):
+    def send_welcome_email(self, recruiter: Recruiter, frontend_origin: str = ""):
+        base = frontend_origin or settings.frontend_url
         body = f"""
         <h2 style="color:#1a1a2e; margin-bottom:16px;">Welcome to PickCV, {recruiter.full_name}! 🎉</h2>
         <p style="color:#4a5568; line-height:1.6;">
@@ -85,7 +88,7 @@ class RecruiterService:
             You can now start posting jobs and finding top talent.
         </p>
         <div style="text-align:center; margin:32px 0;">
-            <a href="{settings.frontend_url}/recruiter/dashboard"
+            <a href="{base}/recruiter/dashboard"
                style="background:#0d9488; color:#fff; text-decoration:none;
                       padding:14px 36px; border-radius:8px; font-weight:600;
                       display:inline-block;">
@@ -112,8 +115,9 @@ class RecruiterService:
         """
         email_service.send_email(recruiter.email, "PickCV Recruiter Account Update", body)
 
-    def send_interviewer_invite(self, interviewer_email: str, recruiter: Recruiter, token: str):
-        accept_url = f"{settings.frontend_url}/recruiter/accept-invite?token={token}"
+    def send_interviewer_invite(self, interviewer_email: str, recruiter: Recruiter, token: str, frontend_origin: str = ""):
+        base = frontend_origin or settings.frontend_url
+        accept_url = f"{base}/recruiter/accept-invite?token={token}"
         body = f"""
         <h2 style="color:#1a1a2e; margin-bottom:16px;">You've been invited to interview!</h2>
         <p style="color:#4a5568; line-height:1.6;">

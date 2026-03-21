@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     # ============= CORS =============
     allowed_origins: str = os.getenv(
         "ALLOWED_ORIGINS",
-        "http://localhost:3000"
+        "http://localhost:3000;http://localhost:5173"
     )
     
     # ============= RATE LIMITING =============
@@ -85,7 +85,7 @@ class Settings(BaseSettings):
     storage_backend: str = os.getenv("STORAGE_BACKEND", "local")  # "gcs" or "local"
     
     # ============= FRONTEND CONFIG =============
-    frontend_url: str = os.getenv("FRONTEND_URL", "http://localhost:5173")
+    frontend_url: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
     
     # ============= ZOHO PAYMENTS =============
     zoho_payments_account_id: str = os.getenv("ZOHO_PAYMENTS_ACCOUNT_ID", "")
@@ -142,3 +142,23 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def get_frontend_origin(request) -> str:
+    """Extract the frontend origin from the incoming request.
+
+    Checks the Origin header first, then falls back to the Referer header,
+    and finally to settings.frontend_url.  This ensures email verification
+    links always point back to wherever the user actually came from.
+    """
+    origin = request.headers.get("origin")
+    if origin:
+        return origin.rstrip("/")
+
+    referer = request.headers.get("referer")
+    if referer:
+        from urllib.parse import urlparse
+        parsed = urlparse(referer)
+        return f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
+
+    return settings.frontend_url

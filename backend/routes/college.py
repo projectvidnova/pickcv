@@ -1,5 +1,5 @@
 """College module routes — registration, login, student management, sharing."""
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, status, UploadFile, File, Form, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, distinct
 from datetime import datetime, timezone, timedelta
@@ -23,7 +23,7 @@ from schemas import (
 from services.auth_service import auth_service
 from services.college_service import college_service
 from services.skill_analytics_service import sync_student_skills_from_user, get_skill_heatmap
-from config import settings
+from config import settings, get_frontend_origin
 
 logger = logging.getLogger(__name__)
 
@@ -237,6 +237,7 @@ async def upload_students(
 
 @router.post("/students/invite")
 async def invite_students(
+    request: Request,
     college: College = Depends(get_current_college_auth),
     db: AsyncSession = Depends(get_db),
 ):
@@ -248,7 +249,7 @@ async def invite_students(
         db=db,
         college_id=college.id,
         college_name=college.institution_name,
-        frontend_url=settings.frontend_url,
+        frontend_url=get_frontend_origin(request),
     )
     return result
 
@@ -629,6 +630,7 @@ async def get_student_stats(
 @router.post("/share", response_model=ShareProfilesResponse)
 async def share_profiles(
     data: ShareProfilesRequest,
+    request: Request,
     college: College = Depends(get_current_college_auth),
     db: AsyncSession = Depends(get_db),
 ):
@@ -677,7 +679,7 @@ async def share_profiles(
     await db.commit()
     await db.refresh(shared)
 
-    share_url = f"{settings.frontend_url}/shared/{share_token}"
+    share_url = f"{get_frontend_origin(request)}/shared/{share_token}"
 
     return ShareProfilesResponse(
         share_token=share_token,

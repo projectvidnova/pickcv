@@ -1,5 +1,5 @@
 """Admin module routes — login, college management, payment oversight."""
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, status
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
@@ -356,6 +356,7 @@ async def get_recruiter(
 @router.post("/recruiters/{recruiter_id}/approve")
 async def approve_recruiter(
     recruiter_id: int,
+    request: Request,
     background_tasks: BackgroundTasks,
     admin: Admin = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
@@ -376,7 +377,8 @@ async def approve_recruiter(
     await db.commit()
 
     # Send welcome email
-    background_tasks.add_task(recruiter_service.send_welcome_email, rec)
+    from config import get_frontend_origin
+    background_tasks.add_task(recruiter_service.send_welcome_email, rec, get_frontend_origin(request))
 
     return {"message": f"Recruiter {rec.full_name} approved"}
 
@@ -385,6 +387,7 @@ async def approve_recruiter(
 async def reject_recruiter(
     recruiter_id: int,
     data: AdminRecruiterRejectRequest,
+    request: Request,
     background_tasks: BackgroundTasks,
     admin: Admin = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),

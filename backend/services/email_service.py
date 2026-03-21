@@ -210,10 +210,11 @@ class EmailService:
             return False
 
     def send_welcome_email(
-        self, recipient_email: str, full_name: Optional[str] = None
+        self, recipient_email: str, full_name: Optional[str] = None, frontend_url: str = ""
     ) -> bool:
         """Send welcome email after email verification."""
         try:
+            base = frontend_url or settings.frontend_url
             name = full_name or "there"
             subject = "Welcome to PickCV — Let's Optimize Your Resume"
             body = f"""\
@@ -240,7 +241,7 @@ class EmailService:
   </td></tr>
 </table>
 <div style="text-align:center; margin:28px 0;">
-  <a href="{settings.frontend_url}/onboarding"
+  <a href="{base}/onboarding"
      style="background:linear-gradient(135deg,#0d9488,#10b981); color:white;
             padding:14px 40px; text-decoration:none; border-radius:8px;
             display:inline-block; font-weight:600; font-size:15px;">
@@ -252,7 +253,7 @@ class EmailService:
             text = (
                 f"Welcome, {name}!\n\n"
                 f"Your email is verified. Start using PickCV to optimize your resume.\n\n"
-                f"Get started: {settings.frontend_url}/onboarding\n\n"
+                f"Get started: {base}/onboarding\n\n"
                 f"The PickCV Team"
             )
             return self._send_email(recipient_email, subject, _wrap_html(body), text)
@@ -267,9 +268,11 @@ class EmailService:
         amount: Optional[float] = None,
         plan_type: str = "resume_download",
         payment_id: str = "",
+        frontend_url: str = "",
     ) -> bool:
         """Send payment / subscription confirmation email."""
         try:
+            base = frontend_url or settings.frontend_url
             name = full_name or "there"
             amount_str = f"₹{amount:.0f}" if amount else "—"
 
@@ -318,7 +321,7 @@ class EmailService:
 </table>
 {sub_note}
 <div style="text-align:center; margin:28px 0;">
-  <a href="{settings.frontend_url}/profile"
+  <a href="{base}/profile"
      style="background:linear-gradient(135deg,#0d9488,#10b981); color:white;
             padding:14px 40px; text-decoration:none; border-radius:8px;
             display:inline-block; font-weight:600; font-size:15px;">
@@ -333,7 +336,7 @@ class EmailService:
                 f"Plan: {plan_label}\n"
                 f"Amount: {amount_str}\n"
                 f"Payment ID: {payment_id}\n\n"
-                f"Visit {settings.frontend_url}/profile to continue.\n\n"
+                f"Visit {base}/profile to continue.\n\n"
                 f"The PickCV Team"
             )
             return self._send_email(recipient_email, subject, _wrap_html(body), text)

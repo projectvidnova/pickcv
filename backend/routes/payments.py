@@ -21,7 +21,7 @@ import logging
 import uuid
 from datetime import datetime, timezone, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import select, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -506,6 +506,7 @@ async def create_payment_session(
 @router.post("/verify", response_model=VerifyPaymentResponse)
 async def verify_payment(
     data: VerifyPaymentRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -597,12 +598,14 @@ async def verify_payment(
         # Send payment confirmation email
         try:
             from services.email_service import email_service
+            from config import get_frontend_origin
             email_service.send_payment_confirmation_email(
                 recipient_email=current_user.email,
                 full_name=current_user.full_name,
                 amount=payment.amount,
                 plan_type=payment.product_type,
                 payment_id=data.payment_id,
+                frontend_url=get_frontend_origin(request),
             )
         except Exception as e:
             logger.warning("Payment confirmation email failed for user %s: %s", current_user.id, e)
