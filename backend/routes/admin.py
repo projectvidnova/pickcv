@@ -372,6 +372,7 @@ async def approve_recruiter(
     rec.is_approved = True
     rec.status = "approved"
     rec.approved_at = datetime.now(timezone.utc)
+    rec.approved_by = admin.id
     await db.commit()
 
     # Send welcome email

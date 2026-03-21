@@ -492,6 +492,9 @@ async def get_candidate_user(
     payload = auth_service.decode_access_token(token)
     if not payload:
         raise HTTPException(401, "Invalid credentials")
+    # Reject recruiter/admin tokens — only standard user tokens allowed
+    if payload.get("type") in ("recruiter", "recruiter_verify", "admin"):
+        raise HTTPException(403, "Invalid token type for this endpoint")
     user_id = int(payload["sub"])
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()

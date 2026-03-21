@@ -32,7 +32,7 @@ class RecruiterService:
 
     # ─── Email helpers ────────────────────────────────────
 
-    async def send_recruiter_verification_email(self, email: str, token: str):
+    def send_recruiter_verification_email(self, email: str, token: str):
         verify_url = f"{settings.frontend_url}/recruiter/verify-email?token={token}"
         body = f"""
         <h2 style="color:#1a1a2e; margin-bottom:16px;">Verify Your Recruiter Account</h2>
@@ -53,9 +53,9 @@ class RecruiterService:
             <a href="{verify_url}" style="color:#0d9488;">{verify_url}</a>
         </p>
         """
-        await email_service.send_email(email, "Verify your PickCV recruiter account", body)
+        email_service.send_email(email, "Verify your PickCV recruiter account", body)
 
-    async def send_admin_approval_notification(self, recruiter: Recruiter):
+    def send_admin_approval_notification(self, recruiter: Recruiter):
         """Notify admins that a new recruiter needs approval."""
         body = f"""
         <h2 style="color:#1a1a2e;">New Recruiter Pending Approval</h2>
@@ -75,9 +75,9 @@ class RecruiterService:
             </a>
         </div>
         """
-        await email_service.send_email("admin@pickcv.com", "New recruiter pending approval", body)
+        email_service.send_email("admin@pickcv.com", "New recruiter pending approval", body)
 
-    async def send_welcome_email(self, recruiter: Recruiter):
+    def send_welcome_email(self, recruiter: Recruiter):
         body = f"""
         <h2 style="color:#1a1a2e; margin-bottom:16px;">Welcome to PickCV, {recruiter.full_name}! 🎉</h2>
         <p style="color:#4a5568; line-height:1.6;">
@@ -93,9 +93,9 @@ class RecruiterService:
             </a>
         </div>
         """
-        await email_service.send_email(recruiter.email, "Welcome to PickCV — Account Approved!", body)
+        email_service.send_email(recruiter.email, "Welcome to PickCV — Account Approved!", body)
 
-    async def send_rejection_email(self, recruiter: Recruiter, reason: str):
+    def send_rejection_email(self, recruiter: Recruiter, reason: str):
         body = f"""
         <h2 style="color:#1a1a2e; margin-bottom:16px;">Account Review Update</h2>
         <p style="color:#4a5568; line-height:1.6;">
@@ -110,9 +110,9 @@ class RecruiterService:
             If you think this is a mistake, please contact us at support@pickcv.com.
         </p>
         """
-        await email_service.send_email(recruiter.email, "PickCV Recruiter Account Update", body)
+        email_service.send_email(recruiter.email, "PickCV Recruiter Account Update", body)
 
-    async def send_interviewer_invite(self, interviewer_email: str, recruiter: Recruiter, token: str):
+    def send_interviewer_invite(self, interviewer_email: str, recruiter: Recruiter, token: str):
         accept_url = f"{settings.frontend_url}/recruiter/accept-invite?token={token}"
         body = f"""
         <h2 style="color:#1a1a2e; margin-bottom:16px;">You've been invited to interview!</h2>
@@ -129,9 +129,9 @@ class RecruiterService:
             </a>
         </div>
         """
-        await email_service.send_email(interviewer_email, f"Interview Panel Invite — {recruiter.company_name}", body)
+        email_service.send_email(interviewer_email, f"Interview Panel Invite — {recruiter.company_name}", body)
 
-    async def send_interview_invite_email(
+    def send_interview_invite_email(
         self, candidate_email: str, candidate_name: str,
         job_title: str, company_name: str,
         round_title: str, scheduled_at: datetime,
@@ -151,9 +151,9 @@ class RecruiterService:
         </table>
         {meet_html}
         """
-        await email_service.send_email(candidate_email, f"Interview: {round_title} — {company_name}", body)
+        email_service.send_email(candidate_email, f"Interview: {round_title} — {company_name}", body)
 
-    async def send_offer_email(
+    def send_offer_email(
         self, candidate_email: str, candidate_name: str,
         job_title: str, company_name: str,
         offer_url: str,
@@ -173,7 +173,7 @@ class RecruiterService:
             </a>
         </div>
         """
-        await email_service.send_email(candidate_email, f"Offer Letter — {company_name}", body)
+        email_service.send_email(candidate_email, f"Offer Letter — {company_name}", body)
 
     # ─── Job Auto-Pause Cron ─────────────────────────────
 

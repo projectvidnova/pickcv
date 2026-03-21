@@ -33,13 +33,13 @@ class RecruiterResponse(BaseModel):
     id: int
     email: str
     full_name: str
-    phone: Optional[str]
+    phone: Optional[str] = None
     company_name: str
-    company_website: Optional[str]
-    company_logo_url: Optional[str]
-    company_size: Optional[str]
-    industry: Optional[str]
-    designation: Optional[str]
+    company_website: Optional[str] = None
+    company_logo_url: Optional[str] = None
+    company_size: Optional[str] = None
+    industry: Optional[str] = None
+    designation: Optional[str] = None
     is_email_verified: bool
     status: str
     is_approved: bool
@@ -65,19 +65,19 @@ class AdminRecruiterResponse(BaseModel):
     id: int
     email: str
     full_name: str
-    phone: Optional[str]
+    phone: Optional[str] = None
     company_name: str
-    company_website: Optional[str]
-    company_size: Optional[str]
-    industry: Optional[str]
-    designation: Optional[str]
+    company_website: Optional[str] = None
+    company_size: Optional[str] = None
+    industry: Optional[str] = None
+    designation: Optional[str] = None
     status: str
     is_approved: bool
     is_email_verified: bool
     job_count: int = 0
     created_at: datetime
-    approved_at: Optional[datetime]
-    rejection_reason: Optional[str]
+    approved_at: Optional[datetime] = None
+    rejection_reason: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -130,20 +130,20 @@ class RecruiterJobResponse(BaseModel):
     recruiter_id: int
     title: str
     description: str
-    requirements: Optional[str]
-    responsibilities: Optional[str]
-    benefits: Optional[str]
-    job_type: Optional[str]
-    experience_level: Optional[str]
-    location: Optional[str]
-    remote_policy: Optional[str]
-    salary_min: Optional[int]
-    salary_max: Optional[int]
+    requirements: Optional[str] = None
+    responsibilities: Optional[str] = None
+    benefits: Optional[str] = None
+    job_type: Optional[str] = None
+    experience_level: Optional[str] = None
+    location: Optional[str] = None
+    remote_policy: Optional[str] = None
+    salary_min: Optional[int] = None
+    salary_max: Optional[int] = None
     currency: str
-    required_skills: List[str] = []
-    preferred_skills: List[str] = []
+    required_skills: Optional[List[str]] = []
+    preferred_skills: Optional[List[str]] = []
     status: str
-    pause_date: Optional[datetime]
+    pause_date: Optional[datetime] = None
     application_count: int = 0
     view_count: int = 0
     company_name: str = ""
@@ -175,16 +175,16 @@ class ApplicationResponse(BaseModel):
     id: int
     job_id: int
     user_id: int
-    resume_id: Optional[int]
+    resume_id: Optional[int] = None
     status: str
-    cover_letter: Optional[str]
-    match_score: Optional[float]
-    recruiter_notes: Optional[str]
-    applied_at: datetime
-    reviewed_at: Optional[datetime]
-    shortlisted_at: Optional[datetime]
-    offered_at: Optional[datetime]
-    offer_response: Optional[str]
+    cover_letter: Optional[str] = None
+    match_score: Optional[float] = None
+    recruiter_notes: Optional[str] = None
+    applied_at: Optional[datetime] = None
+    reviewed_at: Optional[datetime] = None
+    shortlisted_at: Optional[datetime] = None
+    offered_at: Optional[datetime] = None
+    offer_response: Optional[str] = None
     # Denormalized candidate info
     candidate_name: Optional[str] = None
     candidate_email: Optional[str] = None
@@ -194,7 +194,7 @@ class ApplicationResponse(BaseModel):
     # Interview summary
     total_rounds: int = 0
     completed_rounds: int = 0
-    created_at: datetime
+    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -231,19 +231,19 @@ class InterviewFeedbackSubmit(BaseModel):
 class InterviewResponse(BaseModel):
     id: int
     application_id: int
-    interviewer_id: Optional[int]
+    interviewer_id: Optional[int] = None
     round_number: int
-    round_title: Optional[str]
+    round_title: Optional[str] = None
     interview_type: str
-    scheduled_at: Optional[datetime]
+    scheduled_at: Optional[datetime] = None
     duration_minutes: int
-    google_meet_link: Optional[str]
+    google_meet_link: Optional[str] = None
     status: str
-    feedback: Optional[str]
-    rating: Optional[int]
-    is_qualified: Optional[bool]
+    feedback: Optional[str] = None
+    rating: Optional[int] = None
+    is_qualified: Optional[bool] = None
     invite_sent: bool
-    invite_sent_at: Optional[datetime]
+    invite_sent_at: Optional[datetime] = None
     # Denormalized
     interviewer_name: Optional[str] = None
     interviewer_email: Optional[str] = None
@@ -272,12 +272,12 @@ class InterviewerResponse(BaseModel):
     id: int
     recruiter_id: int
     email: str
-    full_name: Optional[str]
-    designation: Optional[str]
-    phone: Optional[str]
+    full_name: Optional[str] = None
+    designation: Optional[str] = None
+    phone: Optional[str] = None
     status: str
     is_active: bool
-    accepted_at: Optional[datetime]
+    accepted_at: Optional[datetime] = None
     created_at: datetime
     interview_count: int = 0
 
@@ -316,7 +316,7 @@ class OfferTemplateResponse(BaseModel):
     variables: List[str] = []
     is_default: bool
     created_at: datetime
-    updated_at: Optional[datetime]
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -331,14 +331,14 @@ class ReleaseOfferRequest(BaseModel):
 class OfferResponse(BaseModel):
     id: int
     application_id: int
-    template_id: Optional[int]
+    template_id: Optional[int] = None
     rendered_content: str
-    variables_used: Optional[Dict[str, Any]]
-    pdf_url: Optional[str]
+    variables_used: Optional[Dict[str, Any]] = None
+    pdf_url: Optional[str] = None
     status: str
     released_at: datetime
-    responded_at: Optional[datetime]
-    response_note: Optional[str]
+    responded_at: Optional[datetime] = None
+    response_note: Optional[str] = None
     # Denormalized
     candidate_name: Optional[str] = None
     candidate_email: Optional[str] = None
@@ -377,18 +377,18 @@ class PublicJobResponse(BaseModel):
     id: int
     title: str
     description: str
-    requirements: Optional[str]
-    responsibilities: Optional[str]
-    benefits: Optional[str]
-    job_type: Optional[str]
-    experience_level: Optional[str]
-    location: Optional[str]
-    remote_policy: Optional[str]
-    salary_min: Optional[int]
-    salary_max: Optional[int]
+    requirements: Optional[str] = None
+    responsibilities: Optional[str] = None
+    benefits: Optional[str] = None
+    job_type: Optional[str] = None
+    experience_level: Optional[str] = None
+    location: Optional[str] = None
+    remote_policy: Optional[str] = None
+    salary_min: Optional[int] = None
+    salary_max: Optional[int] = None
     currency: str
-    required_skills: List[str] = []
-    preferred_skills: List[str] = []
+    required_skills: Optional[List[str]] = []
+    preferred_skills: Optional[List[str]] = []
     company_name: str = ""
     company_logo_url: Optional[str] = None
     created_at: datetime

@@ -158,6 +158,16 @@ class EmailService:
 
     # ── Public email methods ──────────────────────────────────
 
+    def send_email(self, to_email: str, subject: str, body_html: str) -> bool:
+        """Send a branded email with auto-generated plain-text fallback.
+
+        This is the general-purpose public sender used by recruiter_service
+        and any other caller that already has its own HTML body.
+        """
+        import re as _re
+        text = _re.sub(r'<[^>]+>', '', body_html).strip()
+        return self._send_email(to_email, subject, _wrap_html(body_html), text)
+
     def send_verification_email(
         self,
         recipient_email: str,
