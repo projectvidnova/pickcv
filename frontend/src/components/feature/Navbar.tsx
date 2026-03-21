@@ -71,6 +71,12 @@ export default function Navbar() {
     navigate('/college/login');
   };
 
+  const handleRecruitersClick = () => {
+    setIsToolsOpen(false);
+    setIsMobileMenuOpen(false);
+    navigate('/recruiter/login');
+  };
+
   return (
     <>
       <style>{`
@@ -151,18 +157,17 @@ export default function Navbar() {
                 {isToolsOpen && (
                   <div className="absolute top-full left-1/2 -translate-x-1/2 mt-3 w-64 tools-dropdown-enter">
                     <div className="bg-white/95 backdrop-blur-xl rounded-xl shadow-lg border border-gray-100/80 p-2 overflow-hidden">
-                      <a
-                        href="#recruiters"
-                        onClick={() => setIsToolsOpen(false)}
-                        className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-teal-50/60 transition-colors group cursor-pointer">
+                      <button
+                        onClick={handleRecruitersClick}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-teal-50/60 transition-colors group cursor-pointer">
                         <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-teal-500/10 to-emerald-500/10 flex items-center justify-center shrink-0">
                           <i className="ri-building-2-line text-teal-600 text-base"></i>
                         </div>
-                        <div>
+                        <div className="text-left">
                           <p className="text-sm font-medium text-gray-900 group-hover:text-teal-700 transition-colors">For Recruiters & Companies</p>
                           <p className="text-xs text-gray-500">Post jobs & find talent</p>
                         </div>
-                      </a>
+                      </button>
                       <a
                         onClick={handleCollegesClick}
                         className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-teal-50/60 transition-colors group cursor-pointer">
@@ -260,10 +265,10 @@ export default function Navbar() {
                     </button>
                     {isMobileToolsOpen && (
                       <div className="ml-8 mt-1 space-y-1">
-                        <a href="#recruiters" onClick={() => setIsMobileMenuOpen(false)}
-                          className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-teal-50/60 hover:text-teal-700 transition-colors">
+                        <button onClick={handleRecruitersClick}
+                          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-teal-50/60 hover:text-teal-700 transition-colors cursor-pointer">
                           <i className="ri-building-2-line text-teal-500 text-xs"></i>For Recruiters
-                        </a>
+                        </button>
                         <button onClick={handleCollegesClick}
                           className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-teal-50/60 hover:text-teal-700 transition-colors cursor-pointer">
                           <i className="ri-graduation-cap-line text-blue-500 text-xs"></i>For Colleges
@@ -307,10 +312,10 @@ export default function Navbar() {
                     </button>
                     {isMobileToolsOpen && (
                       <div className="ml-8 mt-1 space-y-1">
-                        <a href="#recruiters" onClick={() => setIsMobileMenuOpen(false)}
-                          className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-teal-50/60 hover:text-teal-700 transition-colors">
+                        <button onClick={handleRecruitersClick}
+                          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-teal-50/60 hover:text-teal-700 transition-colors cursor-pointer">
                           <i className="ri-building-2-line text-teal-500 text-xs"></i>For Recruiters
-                        </a>
+                        </button>
                         <button onClick={handleCollegesClick}
                           className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-teal-50/60 hover:text-teal-700 transition-colors cursor-pointer">
                           <i className="ri-graduation-cap-line text-blue-500 text-xs"></i>For Colleges
