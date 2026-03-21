@@ -27,11 +27,19 @@ export default function RecruiterVerifyEmail() {
               <div className="w-16 h-16 mx-auto rounded-full bg-green-500/10 flex items-center justify-center mb-6">
                 <i className="ri-check-double-line text-green-400 text-3xl" />
               </div>
-              <h1 className="text-2xl font-bold text-white mb-3">Email Verified!</h1>
-              <p className="text-gray-400 mb-6">{message}</p>
-              <Link to="/recruiter/login"
+              <h1 className="text-2xl font-bold text-white mb-3">Email Verified Successfully!</h1>
+              <p className="text-gray-300 mb-4">
+                Your email has been verified. Our team will review your registration and reach out within <strong className="text-green-400">24 hours</strong> if everything checks out.
+              </p>
+              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 mb-6">
+                <p className="text-yellow-300 text-sm flex items-start gap-2">
+                  <i className="ri-time-line text-lg mt-0.5" />
+                  <span>You'll receive an email once your account is approved. You can then log in and start using your recruiter dashboard.</span>
+                </p>
+              </div>
+              <Link to="/recruiter/pending-approval"
                 className="inline-flex items-center gap-2 px-6 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-all">
-                Go to Login <i className="ri-arrow-right-line" />
+                Got it <i className="ri-check-line" />
               </Link>
             </>
           )}

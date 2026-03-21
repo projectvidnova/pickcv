@@ -136,18 +136,24 @@ async def verify_email(
         raise HTTPException(404, "Recruiter not found")
 
     if rec.is_email_verified:
-        return {"message": "Email already verified"}
+        return {"message": "Email already verified. Your account is under review by our team."}
 
     rec.is_email_verified = True
     rec.email_verified_at = datetime.now(timezone.utc)
     rec.status = "pending_approval"
     await db.commit()
 
-    # Notify admin
     frontend_origin = get_frontend_origin(request)
+
+    # 1. Send email to the recruiter confirming verification + wait for approval
+    background_tasks.add_task(recruiter_service.send_verification_success_email, rec, frontend_origin)
+
+    # 2. Notify PickCV team at connect@pickcv.com about the new registration
     background_tasks.add_task(recruiter_service.send_admin_approval_notification, rec, frontend_origin)
 
-    return {"message": "Email verified. Your account is pending admin approval."}
+    return {
+        "message": "Your email has been verified successfully! Our team will review your registration and reach out within 24 hours."
+    }
 
 
 @router.post("/login", response_model=RecruiterLoginResponse)

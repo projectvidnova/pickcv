@@ -57,46 +57,112 @@ class RecruiterService:
         email_service.send_email(email, "Verify your PickCV recruiter account", body)
 
     def send_admin_approval_notification(self, recruiter: Recruiter, frontend_origin: str = ""):
-        """Notify admins that a new recruiter needs approval."""
+        """Notify the PickCV team at connect@pickcv.com that a new company registered."""
         base = frontend_origin or settings.frontend_url
         body = f"""
-        <h2 style="color:#1a1a2e;">New Recruiter Pending Approval</h2>
-        <table style="width:100%; border-collapse:collapse;">
-            <tr><td style="padding:8px; color:#64748b;">Name</td><td style="padding:8px; font-weight:600;">{recruiter.full_name}</td></tr>
-            <tr><td style="padding:8px; color:#64748b;">Email</td><td style="padding:8px;">{recruiter.email}</td></tr>
-            <tr><td style="padding:8px; color:#64748b;">Company</td><td style="padding:8px; font-weight:600;">{recruiter.company_name}</td></tr>
-            <tr><td style="padding:8px; color:#64748b;">Industry</td><td style="padding:8px;">{recruiter.industry or 'N/A'}</td></tr>
-            <tr><td style="padding:8px; color:#64748b;">Designation</td><td style="padding:8px;">{recruiter.designation or 'N/A'}</td></tr>
+        <h2 style="color:#1a1a2e; margin-bottom:16px;">🏢 New Company Registration</h2>
+        <p style="color:#4a5568; line-height:1.6;">
+            A new company has completed email verification and is awaiting approval.
+            Please review the details below and approve or reject from the admin portal.
+        </p>
+        <table style="width:100%; border-collapse:collapse; margin:20px 0;">
+            <tr style="border-bottom:1px solid #e2e8f0;">
+                <td style="padding:12px 8px; color:#64748b; font-size:14px;">Contact Name</td>
+                <td style="padding:12px 8px; font-weight:600; color:#1a1a2e;">{recruiter.full_name}</td>
+            </tr>
+            <tr style="border-bottom:1px solid #e2e8f0;">
+                <td style="padding:12px 8px; color:#64748b; font-size:14px;">Email</td>
+                <td style="padding:12px 8px; color:#1a1a2e;"><a href="mailto:{recruiter.email}" style="color:#0d9488;">{recruiter.email}</a></td>
+            </tr>
+            <tr style="border-bottom:1px solid #e2e8f0;">
+                <td style="padding:12px 8px; color:#64748b; font-size:14px;">Phone</td>
+                <td style="padding:12px 8px; color:#1a1a2e;">{recruiter.phone or 'Not provided'}</td>
+            </tr>
+            <tr style="border-bottom:1px solid #e2e8f0;">
+                <td style="padding:12px 8px; color:#64748b; font-size:14px;">Company Name</td>
+                <td style="padding:12px 8px; font-weight:600; color:#1a1a2e;">{recruiter.company_name}</td>
+            </tr>
+            <tr style="border-bottom:1px solid #e2e8f0;">
+                <td style="padding:12px 8px; color:#64748b; font-size:14px;">Company Website</td>
+                <td style="padding:12px 8px; color:#1a1a2e;">{recruiter.company_website or 'Not provided'}</td>
+            </tr>
+            <tr style="border-bottom:1px solid #e2e8f0;">
+                <td style="padding:12px 8px; color:#64748b; font-size:14px;">Company Size</td>
+                <td style="padding:12px 8px; color:#1a1a2e;">{recruiter.company_size or 'Not provided'}</td>
+            </tr>
+            <tr style="border-bottom:1px solid #e2e8f0;">
+                <td style="padding:12px 8px; color:#64748b; font-size:14px;">Industry</td>
+                <td style="padding:12px 8px; color:#1a1a2e;">{recruiter.industry or 'Not provided'}</td>
+            </tr>
+            <tr>
+                <td style="padding:12px 8px; color:#64748b; font-size:14px;">Designation</td>
+                <td style="padding:12px 8px; color:#1a1a2e;">{recruiter.designation or 'Not provided'}</td>
+            </tr>
         </table>
-        <div style="text-align:center; margin:24px 0;">
+        <div style="text-align:center; margin:28px 0;">
             <a href="{base}/admin/recruiters"
                style="background:#0d9488; color:#fff; text-decoration:none;
-                      padding:12px 28px; border-radius:8px; font-weight:600;
+                      padding:14px 36px; border-radius:8px; font-weight:600;
                       display:inline-block;">
-                Review in Admin Panel
+                Login to Admin Portal &amp; Approve
             </a>
         </div>
+        <p style="color:#94a3b8; font-size:13px; text-align:center;">Please review and approve within 24 hours.</p>
         """
-        email_service.send_email("admin@pickcv.com", "New recruiter pending approval", body)
+        email_service.send_email("connect@pickcv.com", f"New Company Registration — {recruiter.company_name}", body)
+
+    def send_verification_success_email(self, recruiter: Recruiter, frontend_origin: str = ""):
+        """Notify recruiter that email verification succeeded — wait for admin approval."""
+        base = frontend_origin or settings.frontend_url
+        body = f"""
+        <h2 style="color:#1a1a2e; margin-bottom:16px;">Email Verified Successfully! ✅</h2>
+        <p style="color:#4a5568; line-height:1.6;">
+            Hi <strong>{recruiter.full_name}</strong>, your email has been verified successfully.
+        </p>
+        <div style="background:#fffbeb; border:1px solid #fbbf24; border-radius:12px; padding:20px; margin:24px 0;">
+            <p style="color:#92400e; font-weight:600; margin:0 0 8px;">⏳ What happens next?</p>
+            <p style="color:#78350f; margin:0; line-height:1.6;">
+                Our team will review your company registration and confirm your account
+                within <strong>24 hours</strong> if everything checks out. You'll receive
+                an email once your account is approved.
+            </p>
+        </div>
+        <p style="color:#4a5568; line-height:1.6;">
+            In the meantime, if you have any questions, feel free to reach out to us at
+            <a href="mailto:connect@pickcv.com" style="color:#0d9488; font-weight:600;">connect@pickcv.com</a>.
+        </p>
+        <p style="color:#94a3b8; font-size:13px; margin-top:24px;">Thank you for choosing PickCV!</p>
+        """
+        email_service.send_email(recruiter.email, "PickCV — Email Verified, Registration Under Review", body)
 
     def send_welcome_email(self, recruiter: Recruiter, frontend_origin: str = ""):
         base = frontend_origin or settings.frontend_url
         body = f"""
-        <h2 style="color:#1a1a2e; margin-bottom:16px;">Welcome to PickCV, {recruiter.full_name}! 🎉</h2>
+        <h2 style="color:#1a1a2e; margin-bottom:16px;">Registration Approved — Welcome to PickCV! 🎉</h2>
         <p style="color:#4a5568; line-height:1.6;">
-            Your recruiter account for <strong>{recruiter.company_name}</strong> has been approved!
-            You can now start posting jobs and finding top talent.
+            Hi <strong>{recruiter.full_name}</strong>, great news!
         </p>
+        <div style="background:#f0fdf4; border:1px solid #22c55e; border-radius:12px; padding:20px; margin:20px 0;">
+            <p style="color:#166534; font-weight:600; margin:0 0 8px;">✅ Your registration has been approved!</p>
+            <p style="color:#15803d; margin:0; line-height:1.6;">
+                Your recruiter account for <strong>{recruiter.company_name}</strong> is now active.
+                You can log in and start posting jobs, reviewing candidates, and finding top talent.
+            </p>
+        </div>
         <div style="text-align:center; margin:32px 0;">
-            <a href="{base}/recruiter/dashboard"
+            <a href="{base}/recruiter/login"
                style="background:#0d9488; color:#fff; text-decoration:none;
                       padding:14px 36px; border-radius:8px; font-weight:600;
                       display:inline-block;">
-                Go to Dashboard
+                Login to Your Account
             </a>
         </div>
+        <p style="color:#4a5568; line-height:1.6; font-size:14px;">
+            If you have any questions, contact us at
+            <a href="mailto:connect@pickcv.com" style="color:#0d9488;">connect@pickcv.com</a>.
+        </p>
         """
-        email_service.send_email(recruiter.email, "Welcome to PickCV — Account Approved!", body)
+        email_service.send_email(recruiter.email, "PickCV — Registration Approved! You Can Now Login", body)
 
     def send_rejection_email(self, recruiter: Recruiter, reason: str):
         body = f"""
