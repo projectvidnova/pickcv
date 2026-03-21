@@ -1,7 +1,7 @@
 """Recruiter service — authentication, email helpers, job auto-pause cron."""
 import logging
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select, update, and_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,7 +27,7 @@ class RecruiterService:
     def create_verification_token(self, recruiter_id: int) -> str:
         return auth_service.create_access_token(
             data={"sub": str(recruiter_id), "type": "recruiter_verify"},
-            expires_minutes=1440,  # 24 hours
+            expires_delta=timedelta(hours=24),
         )
 
     # ─── Email helpers ────────────────────────────────────

@@ -40,7 +40,15 @@ function authHeaders(): Record<string, string> {
 async function handleResponse(res: Response) {
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    throw new Error(body?.detail || `Request failed (${res.status})`);
+    let message = `Request failed (${res.status})`;
+    if (body?.detail) {
+      if (typeof body.detail === 'string') {
+        message = body.detail;
+      } else if (Array.isArray(body.detail)) {
+        message = body.detail.map((e: any) => e.msg || JSON.stringify(e)).join('; ');
+      }
+    }
+    throw new Error(message);
   }
   return res.json();
 }
