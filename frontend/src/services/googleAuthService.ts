@@ -66,8 +66,9 @@ export const googleAuthService = {
    * Redirect to Google OAuth login
    */
   redirectToGoogleLogin(): void {
-    const state = this.generateState();
+    const state = `google_${this.generateState()}`;
     sessionStorage.setItem('oauth_state', state);
+    sessionStorage.setItem('oauth_provider', 'google');
 
     const params = new URLSearchParams({
       client_id: GOOGLE_CLIENT_ID,

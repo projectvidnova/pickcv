@@ -47,9 +47,12 @@ export default function OAuthCallback() {
         }
 
         // Determine which OAuth provider initiated this callback
+        // Check sessionStorage first, then fall back to state parameter prefix
         const oauthProvider = sessionStorage.getItem('oauth_provider');
+        const stateParam = params.get('state') || '';
+        const isLinkedIn = oauthProvider === 'linkedin' || stateParam.startsWith('linkedin_');
 
-        if (oauthProvider === 'linkedin') {
+        if (isLinkedIn) {
           // LinkedIn OAuth flow
           const tokens = await linkedinAuthService.handleCallback();
           if (tokens) {

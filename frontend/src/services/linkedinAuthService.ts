@@ -27,7 +27,7 @@ export const linkedinAuthService = {
    * Redirect to LinkedIn OAuth login
    */
   redirectToLinkedInLogin(): void {
-    const state = this.generateState();
+    const state = `linkedin_${this.generateState()}`;
     sessionStorage.setItem('oauth_state', state);
     sessionStorage.setItem('oauth_provider', 'linkedin');
 
