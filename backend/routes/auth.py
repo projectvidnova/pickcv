@@ -604,6 +604,8 @@ async def linkedin_token(code: str, redirect_uri: str = None, db: AsyncSession =
         email = user_info.get("email")
         name = user_info.get("name", "")
         picture = user_info.get("picture", "")
+        linkedin_sub = user_info.get("sub", "")
+        linkedin_access_token_raw = access_token  # The LinkedIn API access token
 
         # Find or create user
         try:
@@ -617,6 +619,9 @@ async def linkedin_token(code: str, redirect_uri: str = None, db: AsyncSession =
                     hashed_password="",  # OAuth users don't need passwords
                     is_verified=True,  # Trust LinkedIn's email verification
                     profile_picture_url=picture,
+                    oauth_provider="linkedin",
+                    linkedin_sub=linkedin_sub,
+                    linkedin_access_token=linkedin_access_token_raw,
                 )
                 db.add(user)
                 await db.commit()
@@ -632,6 +637,11 @@ async def linkedin_token(code: str, redirect_uri: str = None, db: AsyncSession =
                         f"College student status update failed for {email}: {e}"
                     )
             else:
+                # Always refresh LinkedIn token & sub on every login
+                user.linkedin_sub = linkedin_sub
+                user.linkedin_access_token = linkedin_access_token_raw
+                if not user.oauth_provider:
+                    user.oauth_provider = "linkedin"
                 # Update profile picture if available and not already set
                 if picture and not user.profile_picture_url:
                     user.profile_picture_url = picture
@@ -665,4 +675,150 @@ async def linkedin_token(code: str, redirect_uri: str = None, db: AsyncSession =
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"LinkedIn OAuth failed: {str(e)}",
         )
+
+
+# ─────────────────────────────────────────────────────
+# LinkedIn Data API routes (requires w_member_social)
+# ─────────────────────────────────────────────────────
+
+@router.get("/linkedin/profile")
+async def get_linkedin_profile(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get the current user's LinkedIn profile data (OpenID Connect info)."""
+    if not current_user.linkedin_access_token or not current_user.linkedin_sub:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No LinkedIn account linked. Please sign in with LinkedIn first.",
+        )
+
+    user_info = await linkedin_oauth_service.get_user_info(
+        current_user.linkedin_access_token
+    )
+    if not user_info:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="LinkedIn access token expired. Please re-authenticate with LinkedIn.",
+        )
+
+    return {
+        "linkedin_sub": user_info.get("sub"),
+        "name": user_info.get("name"),
+        "given_name": user_info.get("given_name"),
+        "family_name": user_info.get("family_name"),
+        "email": user_info.get("email"),
+        "email_verified": user_info.get("email_verified"),
+        "picture": user_info.get("picture"),
+        "locale": user_info.get("locale"),
+        "profile_url": f"https://www.linkedin.com/in/{user_info.get('sub', '')}",
+    }
+
+
+@router.get("/linkedin/posts")
+async def get_linkedin_posts(
+    count: int = 50,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Fetch the current user's own LinkedIn posts/shares (requires w_member_social)."""
+    if not current_user.linkedin_access_token or not current_user.linkedin_sub:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No LinkedIn account linked. Please sign in with LinkedIn first.",
+        )
+
+    posts = await linkedin_oauth_service.get_member_posts(
+        current_user.linkedin_access_token,
+        current_user.linkedin_sub,
+        count=min(count, 100),
+    )
+
+    if posts is None:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch LinkedIn posts. Token may have expired — please re-authenticate.",
+        )
+
+    # Transform raw posts into cleaner format
+    cleaned_posts = [
+        linkedin_oauth_service._extract_post_data(p) for p in posts
+    ]
+
+    return {
+        "total": len(cleaned_posts),
+        "posts": cleaned_posts,
+    }
+
+
+@router.get("/linkedin/activity-summary")
+async def get_linkedin_activity_summary(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get a comprehensive summary of the user's LinkedIn activity.
+    
+    Includes total posts, engagement metrics, content themes, etc.
+    """
+    if not current_user.linkedin_access_token or not current_user.linkedin_sub:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No LinkedIn account linked. Please sign in with LinkedIn first.",
+        )
+
+    summary = await linkedin_oauth_service.get_member_activity_summary(
+        current_user.linkedin_access_token,
+        current_user.linkedin_sub,
+    )
+
+    return {
+        "linkedin_sub": current_user.linkedin_sub,
+        "name": current_user.full_name,
+        "email": current_user.email,
+        **summary,
+    }
+
+
+@router.get("/linkedin/posts/{post_urn:path}/comments")
+async def get_linkedin_post_comments(
+    post_urn: str,
+    count: int = 20,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get comments on a specific LinkedIn post."""
+    if not current_user.linkedin_access_token:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No LinkedIn account linked.",
+        )
+
+    comments = await linkedin_oauth_service.get_post_comments(
+        current_user.linkedin_access_token,
+        post_urn,
+        count=min(count, 100),
+    )
+
+    if comments is None:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch comments from LinkedIn.",
+        )
+
+    return {"total": len(comments), "comments": comments}
+
+
+@router.get("/linkedin/status")
+async def get_linkedin_connection_status(
+    current_user: User = Depends(get_current_user),
+):
+    """Check if the current user has an active LinkedIn connection."""
+    has_linkedin = bool(
+        current_user.linkedin_access_token and current_user.linkedin_sub
+    )
+    return {
+        "connected": has_linkedin,
+        "linkedin_sub": current_user.linkedin_sub if has_linkedin else None,
+        "oauth_provider": current_user.oauth_provider,
+    }
 

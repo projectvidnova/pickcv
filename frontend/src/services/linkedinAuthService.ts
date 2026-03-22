@@ -33,7 +33,7 @@ export const linkedinAuthService = {
       client_id: LINKEDIN_CLIENT_ID,
       redirect_uri: LINKEDIN_REDIRECT_URI,
       state: state,
-      scope: 'openid profile email',
+      scope: 'openid profile email w_member_social',
     });
 
     window.location.href = `https://www.linkedin.com/oauth/v2/authorization?${params.toString()}`;
@@ -134,5 +134,138 @@ export const linkedinAuthService = {
     if (picture) {
       localStorage.setItem('user_picture', picture);
     }
+  },
+
+  // ─── LinkedIn Data API Methods ──────────────────────────
+
+  /**
+   * Get auth headers for API calls
+   */
+  _getAuthHeaders(): Record<string, string> {
+    const token = localStorage.getItem('access_token');
+    return {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    };
+  },
+
+  /**
+   * Check if the user has a linked LinkedIn account
+   */
+  async getLinkedInStatus(): Promise<{
+    connected: boolean;
+    linkedin_sub: string | null;
+    oauth_provider: string | null;
+  }> {
+    const response = await fetch(`${API_URL}/auth/linkedin/status`, {
+      headers: this._getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to check LinkedIn status');
+    return response.json();
+  },
+
+  /**
+   * Get the user's LinkedIn profile info
+   */
+  async getLinkedInProfile(): Promise<{
+    linkedin_sub: string;
+    name: string;
+    given_name: string;
+    family_name: string;
+    email: string;
+    email_verified: boolean;
+    picture: string;
+    locale: string;
+    profile_url: string;
+  }> {
+    const response = await fetch(`${API_URL}/auth/linkedin/profile`, {
+      headers: this._getAuthHeaders(),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to fetch LinkedIn profile');
+    }
+    return response.json();
+  },
+
+  /**
+   * Get the user's own LinkedIn posts/shares
+   */
+  async getLinkedInPosts(
+    count: number = 50
+  ): Promise<{
+    total: number;
+    posts: Array<{
+      post_urn: string;
+      text: string;
+      full_text: string;
+      media: Array<{ title: string; description: string; url: string }>;
+      created_at: number;
+      last_modified: number;
+      likes: number;
+      comments: number;
+      shares: number;
+      visibility: string;
+    }>;
+  }> {
+    const response = await fetch(
+      `${API_URL}/auth/linkedin/posts?count=${count}`,
+      { headers: this._getAuthHeaders() }
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to fetch LinkedIn posts');
+    }
+    return response.json();
+  },
+
+  /**
+   * Get a comprehensive activity summary from LinkedIn
+   */
+  async getLinkedInActivitySummary(): Promise<{
+    linkedin_sub: string;
+    name: string;
+    email: string;
+    total_posts: number;
+    total_likes: number;
+    total_comments: number;
+    total_shares: number;
+    posts: Array<{
+      post_urn: string;
+      text: string;
+      likes: number;
+      comments: number;
+      shares: number;
+      created_at: number;
+    }>;
+    engagement_rate: number;
+  }> {
+    const response = await fetch(
+      `${API_URL}/auth/linkedin/activity-summary`,
+      { headers: this._getAuthHeaders() }
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to fetch LinkedIn activity');
+    }
+    return response.json();
+  },
+
+  /**
+   * Get comments on a specific LinkedIn post
+   */
+  async getPostComments(
+    postUrn: string,
+    count: number = 20
+  ): Promise<{ total: number; comments: Array<Record<string, unknown>> }> {
+    const response = await fetch(
+      `${API_URL}/auth/linkedin/posts/${encodeURIComponent(postUrn)}/comments?count=${count}`,
+      { headers: this._getAuthHeaders() }
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to fetch post comments');
+    }
+    return response.json();
   },
 };

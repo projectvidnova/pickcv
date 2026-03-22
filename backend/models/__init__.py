@@ -18,6 +18,9 @@ class User(Base):
     phone = Column(String(20))
     location = Column(String(255))
     linkedin_url = Column(String(500))
+    linkedin_sub = Column(String(255))  # LinkedIn person ID (sub from OIDC)
+    linkedin_access_token = Column(Text)  # LinkedIn API access token for data fetching
+    oauth_provider = Column(String(50))  # google, linkedin, email
     profile_picture_url = Column(String(500))
     target_role = Column(String(255))
     experience_level = Column(String(50))  # Entry, Mid, Senior, Lead

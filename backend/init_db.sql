@@ -14,6 +14,9 @@ CREATE TABLE IF NOT EXISTS users (
     phone VARCHAR(20),
     location VARCHAR(255),
     linkedin_url VARCHAR(500),
+    linkedin_sub VARCHAR(255),
+    linkedin_access_token TEXT,
+    oauth_provider VARCHAR(50),
     profile_picture_url VARCHAR(500),
     target_role VARCHAR(255),
     experience_level VARCHAR(50),
@@ -27,6 +30,8 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_is_active ON users(is_active);
 CREATE INDEX IF NOT EXISTS idx_users_created_at ON users(created_at);
+CREATE INDEX IF NOT EXISTS idx_users_linkedin_sub ON users(linkedin_sub);
+CREATE INDEX IF NOT EXISTS idx_users_oauth_provider ON users(oauth_provider);
 
 -- ============= 2. USER PROFILES TABLE =============
 CREATE TABLE IF NOT EXISTS user_profiles (
