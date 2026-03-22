@@ -58,20 +58,18 @@ export default function Hero() {
                   Only 57% of resumes pass ATS parsing checks, PickCV ensures yours does.
                 </div>
 
-                <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold text-gray-900 leading-[1.1] tracking-tight mb-6">
-                  From Resume →
-                  <br />
-                  <span className="inline-flex items-baseline pb-3">
-                    Get{' '}
-                    <span
-                      className="bg-gradient-to-r from-teal-600 to-emerald-500 bg-clip-text text-transparent inline-block pl-3 pb-4"
-                      style={{ fontFamily: "'Pacifico', cursive", lineHeight: 1.4 }}
+              <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold text-gray-900 leading-[1.2] tracking-tight mb-6">
+                  From Resume →<br />
+                  <span className="inline-flex items-baseline">
+                    Get 
+                    <span 
+                      className="bg-gradient-to-r from-teal-600 to-emerald-500 bg-clip-text text-transparent inline-block pl-3 pr-12 pt-2 pb-10 align-middle" 
+                      style={{ fontFamily: "'Pacifico', cursive", lineHeight: "1.6" }}
                     >
                       Hired
                     </span>
                   </span>
                 </h1>
-
                 <p className="text-lg sm:text-xl text-gray-600 mb-8 max-w-lg leading-relaxed">
                   Transform your resume into structured talent signals optimized for real hiring systems.
                 </p>
