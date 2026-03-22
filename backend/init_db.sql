@@ -17,6 +17,8 @@ CREATE TABLE IF NOT EXISTS users (
     linkedin_sub VARCHAR(255),
     linkedin_access_token TEXT,
     oauth_provider VARCHAR(50),
+    linkedin_profile_data JSONB,
+    linkedin_data_fetched_at TIMESTAMP WITH TIME ZONE,
     profile_picture_url VARCHAR(500),
     target_role VARCHAR(255),
     experience_level VARCHAR(50),

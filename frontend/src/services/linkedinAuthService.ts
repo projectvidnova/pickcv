@@ -17,6 +17,9 @@ interface LinkedInAuthResponse {
   email: string;
   name?: string;
   picture?: string;
+  is_new_user?: boolean;
+  has_linkedin_data?: boolean;
+  linkedin_posts_count?: number;
 }
 
 export const linkedinAuthService = {
@@ -123,6 +126,13 @@ export const linkedinAuthService = {
     localStorage.setItem('refresh_token', tokens.refresh_token);
     localStorage.setItem('user_id', tokens.user_id.toString());
     localStorage.setItem('user_email', tokens.email);
+    localStorage.setItem('oauth_provider', 'linkedin');
+    if (tokens.has_linkedin_data) {
+      localStorage.setItem('has_linkedin_data', 'true');
+    }
+    if (tokens.linkedin_posts_count) {
+      localStorage.setItem('linkedin_posts_count', tokens.linkedin_posts_count.toString());
+    }
   },
 
   /**

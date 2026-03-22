@@ -470,3 +470,85 @@ def _format_resume_as_text(data: dict) -> str:
     
     return "\n".join(lines)
 
+
+@router.get("/prefill-from-linkedin")
+async def prefill_resume_from_linkedin(
+    target_role: str = None,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Generate pre-filled resume data from user's stored LinkedIn profile + posts.
+    
+    Uses Gemini AI to intelligently convert LinkedIn activity into
+    structured resume content that the resume builder can use.
+    
+    Returns structured resume data matching the resume builder form fields.
+    """
+    if not current_user.linkedin_profile_data:
+        # Try to fetch fresh data if we have a token
+        if current_user.linkedin_access_token and current_user.linkedin_sub:
+            from services.linkedin_oauth_service import linkedin_oauth_service as li_service
+            from datetime import datetime, timezone
+            
+            user_info = await li_service.get_user_info(current_user.linkedin_access_token)
+            posts_raw = await li_service.get_member_posts(
+                current_user.linkedin_access_token, current_user.linkedin_sub, count=100
+            )
+            posts_data = [li_service._extract_post_data(p) for p in (posts_raw or [])]
+            
+            linkedin_data = {
+                "profile": user_info or {
+                    "name": current_user.full_name or "",
+                    "email": current_user.email,
+                    "sub": current_user.linkedin_sub,
+                },
+                "posts": posts_data,
+                "posts_count": len(posts_data),
+                "fetched_at": datetime.now(timezone.utc).isoformat(),
+            }
+            
+            # Store it
+            current_user.linkedin_profile_data = linkedin_data
+            current_user.linkedin_data_fetched_at = datetime.now(timezone.utc)
+            await db.commit()
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No LinkedIn data available. Please sign in with LinkedIn first.",
+            )
+    else:
+        linkedin_data = current_user.linkedin_profile_data
+
+    # Use Gemini to convert LinkedIn data into resume content
+    resume_data = await gemini_service.generate_resume_from_linkedin(
+        linkedin_data,
+        target_role=target_role or current_user.target_role,
+    )
+
+    # Also include raw LinkedIn info for the frontend
+    resume_data["_linkedin_meta"] = {
+        "posts_count": linkedin_data.get("posts_count", 0),
+        "fetched_at": linkedin_data.get("fetched_at"),
+        "has_posts": bool(linkedin_data.get("posts")),
+    }
+
+    return resume_data
+
+
+@router.get("/linkedin-data")
+async def get_stored_linkedin_data(
+    current_user: User = Depends(get_current_user),
+):
+    """Return the raw stored LinkedIn data for the current user."""
+    if not current_user.linkedin_profile_data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No LinkedIn data stored. Please sign in with LinkedIn.",
+        )
+    return {
+        "profile": current_user.linkedin_profile_data.get("profile", {}),
+        "posts_count": current_user.linkedin_profile_data.get("posts_count", 0),
+        "posts": current_user.linkedin_profile_data.get("posts", []),
+        "fetched_at": current_user.linkedin_profile_data.get("fetched_at"),
+    }
+

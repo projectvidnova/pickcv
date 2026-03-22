@@ -503,4 +503,151 @@ Return ONLY the job description text, no extra commentary."""
             }
 
 
+    async def generate_resume_from_linkedin(
+        self,
+        linkedin_data: Dict,
+        target_role: Optional[str] = None,
+    ) -> Dict:
+        """Generate a structured resume from LinkedIn profile + posts data.
+        
+        Uses Gemini to intelligently convert LinkedIn activity into
+        professional resume content.
+        
+        Args:
+            linkedin_data: Full LinkedIn snapshot with profile and posts
+            target_role: Optional target role for tailoring
+            
+        Returns:
+            Structured resume dict matching the resume builder format
+        """
+        profile = linkedin_data.get("profile", {})
+        posts = linkedin_data.get("posts", [])
+        
+        # Build a text representation of the LinkedIn data
+        linkedin_text_parts = []
+        linkedin_text_parts.append(f"Name: {profile.get('name', '')}")
+        linkedin_text_parts.append(f"Email: {profile.get('email', '')}")
+        linkedin_text_parts.append(f"Location/Locale: {profile.get('locale', '')}")
+        linkedin_text_parts.append(f"LinkedIn Profile Picture: {profile.get('picture', '')}")
+        
+        if posts:
+            linkedin_text_parts.append(f"\n--- LinkedIn Posts ({len(posts)} total) ---")
+            for i, post in enumerate(posts[:30]):  # Limit to 30 posts for context window
+                text = post.get("full_text", post.get("text", ""))
+                if text:
+                    likes = post.get("likes", 0)
+                    comments = post.get("comments", 0)
+                    linkedin_text_parts.append(
+                        f"\nPost {i+1} (Likes: {likes}, Comments: {comments}):\n{text[:800]}"
+                    )
+                    # Include shared media/articles
+                    for media in post.get("media", []):
+                        if media.get("title"):
+                            linkedin_text_parts.append(f"  Shared: {media['title']} — {media.get('url', '')}")
+        
+        linkedin_text = "\n".join(linkedin_text_parts)
+        
+        role_context = f"\nTarget Role: {target_role}" if target_role else ""
+        
+        prompt = f"""You are an expert resume writer. A user has signed up using LinkedIn OAuth.
+From their LinkedIn data (profile info + their own posts/shares), create a PROFESSIONAL RESUME.
+
+LINKEDIN DATA:
+{linkedin_text}
+{role_context}
+
+IMPORTANT RULES:
+- Extract REAL information from the LinkedIn data. Do NOT fabricate companies, roles, or education.
+- From the user's LinkedIn POSTS, infer: their expertise areas, industry knowledge, thought leadership topics, 
+  technical skills they discuss, projects they mention, achievements they share.
+- If posts mention specific technologies, frameworks, tools — include those as skills.
+- If posts discuss work at specific companies or roles — include that as experience.
+- Professional summary should reflect their LinkedIn voice and expertise from their posts.
+- If you cannot determine specific work history, create a summary-focused resume 
+  emphasizing their demonstrated expertise from their content.
+- Keep education blank if not evident from posts.
+- DO NOT make up dates, company names, or details that aren't supported by the data.
+
+Return a JSON object with this EXACT structure:
+{{
+    "name": "{profile.get('name', '')}",
+    "email": "{profile.get('email', '')}",
+    "phone": "",
+    "linkedin": "https://www.linkedin.com/in/{profile.get('sub', '')}",
+    "location": "",
+    "professional_summary": "<2-4 sentence professional summary derived from their LinkedIn content and expertise>",
+    "experience": [
+        {{
+            "title": "<role/position inferred from posts>",
+            "company": "<company if mentioned in posts>",
+            "dates": "<approximate dates if mentioned>",
+            "bullets": [
+                "<achievement or responsibility derived from their LinkedIn posts>",
+                "<another achievement>"
+            ]
+        }}
+    ],
+    "skills": ["<skill1 from posts>", "<skill2>", "<skill3>"],
+    "education": [
+        {{
+            "degree": "<degree if mentioned>",
+            "school": "<school if mentioned>",
+            "year": "<year if mentioned>"
+        }}
+    ],
+    "certifications": ["<cert if mentioned in posts>"],
+    "inferred_expertise": ["<topic1 they write about>", "<topic2>"],
+    "linkedin_insights": {{
+        "content_themes": ["<theme1>", "<theme2>"],
+        "industry_focus": "<primary industry from their content>",
+        "thought_leadership_topics": ["<topic1>", "<topic2>"],
+        "engagement_highlights": "<summary of their post engagement>"
+    }}
+}}
+
+Even if posts are empty, return a basic structure with the name and email filled in.
+Ensure the JSON is valid."""
+
+        max_retries = 2
+        last_error = None
+        
+        for attempt in range(max_retries + 1):
+            try:
+                response = self.client.models.generate_content(
+                    model=self.model_name,
+                    contents=prompt,
+                    config=JSON_CONFIG,
+                )
+                result = _robust_parse_json(response.text)
+                logger.info(f"Generated resume from LinkedIn data for {profile.get('email', 'unknown')}")
+                return result
+            except (ValueError, json.JSONDecodeError) as e:
+                last_error = e
+                logger.warning(f"LinkedIn resume generation JSON parse attempt {attempt + 1}: {e}")
+                if attempt < max_retries:
+                    continue
+            except Exception as e:
+                last_error = e
+                logger.error(f"LinkedIn resume generation failed (attempt {attempt + 1}): {e}")
+                break
+
+        # Fallback: return basic structure from profile data
+        logger.error(f"LinkedIn resume generation failed after retries: {last_error}")
+        return {
+            "name": profile.get("name", ""),
+            "email": profile.get("email", ""),
+            "phone": "",
+            "linkedin": f"https://www.linkedin.com/in/{profile.get('sub', '')}",
+            "location": "",
+            "professional_summary": "",
+            "experience": [],
+            "skills": [],
+            "education": [],
+            "certifications": [],
+            "inferred_expertise": [],
+            "linkedin_insights": {},
+            "error": str(last_error),
+        }
+
+
 gemini_service = GeminiService()

@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../../components/feature/Navbar';
 import Footer from '../../components/feature/Footer';
 import OptimizeModal from '../../components/feature/OptimizeModal';
 import { apiService } from '../../services/api';
+import { linkedinAuthService } from '../../services/linkedinAuthService';
 
 interface WorkExperience {
   id: string;
@@ -105,6 +106,107 @@ export default function ResumeBuilder() {
   const [hasPlan, setHasPlan] = useState(false);
   const [savedResumeId, setSavedResumeId] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  // LinkedIn prefill state
+  const [isLoadingLinkedIn, setIsLoadingLinkedIn] = useState(false);
+  const [linkedInPrefilled, setLinkedInPrefilled] = useState(false);
+
+  // Auto-prefill from LinkedIn data on mount
+  useEffect(() => {
+    const prefillFromProfile = async () => {
+      try {
+        // Step 1: Quick prefill from user profile (works for all OAuth providers)
+        const profileResult = await apiService.getProfile();
+        if (profileResult.success && profileResult.profile) {
+          const p = profileResult.profile;
+          if (!fullName && p.full_name) setFullName(p.full_name);
+          if (!email && p.email) setEmail(p.email);
+          if (!phone && p.phone) setPhone(p.phone);
+          if (!linkedinUrl && p.linkedin_url) setLinkedinUrl(p.linkedin_url);
+        }
+      } catch (err) {
+        console.log('Profile prefill skipped:', err);
+      }
+    };
+
+    const prefillFromLinkedIn = async () => {
+      try {
+        // Step 2: Check if user has LinkedIn connection — get AI-powered resume prefill
+        const status = await linkedinAuthService.getLinkedInStatus();
+        if (!status.connected) return;
+
+        setIsLoadingLinkedIn(true);
+
+        // Fetch AI-generated resume data from LinkedIn posts
+        const token = localStorage.getItem('access_token');
+        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+        const response = await fetch(`${API_URL}/resume/prefill-from-linkedin`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (!response.ok) return;
+
+        const data = await response.json();
+
+        // Only prefill if fields are currently empty (don't overwrite user input)
+        if (!fullName && data.name) setFullName(data.name);
+        if (!email && data.email) setEmail(data.email);
+        if (!phone && data.phone) setPhone(data.phone);
+        if (!linkedinUrl && data.linkedin) setLinkedinUrl(data.linkedin);
+        if (!professionalSummary && data.professional_summary) {
+          setProfessionalSummary(data.professional_summary);
+        }
+
+        // Prefill skills
+        if (!skills && data.skills?.length) {
+          setSkills(data.skills.join(', '));
+        }
+
+        // Prefill education
+        if (!education && data.education?.length) {
+          const eduLines = data.education
+            .filter((e: { degree?: string; school?: string }) => e.degree || e.school)
+            .map((e: { degree?: string; school?: string; year?: string }) =>
+              `${e.degree || ''} - ${e.school || ''} | ${e.year || ''}`
+            );
+          if (eduLines.length) setEducation(eduLines.join('\n'));
+        }
+
+        // Prefill certifications
+        if (!certifications && data.certifications?.length) {
+          setCertifications(data.certifications.join('\n'));
+        }
+
+        // Prefill work experiences
+        if (data.experience?.length) {
+          const hasEmptyExp = workExperiences.length === 1 && !workExperiences[0].role;
+          if (hasEmptyExp) {
+            const prefillExps = data.experience.map(
+              (exp: { title?: string; company?: string; dates?: string; bullets?: string[] }, idx: number) => ({
+                id: Date.now().toString() + idx,
+                role: exp.title || '',
+                company: exp.company || '',
+                startDate: exp.dates?.split(' - ')[0]?.trim() || exp.dates || '',
+                endDate: exp.dates?.split(' - ')[1]?.trim() || '',
+                achievements: (exp.bullets || []).join('\n'),
+              })
+            );
+            if (prefillExps.length) setWorkExperiences(prefillExps);
+          }
+        }
+
+        setLinkedInPrefilled(true);
+      } catch (err) {
+        console.log('LinkedIn prefill skipped:', err);
+      } finally {
+        setIsLoadingLinkedIn(false);
+      }
+    };
+
+    // Run profile prefill first (fast), then LinkedIn AI prefill (slower)
+    prefillFromProfile().then(() => prefillFromLinkedIn());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const processingSteps = [
     { icon: 'ri-search-line', text: 'Analyzing keywords…' },
@@ -701,6 +803,38 @@ ${optimizedResume.certifications ? `CERTIFICATIONS\n${optimizedResume.certificat
             </div>
 
             <div className="glass-card rounded-2xl p-8 space-y-8">
+
+              {/* LinkedIn Prefill Banner */}
+              {isLoadingLinkedIn && (
+                <div className="flex items-center gap-3 p-4 rounded-xl bg-blue-50 border border-blue-200">
+                  <div className="animate-spin">
+                    <i className="ri-loader-4-line text-blue-600 text-xl"></i>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-blue-900">Loading your LinkedIn data...</p>
+                    <p className="text-xs text-blue-700">AI is converting your LinkedIn posts and activity into resume content</p>
+                  </div>
+                </div>
+              )}
+              {linkedInPrefilled && !isLoadingLinkedIn && (
+                <div className="flex items-center gap-3 p-4 rounded-xl bg-emerald-50 border border-emerald-200">
+                  <i className="ri-linkedin-box-fill text-blue-600 text-2xl"></i>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-emerald-900">
+                      <i className="ri-magic-line mr-1"></i>Pre-filled from your LinkedIn
+                    </p>
+                    <p className="text-xs text-emerald-700">
+                      We used AI to analyze your LinkedIn posts & activity. Review and edit the fields below.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setLinkedInPrefilled(false)}
+                    className="text-xs text-emerald-600 hover:text-emerald-800 underline"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              )}
               
               {/* Section 1: Personal Information */}
               <div className="space-y-4">

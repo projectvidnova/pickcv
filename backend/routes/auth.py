@@ -4,11 +4,11 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from datetime import timedelta
+from datetime import timedelta, datetime, timezone
 import secrets
 import logging
 
-from database import get_db
+from database import get_db, async_session_maker
 from models import User, UserProfile, UserSkill, Recruiter
 from schemas import UserCreate, UserResponse, Token, UserProfileFullResponse, UserProfileUpdateRequest, SkillItem
 from services.auth_service import auth_service
@@ -570,7 +570,7 @@ async def linkedin_login():
 
 
 @router.post("/linkedin/token")
-async def linkedin_token(code: str, redirect_uri: str = None, db: AsyncSession = Depends(get_db)):
+async def linkedin_token(code: str, redirect_uri: str = None, db: AsyncSession = Depends(get_db), background_tasks: BackgroundTasks = BackgroundTasks()):
     """Exchange LinkedIn authorization code for JWT tokens (SPA flow)."""
     try:
         if not code:
@@ -607,12 +607,47 @@ async def linkedin_token(code: str, redirect_uri: str = None, db: AsyncSession =
         linkedin_sub = user_info.get("sub", "")
         linkedin_access_token_raw = access_token  # The LinkedIn API access token
 
+        # Build LinkedIn profile snapshot to store
+        linkedin_profile_snapshot = {
+            "sub": linkedin_sub,
+            "name": name,
+            "given_name": user_info.get("given_name", ""),
+            "family_name": user_info.get("family_name", ""),
+            "email": email,
+            "email_verified": user_info.get("email_verified", False),
+            "picture": picture,
+            "locale": user_info.get("locale", ""),
+        }
+
+        # Try to fetch LinkedIn posts (w_member_social data)
+        linkedin_posts_data = []
+        try:
+            posts = await linkedin_oauth_service.get_member_posts(
+                linkedin_access_token_raw, linkedin_sub, count=100
+            )
+            if posts:
+                linkedin_posts_data = [
+                    linkedin_oauth_service._extract_post_data(p) for p in posts
+                ]
+                logger.info(f"Fetched {len(linkedin_posts_data)} LinkedIn posts for {email}")
+        except Exception as posts_err:
+            logger.warning(f"Could not fetch LinkedIn posts for {email}: {posts_err}")
+
+        # Full LinkedIn data blob
+        full_linkedin_data = {
+            "profile": linkedin_profile_snapshot,
+            "posts": linkedin_posts_data,
+            "posts_count": len(linkedin_posts_data),
+            "fetched_at": datetime.now(timezone.utc).isoformat(),
+        }
+
         # Find or create user
         try:
             result = await db.execute(select(User).where(User.email == email))
             user = result.scalar_one_or_none()
+            is_new_user = user is None
 
-            if user is None:
+            if is_new_user:
                 user = User(
                     email=email,
                     full_name=name,
@@ -622,11 +657,28 @@ async def linkedin_token(code: str, redirect_uri: str = None, db: AsyncSession =
                     oauth_provider="linkedin",
                     linkedin_sub=linkedin_sub,
                     linkedin_access_token=linkedin_access_token_raw,
+                    linkedin_profile_data=full_linkedin_data,
+                    linkedin_data_fetched_at=datetime.now(timezone.utc),
+                    linkedin_url=f"https://www.linkedin.com/in/{linkedin_sub}",
                 )
                 db.add(user)
                 await db.commit()
                 await db.refresh(user)
                 logger.info(f"New user created via LinkedIn OAuth: {email}")
+
+                # Auto-create UserProfile for new LinkedIn users
+                try:
+                    profile = UserProfile(
+                        user_id=user.id,
+                        bio=f"LinkedIn user — {name}",
+                        onboarding_completed=False,
+                    )
+                    db.add(profile)
+                    await db.commit()
+                    logger.info(f"Auto-created UserProfile for LinkedIn user {email}")
+                except Exception as profile_err:
+                    logger.warning(f"UserProfile creation failed for {email}: {profile_err}")
+
                 # Update college student status if invited
                 try:
                     await college_service.update_student_status_on_register(
@@ -637,15 +689,19 @@ async def linkedin_token(code: str, redirect_uri: str = None, db: AsyncSession =
                         f"College student status update failed for {email}: {e}"
                     )
             else:
-                # Always refresh LinkedIn token & sub on every login
+                # Always refresh LinkedIn token, sub, and data on every login
                 user.linkedin_sub = linkedin_sub
                 user.linkedin_access_token = linkedin_access_token_raw
+                user.linkedin_profile_data = full_linkedin_data
+                user.linkedin_data_fetched_at = datetime.now(timezone.utc)
                 if not user.oauth_provider:
                     user.oauth_provider = "linkedin"
+                if not user.linkedin_url:
+                    user.linkedin_url = f"https://www.linkedin.com/in/{linkedin_sub}"
                 # Update profile picture if available and not already set
                 if picture and not user.profile_picture_url:
                     user.profile_picture_url = picture
-                    await db.commit()
+                await db.commit()
 
             # Generate JWT tokens
             access_token_jwt = auth_service.create_access_token(user.id)
@@ -666,6 +722,9 @@ async def linkedin_token(code: str, redirect_uri: str = None, db: AsyncSession =
             "email": email,
             "name": name,
             "picture": picture,
+            "is_new_user": is_new_user,
+            "has_linkedin_data": bool(linkedin_posts_data),
+            "linkedin_posts_count": len(linkedin_posts_data),
         }
     except HTTPException:
         raise

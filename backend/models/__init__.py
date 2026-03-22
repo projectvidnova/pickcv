@@ -20,6 +20,8 @@ class User(Base):
     linkedin_url = Column(String(500))
     linkedin_sub = Column(String(255))  # LinkedIn person ID (sub from OIDC)
     linkedin_access_token = Column(Text)  # LinkedIn API access token for data fetching
+    linkedin_profile_data = Column(JSONB)  # Full LinkedIn snapshot: profile + posts + activity
+    linkedin_data_fetched_at = Column(DateTime(timezone=True))  # When LinkedIn data was last synced
     oauth_provider = Column(String(50))  # google, linkedin, email
     profile_picture_url = Column(String(500))
     target_role = Column(String(255))
