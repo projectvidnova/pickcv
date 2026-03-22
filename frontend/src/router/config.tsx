@@ -263,10 +263,6 @@ const mainRoutes: RouteObject[] = [
     element: <JobDetail />,
   },
   {
-    path: '/onboarding',
-    element: <Onboarding />,
-  },
-  {
     path: '/optimized-resume',
     element: <OptimizedResume />,
   },

@@ -5,9 +5,11 @@
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 const LINKEDIN_CLIENT_ID = import.meta.env.VITE_LINKEDIN_CLIENT_ID || '';
-const LINKEDIN_REDIRECT_URI =
-  import.meta.env.VITE_LINKEDIN_REDIRECT_URI ||
-  `${typeof window !== 'undefined' ? window.location.origin : ''}/auth/callback`;
+
+/** Always use the current origin so the user stays on pickcv.com (or whatever domain they're on) */
+function getRedirectUri(): string {
+  return `${typeof window !== 'undefined' ? window.location.origin : ''}/auth/callback`;
+}
 
 interface LinkedInAuthResponse {
   access_token: string;
@@ -34,7 +36,7 @@ export const linkedinAuthService = {
     const params = new URLSearchParams({
       response_type: 'code',
       client_id: LINKEDIN_CLIENT_ID,
-      redirect_uri: LINKEDIN_REDIRECT_URI,
+      redirect_uri: getRedirectUri(),
       state: state,
       scope: 'openid profile email w_member_social',
     });
@@ -47,7 +49,7 @@ export const linkedinAuthService = {
    */
   async exchangeCodeForToken(code: string): Promise<LinkedInAuthResponse> {
     try {
-      const url = `${API_URL}/auth/linkedin/token?code=${encodeURIComponent(code)}&redirect_uri=${encodeURIComponent(LINKEDIN_REDIRECT_URI)}`;
+      const url = `${API_URL}/auth/linkedin/token?code=${encodeURIComponent(code)}&redirect_uri=${encodeURIComponent(getRedirectUri())}`;
       console.log('Calling backend LinkedIn token exchange:', url);
 
       const response = await fetch(url, {

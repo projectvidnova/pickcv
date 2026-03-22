@@ -58,7 +58,7 @@ export default function HowItWorks() {
             </span>
           </h2>
           <p className="text-xl text-gray-600 leading-relaxed">
-            Whether you're a fresher, mid-career pro, or career switcher — PickCV adapts to your stage.
+            Designed for every career stage — early talent to Subject Matter Experts and the hustlers.
           </p>
         </div>
 
@@ -152,7 +152,7 @@ export default function HowItWorks() {
           </button>
           <p className="text-sm text-gray-500 mt-4">
             <i className="ri-lock-unlock-line text-teal-500 mr-1"></i>
-            No signup required • Results in 30 seconds
+            No signup required • Results in 60 seconds
           </p>
         </div>
       </div>

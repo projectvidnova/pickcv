@@ -1,4 +1,4 @@
-import { getPortalUrl } from '../../../utils/subdomain';
+
 
 export default function CtaSection() {
   return (
@@ -26,20 +26,20 @@ export default function CtaSection() {
             </p>
 
             <div className="flex flex-wrap gap-4 justify-center mb-10">
-              <a
-                href={getPortalUrl('recruiter', '/register')}
+              <button
+                onClick={() => alert('🚀 Coming Soon! We\'re building something amazing for recruiters. Stay tuned!')}
                 className="flex items-center gap-2 px-8 py-4 rounded-xl text-white font-semibold whitespace-nowrap cursor-pointer transition-all hover:scale-[1.02] bg-gradient-to-r from-teal-600 to-emerald-500 shadow-lg shadow-teal-500/25 hover:shadow-teal-500/40 text-base"
               >
                 <i className="ri-building-2-line"></i>
                 Register Your Company
-              </a>
-              <a
-                href={getPortalUrl('recruiter', '/login')}
+              </button>
+              <button
+                onClick={() => alert('🚀 Coming Soon! We\'re building something amazing for recruiters. Stay tuned!')}
                 className="flex items-center gap-2 px-8 py-4 rounded-xl font-semibold whitespace-nowrap cursor-pointer transition-all glass hover:bg-white/80 text-gray-700 text-base"
               >
                 Sign In
                 <i className="ri-arrow-right-line text-sm"></i>
-              </a>
+              </button>
             </div>
 
             <div className="flex items-center justify-center flex-wrap gap-8">

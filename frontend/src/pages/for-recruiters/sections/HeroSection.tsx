@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { getPortalUrl } from '../../../utils/subdomain';
 
 const stats = [
   { value: 'AI-Powered', label: 'Resume Screening' },
@@ -77,20 +76,20 @@ export default function HeroSection() {
                 </div>
 
                 <div className="flex flex-wrap gap-3 mb-8">
-                  <a
-                    href={getPortalUrl('recruiter', '/register')}
+                  <button
+                    onClick={() => alert('🚀 Coming Soon! We\'re building something amazing for recruiters. Stay tuned!')}
                     className="flex items-center gap-2 px-8 py-3.5 rounded-xl text-white text-sm font-semibold whitespace-nowrap cursor-pointer transition-all hover:scale-[1.02] bg-gradient-to-r from-teal-600 to-emerald-500 shadow-lg shadow-teal-500/25 hover:shadow-teal-500/40"
                   >
                     <i className="ri-building-2-line"></i>
                     Register Your Company
-                  </a>
-                  <a
-                    href={getPortalUrl('recruiter', '/login')}
+                  </button>
+                  <button
+                    onClick={() => alert('🚀 Coming Soon! We\'re building something amazing for recruiters. Stay tuned!')}
                     className="flex items-center gap-2 px-8 py-3.5 rounded-xl text-sm font-semibold whitespace-nowrap cursor-pointer transition-all glass hover:bg-white/80 text-gray-700"
                   >
                     Sign In
                     <i className="ri-arrow-right-line text-xs"></i>
-                  </a>
+                  </button>
                 </div>
 
                 <div className="flex items-center flex-wrap gap-6">

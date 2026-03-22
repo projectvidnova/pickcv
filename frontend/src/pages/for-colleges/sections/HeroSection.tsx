@@ -1,4 +1,4 @@
-import { getPortalUrl } from '../../../utils/subdomain';
+
 
 export default function HeroSection() {
   return (
@@ -15,7 +15,7 @@ export default function HeroSection() {
             <div>
               <div className="inline-flex items-center gap-2 glass-badge text-teal-700 px-5 py-2.5 rounded-full text-sm font-semibold mb-8 animate-fade-in-up">
                 <i className="ri-graduation-cap-line"></i>
-                For Colleges & Universities
+                Pick Camp
               </div>
 
               <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold text-gray-900 mb-6 tracking-tight leading-[1.08] animate-fade-in-up">
@@ -33,20 +33,20 @@ export default function HeroSection() {
               </p>
 
               <div className="flex flex-wrap gap-4 mb-12 animate-fade-in-up">
-                <a
-                  href={getPortalUrl('institution', '/register')}
+                <button
+                  onClick={() => alert('🚀 Coming Soon! We\'re building something amazing for colleges. Stay tuned!')}
                   className="flex items-center gap-2 px-8 py-4 rounded-xl text-white font-semibold cursor-pointer whitespace-nowrap transition-all hover:scale-[1.02] bg-gradient-to-r from-teal-600 to-emerald-500 shadow-lg shadow-teal-500/25 hover:shadow-teal-500/40 text-lg"
                 >
                   <i className="ri-school-line"></i>
                   Register Your Institution
-                </a>
-                <a
-                  href={getPortalUrl('institution', '/login')}
+                </button>
+                <button
+                  onClick={() => alert('🚀 Coming Soon! We\'re building something amazing for colleges. Stay tuned!')}
                   className="flex items-center gap-2 px-8 py-4 rounded-xl font-semibold cursor-pointer whitespace-nowrap transition-all glass hover:bg-white/80 text-gray-700 text-lg"
                 >
                   Sign In
                   <i className="ri-arrow-right-line text-sm"></i>
-                </a>
+                </button>
               </div>
 
               {/* Trust badges */}

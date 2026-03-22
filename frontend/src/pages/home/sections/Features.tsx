@@ -12,9 +12,9 @@ const features = [
     large: true,
   },
   {
-    icon: 'ri-compass-3-line',
-    title: 'Keyword Injection',
-    description: '6–12 role-specific keywords woven naturally into your resume — no keyword stuffing. Our AI matches the exact language recruiters search for.',
+    icon: 'ri-bar-chart-grouped-line',
+    title: 'Data → Talent Signals',
+    description: 'Your experience is restructured into machine-readable talent signals that ATS systems and recruiters actively search for.',
     color: 'from-cyan-500 to-cyan-600',
     bgColor: 'bg-cyan-50',
     iconColor: 'text-cyan-600',

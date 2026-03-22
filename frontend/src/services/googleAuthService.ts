@@ -5,7 +5,11 @@
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-const GOOGLE_REDIRECT_URI = import.meta.env.VITE_GOOGLE_REDIRECT_URI || `${typeof window !== 'undefined' ? window.location.origin : ''}/auth/callback`;
+
+/** Always use the current origin so the user stays on pickcv.com (or whatever domain they're on) */
+function getRedirectUri(): string {
+  return `${typeof window !== 'undefined' ? window.location.origin : ''}/auth/callback`;
+}
 
 interface GoogleAuthResponse {
   access_token: string;
@@ -37,7 +41,7 @@ export const googleAuthService = {
    */
   async exchangeCodeForToken(code: string): Promise<GoogleAuthResponse> {
     try {
-      const url = `${API_URL}/auth/google/token?code=${encodeURIComponent(code)}&redirect_uri=${encodeURIComponent(GOOGLE_REDIRECT_URI)}`;
+      const url = `${API_URL}/auth/google/token?code=${encodeURIComponent(code)}&redirect_uri=${encodeURIComponent(getRedirectUri())}`;
       console.log('Calling backend token exchange:', url);
       
       const response = await fetch(url, {
@@ -72,7 +76,7 @@ export const googleAuthService = {
 
     const params = new URLSearchParams({
       client_id: GOOGLE_CLIENT_ID,
-      redirect_uri: GOOGLE_REDIRECT_URI,
+      redirect_uri: getRedirectUri(),
       response_type: 'code',
       scope: 'openid email profile',
       state: state,

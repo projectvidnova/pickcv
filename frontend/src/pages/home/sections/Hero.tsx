@@ -9,9 +9,9 @@ export default function Hero() {
   const [isOptimizeModalOpen, setIsOptimizeModalOpen] = useState(false);
 
   const steps = [
-    { icon: 'ri-upload-cloud-2-line', title: 'Upload Resume', description: 'Drop your PDF/DOCX', color: 'from-teal-500 to-teal-600', pillColor: 'bg-teal-100 text-teal-700', detail: 'No signup needed' },
-    { icon: 'ri-radar-line', title: 'ATS Detection', description: 'Scan for issues', color: 'from-cyan-500 to-cyan-600', pillColor: 'bg-cyan-100 text-cyan-700', detail: 'Real-time analysis' },
-    { icon: 'ri-key-2-line', title: 'Keyword Injection', description: '6–12 keywords added', color: 'from-emerald-500 to-emerald-600', pillColor: 'bg-emerald-100 text-emerald-700', detail: 'Role-specific match' },
+    { icon: 'ri-sparkling-2-line', title: 'Optimize Resume', description: 'AI-powered enhancement', color: 'from-teal-500 to-teal-600', pillColor: 'bg-teal-100 text-teal-700', detail: 'One-click transform' },
+    { icon: 'ri-pulse-line', title: 'Dynamic ATS Optimization', description: 'Adaptive scoring engine', color: 'from-cyan-500 to-cyan-600', pillColor: 'bg-cyan-100 text-cyan-700', detail: 'Real-time calibration' },
+    { icon: 'ri-bar-chart-grouped-line', title: 'Data → Talent Signals', description: 'Structured for recruiters', color: 'from-emerald-500 to-emerald-600', pillColor: 'bg-emerald-100 text-emerald-700', detail: 'Machine-readable output' },
     { icon: 'ri-download-cloud-2-line', title: 'Get Hired', description: 'Download & apply', color: 'from-green-500 to-emerald-600', pillColor: 'bg-green-100 text-green-700', detail: '94% ATS score' },
   ];
 
@@ -32,6 +32,13 @@ export default function Hero() {
           border: 1.5px solid rgba(255, 255, 255, 0.95);
           box-shadow: 0 16px 48px rgba(13, 148, 136, 0.18), inset 0 1px 0 rgba(255,255,255,1);
         }
+        @keyframes cta-glow {
+          0%, 100% { box-shadow: 0 8px 32px rgba(13, 148, 136, 0.35), 0 0 0 0 rgba(16, 185, 129, 0.4); }
+          50% { box-shadow: 0 12px 48px rgba(13, 148, 136, 0.5), 0 0 0 6px rgba(16, 185, 129, 0.15); }
+        }
+        .cta-glow-btn {
+          animation: cta-glow 2.5s ease-in-out infinite;
+        }
       `}</style>
 
       <section className="relative min-h-screen pt-20 lg:pt-0 overflow-hidden mesh-bg">
@@ -48,7 +55,7 @@ export default function Hero() {
               <div className="max-w-2xl lg:pr-8">
                 <div className="inline-flex items-center gap-2 glass-badge text-red-600 px-5 py-2.5 rounded-full text-sm font-medium mb-8">
                   <i className="ri-error-warning-fill text-red-500"></i>
-                  70% of resumes are rejected by ATS before a human sees them
+                  Only 57% of resumes pass ATS parsing checks, PickCV ensures yours does.
                 </div>
 
                 <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold text-gray-900 leading-[1.1] tracking-tight mb-6">
@@ -66,8 +73,7 @@ export default function Hero() {
                 </h1>
 
                 <p className="text-lg sm:text-xl text-gray-600 mb-8 max-w-lg leading-relaxed">
-                  Your resume is failing ATS. We fix that in 30 seconds.
-                  AI-powered optimization that gets you past every filter and into interviews.
+                  Transform your resume into structured talent signals optimized for real hiring systems.
                 </p>
 
                 {/* 3-Step Visual Flow */}
@@ -115,22 +121,22 @@ export default function Hero() {
                 {/* Get Started Button */}
                 <button
                   onClick={() => setIsOptimizeModalOpen(true)}
-                  className="w-full py-4 rounded-xl text-base font-semibold bg-gradient-to-r from-teal-600 to-emerald-500 text-white shadow-lg shadow-teal-500/25 hover:shadow-teal-500/40 hover:scale-[1.01] transition-all cursor-pointer flex items-center justify-center gap-2 whitespace-nowrap mb-6"
+                  className="cta-glow-btn w-full py-5 rounded-2xl text-lg font-bold bg-gradient-to-r from-teal-600 via-emerald-500 to-green-500 text-white ring-2 ring-teal-400/30 ring-offset-2 ring-offset-white hover:scale-[1.02] hover:ring-teal-400/50 transition-all cursor-pointer flex items-center justify-center gap-3 whitespace-nowrap mb-6"
                 >
-                  <i className="ri-upload-cloud-2-line text-lg"></i>
+                  <i className="ri-sparkling-fill text-xl"></i>
                   Upload → Get up to 94% ATS Match
-                  <i className="ri-arrow-right-line text-lg"></i>
+                  <i className="ri-arrow-right-line text-xl"></i>
                 </button>
 
                 {/* Micro Stats */}
                 <div className="flex items-center gap-8">
                   <div className="flex items-center gap-2 text-gray-600">
                     <i className="ri-flashlight-fill text-amber-500 text-lg"></i>
-                    <span className="text-sm font-medium">Results in 30 seconds</span>
+                    <span className="text-sm font-medium">Results in 60 seconds</span>
                   </div>
                   <div className="flex items-center gap-2 text-gray-600">
-                    <i className="ri-lock-unlock-line text-teal-500 text-lg"></i>
-                    <span className="text-sm font-medium">No signup required</span>
+                    <i className="ri-gift-fill text-teal-500 text-lg"></i>
+                    <span className="text-sm font-medium">First Resume - FREE</span>
                   </div>
                   <div className="flex items-center gap-2 text-gray-600">
                     <i className="ri-shield-check-fill text-green-500 text-lg"></i>

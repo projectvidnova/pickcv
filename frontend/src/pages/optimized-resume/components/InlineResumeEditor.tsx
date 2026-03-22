@@ -165,8 +165,13 @@ export default function InlineResumeEditor({
   const [activeSubscription, setActiveSubscription] = useState<SubscriptionInfo | null>(null);
   const [plans, setPlans] = useState<PlanInfo[]>([]);
   const [resumeId, setResumeId] = useState<number | null>(null);
-  const [isClaimingFree, setIsClaimingFree] = useState(false);
   const [paymentLoading, setPaymentLoading] = useState(true);
+
+  // Coupon state for first-time free download
+  const [showCouponModal, setShowCouponModal] = useState(false);
+  const [couponCode, setCouponCode] = useState('');
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [couponValidating, setCouponValidating] = useState(false);
 
   const [sections, setSections] = useState<ResumeSection[]>([
     { id: 'summary', label: 'Professional Summary', icon: 'ri-file-text-line', visible: true },
@@ -317,29 +322,52 @@ export default function InlineResumeEditor({
       return;
     }
 
-    // Case 2: Free download available — claim it
+    // Case 2: Free download available — show coupon modal with auto-applied code
     if (hasPaymentAccess && accessType === 'free' && freeDownloadsRemaining > 0 && resumeId) {
-      setIsClaimingFree(true);
-      try {
-        const result = await paymentService.useFreeDownload(resumeId);
-        if (result.success) {
-          setFreeDownloadsRemaining(result.free_downloads_remaining);
-          setHasPaymentAccess(true);
-          setAccessType('per_resume');
-          await performDownload();
-        }
-      } catch (error) {
-        console.error('Free download claim failed:', error);
-        setShowPaymentModal(true);
-      } finally {
-        setIsClaimingFree(false);
-      }
+      setCouponCode('FIRSTRESUME');
+      setCouponError(null);
+      setShowCouponModal(true);
       return;
     }
 
     // Case 3: Payment required — show pricing modal
     if (resumeId) {
       setShowPaymentModal(true);
+    }
+  };
+
+  const handleCouponSubmit = async () => {
+    if (!couponCode.trim()) {
+      setCouponError('Please enter a coupon code');
+      return;
+    }
+    setCouponValidating(true);
+    setCouponError(null);
+
+    // Validate coupon — only FIRSTRESUME is accepted
+    const isValid = couponCode.trim().toUpperCase() === 'FIRSTRESUME';
+
+    if (!isValid) {
+      setCouponValidating(false);
+      setCouponError('Invalid coupon code. Please try again.');
+      return;
+    }
+
+    // Valid coupon — claim free download
+    try {
+      const result = await paymentService.useFreeDownload(resumeId!);
+      if (result.success) {
+        setFreeDownloadsRemaining(result.free_downloads_remaining);
+        setHasPaymentAccess(true);
+        setAccessType('per_resume');
+        setShowCouponModal(false);
+        await performDownload();
+      }
+    } catch (error) {
+      console.error('Free download claim failed:', error);
+      setCouponError('Failed to apply coupon. Please try again.');
+    } finally {
+      setCouponValidating(false);
     }
   };
 
@@ -1018,7 +1046,7 @@ export default function InlineResumeEditor({
 
             <button
               onClick={handleDownloadPDF}
-              disabled={isDownloading || isClaimingFree || paymentLoading}
+              disabled={isDownloading || paymentLoading}
               className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-white shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all disabled:opacity-50"
               style={{ backgroundColor: theme.primary }}
             >
@@ -1026,11 +1054,6 @@ export default function InlineResumeEditor({
                 <>
                   <i className="ri-loader-4-line animate-spin" />
                   Checking...
-                </>
-              ) : isClaimingFree ? (
-                <>
-                  <i className="ri-loader-4-line animate-spin" />
-                  Activating Free Download...
                 </>
               ) : !hasPaymentAccess ? (
                 <>
@@ -1040,12 +1063,12 @@ export default function InlineResumeEditor({
               ) : accessType === 'free' && freeDownloadsRemaining > 0 ? (
                 <>
                   <i className="ri-gift-line" />
-                  Download Free ({freeDownloadsRemaining} left)
+                  Download & Apply (Free)
                 </>
               ) : (
                 <>
                   <i className={`${isDownloading ? 'ri-loader-4-line animate-spin' : 'ri-download-2-line'}`} />
-                  {isDownloading ? 'Exporting...' : activeSubscription ? 'Download PDF ✨' : 'Download PDF'}
+                  {isDownloading ? 'Exporting...' : activeSubscription ? 'Download & Apply ✨' : 'Download & Apply'}
                 </>
               )}
             </button>
@@ -1061,6 +1084,66 @@ export default function InlineResumeEditor({
       {/* Click-outside to close section picker */}
       {showAddSection && (
         <div className="fixed inset-0 z-40" onClick={() => setShowAddSection(false)} />
+      )}
+
+      {/* Coupon Modal for First Free Download */}
+      {showCouponModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowCouponModal(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 animate-in fade-in zoom-in-95">
+            <button
+              onClick={() => setShowCouponModal(false)}
+              className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 transition-colors"
+            >
+              <i className="ri-close-line text-lg" />
+            </button>
+
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-br from-emerald-100 to-teal-100 rounded-2xl flex items-center justify-center">
+                <i className="ri-gift-2-fill text-3xl text-emerald-600" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900">Your First Resume — Free! 🎉</h3>
+              <p className="text-sm text-gray-500 mt-2">A coupon has been auto-applied for your first download</p>
+            </div>
+
+            <div className="space-y-4">
+              {/* Auto-applied coupon badge */}
+              <div className="relative">
+                <div className="w-full px-4 py-3.5 rounded-xl border-2 border-emerald-300 bg-emerald-50/60 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <i className="ri-coupon-3-fill text-emerald-500 text-lg" />
+                    <span className="text-lg font-bold tracking-wider text-emerald-700">FIRSTRESUME</span>
+                  </div>
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold">
+                    <i className="ri-check-line text-sm" />
+                    Auto Applied
+                  </span>
+                </div>
+              </div>
+
+              {couponError && (
+                <p className="text-sm text-red-500 flex items-center justify-center gap-1">
+                  <i className="ri-error-warning-line" />
+                  {couponError}
+                </p>
+              )}
+
+              <button
+                onClick={handleCouponSubmit}
+                disabled={couponValidating}
+                className="w-full py-3 rounded-xl text-white font-semibold text-base shadow-lg hover:shadow-xl hover:scale-[1.01] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ backgroundColor: theme.primary }}
+              >
+                {couponValidating ? (
+                  <><i className="ri-loader-4-line animate-spin mr-2" />Applying Coupon...</>
+                ) : (
+                  <><i className="ri-download-2-line mr-2" />Download & Apply — Free</>                )}
+              </button>
+
+              <p className="text-center text-xs text-gray-400">Your first optimized resume download is on us!</p>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Payment Modal */}

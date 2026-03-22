@@ -1,6 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authFetch } from '../../services/authFetch';
+import AuthModal from './AuthModal';
+import PaymentModal from '../PaymentModal';
+import paymentService, { PlanInfo } from '../../services/paymentService';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
 interface OptimizeModalProps {
   isOpen: boolean;
@@ -52,6 +57,10 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
   const [processingStep, setProcessingStep] = useState(0);
   const [smoothProgress, setSmoothProgress] = useState(0);
   const [aiMessageIndex, setAiMessageIndex] = useState(0);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showPaywall, setShowPaywall] = useState(false);
+  const [paywallResumeId, setPaywallResumeId] = useState<number | null>(null);
+  const [paywallPlans, setPaywallPlans] = useState<PlanInfo[]>([]);
   const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const messageTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -124,8 +133,38 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
     if (file && file.size <= 5 * 1024 * 1024) setUploadedFile(file);
   };
 
-  const handleNext = () => {
-    if (currentStep === 1 && uploadedFile) setCurrentStep(2);
+  const handleNext = async () => {
+    if (currentStep === 1 && uploadedFile) {
+      // Check auth before proceeding to step 2
+      const token = localStorage.getItem('access_token');
+      if (!token) {
+        setShowAuthModal(true);
+        return;
+      }
+      // Check if user already has optimized resumes (2nd+ resume → paywall)
+      try {
+        const res = await authFetch(`${API_URL}/resume/`);
+        if (res.ok) {
+          const resumes = await res.json();
+          const optimizedResumes = resumes.filter((r: any) => r.is_optimized);
+          if (optimizedResumes.length > 0) {
+            // Grab the last optimized resume ID for payment context
+            setPaywallResumeId(optimizedResumes[optimizedResumes.length - 1].id);
+            // Fetch pricing plans
+            try {
+              const plans = await paymentService.getPlans();
+              setPaywallPlans(plans);
+            } catch { /* plans will be empty, modal handles gracefully */ }
+            setShowPaywall(true);
+            return;
+          }
+        }
+      } catch (err) {
+        console.error('Error checking existing resumes:', err);
+        // Fail open — let user proceed if check fails
+      }
+      setCurrentStep(2);
+    }
     else if (currentStep === 2 && isJDValid()) {
       setCurrentStep(3);
       startProcessing();
@@ -147,9 +186,7 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
     // Check if user is authenticated
     const token = localStorage.getItem('access_token');
     if (!token) {
-      alert('Please sign in first to optimize your resume.');
-      setCurrentStep(1);
-      onClose();
+      setShowAuthModal(true);
       return;
     }
 
@@ -277,6 +314,7 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
     setProcessingStep(0);
     setSmoothProgress(0);
     setAiMessageIndex(0);
+    setShowPaywall(false);
     onClose();
   };
 
@@ -880,6 +918,36 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
           )}
         </div>
       </div>
+
+      {/* Auth Modal – shown when user tries to optimize without being logged in */}
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        onSuccess={() => {
+          setShowAuthModal(false);
+          // After successful login, continue where the user left off
+          if (currentStep === 1 && uploadedFile) {
+            setCurrentStep(2);
+          } else if (currentStep === 3) {
+            startProcessing();
+          }
+        }}
+      />
+
+      {/* Paywall – reuse the site's PaymentModal with pricing plans */}
+      {paywallResumeId && (
+        <PaymentModal
+          isOpen={showPaywall}
+          resumeId={paywallResumeId}
+          plans={paywallPlans}
+          onClose={() => setShowPaywall(false)}
+          onPaymentSuccess={(subscriptionActivated) => {
+            setShowPaywall(false);
+            // After payment, let user proceed to step 2
+            setCurrentStep(2);
+          }}
+        />
+      )}
     </div>
   );
 }

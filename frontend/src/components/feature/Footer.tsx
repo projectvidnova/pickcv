@@ -41,7 +41,7 @@ export default function Footer() {
             {/* Trust line */}
             <div className="flex items-center gap-2 text-xs text-gray-400 mb-5">
               <i className="ri-shield-check-fill text-teal-500"></i>
-              DPDP compliant. Your data stays private.
+              DPDPA compliant. Your data stays private.
             </div>
 
             {/* Social */}

@@ -18,7 +18,7 @@ const faqs = [
   },
   {
     question: 'Is there a free plan?',
-    answer: 'Yes — you can upload and get your ATS score for free, no signup required. Our premium plan unlocks full optimization, keyword injection, and unlimited downloads.',
+    answer: 'Yes — you can upload and get your ATS score for free, no signup required. Our premium plan unlocks full optimization, talent signal conversion, and unlimited downloads.',
     icon: 'ri-gift-line',
   },
   {
