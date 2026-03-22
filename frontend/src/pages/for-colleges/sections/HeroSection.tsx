@@ -1,6 +1,12 @@
 
+type CollegeAction = 'register' | 'signin';
 
-export default function HeroSection() {
+interface HeroSectionProps {
+  onOpenComingSoon: (action: CollegeAction) => void;
+}
+
+
+export default function HeroSection({ onOpenComingSoon }: HeroSectionProps) {
   return (
     <section className="relative min-h-[95vh] flex items-center overflow-hidden mesh-bg">
       {/* Decorative orbs */}
@@ -34,14 +40,14 @@ export default function HeroSection() {
 
               <div className="flex flex-wrap gap-4 mb-12 animate-fade-in-up">
                 <button
-                  onClick={() => alert('🚀 Coming Soon! We\'re building something amazing for colleges. Stay tuned!')}
+                  onClick={() => onOpenComingSoon('register')}
                   className="flex items-center gap-2 px-8 py-4 rounded-xl text-white font-semibold cursor-pointer whitespace-nowrap transition-all hover:scale-[1.02] bg-gradient-to-r from-teal-600 to-emerald-500 shadow-lg shadow-teal-500/25 hover:shadow-teal-500/40 text-lg"
                 >
                   <i className="ri-school-line"></i>
                   Register Your Institution
                 </button>
                 <button
-                  onClick={() => alert('🚀 Coming Soon! We\'re building something amazing for colleges. Stay tuned!')}
+                  onClick={() => onOpenComingSoon('signin')}
                   className="flex items-center gap-2 px-8 py-4 rounded-xl font-semibold cursor-pointer whitespace-nowrap transition-all glass hover:bg-white/80 text-gray-700 text-lg"
                 >
                   Sign In

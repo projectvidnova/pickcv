@@ -1,5 +1,11 @@
 import { useState } from 'react';
 
+type RecruiterAction = 'register' | 'signin';
+
+interface HeroSectionProps {
+  onOpenComingSoon: (action: RecruiterAction) => void;
+}
+
 const stats = [
   { value: 'AI-Powered', label: 'Resume Screening' },
   { value: '99%', label: 'ATS Accuracy' },
@@ -7,7 +13,7 @@ const stats = [
   { value: '< 24h', label: 'Company Approval' },
 ];
 
-export default function HeroSection() {
+export default function HeroSection({ onOpenComingSoon }: HeroSectionProps) {
   const [activeFeature, setActiveFeature] = useState(0);
 
   const features = [
@@ -77,14 +83,14 @@ export default function HeroSection() {
 
                 <div className="flex flex-wrap gap-3 mb-8">
                   <button
-                    onClick={() => alert('🚀 Coming Soon! We\'re building something amazing for recruiters. Stay tuned!')}
+                    onClick={() => onOpenComingSoon('register')}
                     className="flex items-center gap-2 px-8 py-3.5 rounded-xl text-white text-sm font-semibold whitespace-nowrap cursor-pointer transition-all hover:scale-[1.02] bg-gradient-to-r from-teal-600 to-emerald-500 shadow-lg shadow-teal-500/25 hover:shadow-teal-500/40"
                   >
                     <i className="ri-building-2-line"></i>
                     Register Your Company
                   </button>
                   <button
-                    onClick={() => alert('🚀 Coming Soon! We\'re building something amazing for recruiters. Stay tuned!')}
+                    onClick={() => onOpenComingSoon('signin')}
                     className="flex items-center gap-2 px-8 py-3.5 rounded-xl text-sm font-semibold whitespace-nowrap cursor-pointer transition-all glass hover:bg-white/80 text-gray-700"
                   >
                     Sign In
