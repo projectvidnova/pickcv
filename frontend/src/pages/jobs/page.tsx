@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import Navbar from '../../components/feature/Navbar';
 import Footer from '../../components/feature/Footer';
-import { apiService } from '../../services/api';
+import { recruiterApi, RecruiterJob } from '../../services/recruiterService';
 
 type ViewMode = 'grid' | 'list';
 type SortOption = 'relevance' | 'newest' | 'salary';
@@ -16,18 +16,7 @@ interface Filters {
   datePosted: string;
 }
 
-interface Job {
-  id: number;
-  title: string;
-  company: string;
-  location: string;
-  job_type?: string;
-  experience_level?: string;
-  salary_min?: number;
-  salary_max?: number;
-  match_score?: number;
-  [key: string]: any;
-}
+type Job = RecruiterJob;
 
 const JobsPage = () => {
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
@@ -49,17 +38,13 @@ const JobsPage = () => {
     datePosted: 'any'
   });
 
-  // Load jobs from API on mount
+  // Load jobs from recruiter public API on mount
   useEffect(() => {
     const loadJobs = async () => {
       setLoading(true);
       try {
-        const result = await apiService.listJobs(0, 100);
-        if (result.success) {
-          setJobs(result.jobs || []);
-        } else {
-          setError(result.error || 'Failed to load jobs');
-        }
+        const data = await recruiterApi.listPublicJobs();
+        setJobs(data || []);
       } catch (err) {
         setError('Failed to load jobs');
       } finally {
@@ -143,7 +128,8 @@ const JobsPage = () => {
       const keyword = filters.keyword.toLowerCase();
       result = result.filter(job =>
         job.title.toLowerCase().includes(keyword) ||
-        job.company.toLowerCase().includes(keyword)
+        (job.company_name || '').toLowerCase().includes(keyword) ||
+        (job.required_skills || []).some(s => s.toLowerCase().includes(keyword))
       );
     }
 
@@ -162,7 +148,8 @@ const JobsPage = () => {
       result = result.filter(job => filters.experienceLevels.includes(job.experience_level));
     }
 
-    if (filters.salaryRange) {
+    // Only apply salary filter when user has changed it from the default
+    if (filters.salaryRange && (filters.salaryRange[0] !== 0 || filters.salaryRange[1] !== 200)) {
       const [minSalary, maxSalary] = filters.salaryRange;
       result = result.filter(job => {
         const salary = job.salary_min || 0;
@@ -170,8 +157,12 @@ const JobsPage = () => {
       });
     }
 
-    // Sort by match score or relevance
-    result.sort((a, b) => (b.match_score || 0) - (a.match_score || 0));
+    // Sort
+    if (sortBy === 'newest') {
+      result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    } else if (sortBy === 'salary') {
+      result.sort((a, b) => (b.salary_max || b.salary_min || 0) - (a.salary_max || a.salary_min || 0));
+    }
 
     return result;
   }, [jobs, filters, sortBy]);
@@ -566,15 +557,21 @@ const JobsPage = () => {
                       <div
                         key={job.id}
                         className="bg-white rounded-xl border border-gray-100 hover:border-teal-200 hover:shadow-lg transition-all duration-300 p-6 group cursor-pointer"
-                        onClick={() => window.REACT_APP_NAVIGATE(`/jobs/${job.id}`)}
+                        onClick={() => window.REACT_APP_NAVIGATE?.(`/jobs/${job.id}`)}
                       >
                         <div className="flex items-start gap-4">
                           <div className="w-14 h-14 flex-shrink-0">
-                            <img
-                              src={job.logo}
-                              alt={job.company}
-                              className="w-full h-full object-cover rounded-lg"
-                            />
+                            {job.company_logo_url ? (
+                              <img
+                                src={job.company_logo_url}
+                                alt={job.company_name || ''}
+                                className="w-full h-full object-cover rounded-lg"
+                              />
+                            ) : (
+                              <div className="w-full h-full rounded-lg bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center">
+                                <span className="text-white font-bold text-lg">{(job.company_name || 'C')[0].toUpperCase()}</span>
+                              </div>
+                            )}
                           </div>
                           
                           <div className="flex-1 min-w-0">
@@ -583,16 +580,16 @@ const JobsPage = () => {
                                 <h3 className="text-lg font-semibold text-gray-900 group-hover:text-teal-600 transition-colors mb-1 truncate">
                                   {job.title}
                                 </h3>
-                                <p className="text-sm text-gray-600 truncate">{job.company}</p>
+                                <p className="text-sm text-gray-600 truncate">{job.company_name}</p>
                               </div>
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  toggleSaveJob(job.id);
+                                  toggleSaveJob(String(job.id));
                                 }}
                                 className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
                               >
-                                <i className={`${savedJobs.has(job.id) ? 'ri-bookmark-fill text-teal-600' : 'ri-bookmark-line text-gray-400'} text-lg`}></i>
+                                <i className={`${savedJobs.has(String(job.id)) ? 'ri-bookmark-fill text-teal-600' : 'ri-bookmark-line text-gray-400'} text-lg`}></i>
                               </button>
                             </div>
 
@@ -603,16 +600,30 @@ const JobsPage = () => {
                               </div>
                               <div className="flex items-center gap-1.5">
                                 <i className="ri-briefcase-line text-base"></i>
-                                <span>{job.type}</span>
+                                <span>{job.job_type}</span>
                               </div>
-                              <div className="flex items-center gap-1.5">
-                                <i className="ri-money-dollar-circle-line text-base"></i>
-                                <span>{job.salary}</span>
-                              </div>
+                              {(job.salary_min || job.salary_max) && (
+                                <div className="flex items-center gap-1.5">
+                                  <i className="ri-money-dollar-circle-line text-base"></i>
+                                  <span>
+                                    {job.currency === 'INR' ? '₹' : job.currency === 'EUR' ? '€' : job.currency === 'GBP' ? '£' : '$'}
+                                    {job.salary_min ? `${(job.salary_min / 100000).toFixed(1)}L` : ''}
+                                    {job.salary_min && job.salary_max ? ' - ' : ''}
+                                    {job.salary_max ? `${(job.salary_max / 100000).toFixed(1)}L` : ''}
+                                    {job.currency !== 'INR' && ` ${job.currency}`}
+                                  </span>
+                                </div>
+                              )}
+                              {job.remote_policy && (
+                                <div className="flex items-center gap-1.5">
+                                  <i className="ri-home-wifi-line text-base"></i>
+                                  <span>{job.remote_policy}</span>
+                                </div>
+                              )}
                             </div>
 
                             <div className="flex flex-wrap gap-2 mb-3">
-                              {job.skills.slice(0, 3).map(skill => (
+                              {(job.required_skills || []).slice(0, 3).map((skill: string) => (
                                 <span
                                   key={skill}
                                   className="px-2.5 py-1 bg-gray-50 text-gray-700 rounded-md text-xs font-medium"
@@ -620,29 +631,21 @@ const JobsPage = () => {
                                   {skill}
                                 </span>
                               ))}
-                              {job.skills.length > 3 && (
+                              {(job.required_skills || []).length > 3 && (
                                 <span className="px-2.5 py-1 bg-gray-50 text-gray-500 rounded-md text-xs font-medium">
-                                  +{job.skills.length - 3} more
+                                  +{job.required_skills.length - 3} more
                                 </span>
                               )}
                             </div>
 
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-2">
-                                <div className="flex items-center gap-1.5">
-                                  <div className="w-12 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                                    <div
-                                      className="h-full bg-gradient-to-r from-teal-500 to-emerald-500 rounded-full"
-                                      style={{ width: `${job.matchPercentage}%` }}
-                                    ></div>
-                                  </div>
-                                  <span className="text-xs font-semibold text-teal-600">
-                                    {job.matchPercentage}% Match
-                                  </span>
-                                </div>
+                                <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${job.experience_level === 'Senior' ? 'bg-purple-50 text-purple-600' : job.experience_level === 'Lead' ? 'bg-amber-50 text-amber-600' : 'bg-teal-50 text-teal-600'}`}>
+                                  {job.experience_level}
+                                </span>
                               </div>
                               <span className="text-xs text-gray-500">
-                                {getRelativeTime(job.postedDate)}
+                                {getRelativeTime(job.created_at)}
                               </span>
                             </div>
                           </div>

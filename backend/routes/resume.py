@@ -287,7 +287,7 @@ async def optimize_resume_for_job(
         # ── Mode 3: Pasted JD — use it directly ──
         logger.info(f"Optimize mode: PASTE — using provided JD ({len(job_description)} chars)")
     
-    # Optimize resume for the specific job
+    # Optimize resume for the specific job (includes comparison in single call)
     optimization_result = await gemini_service.optimize_resume_for_job(
         resume_text=resume.raw_text,
         job_description=job_description,
@@ -297,12 +297,8 @@ async def optimize_resume_for_job(
     if "error" in optimization_result:
         raise HTTPException(status_code=500, detail=f"Optimization failed: {optimization_result['error']}")
     
-    # Generate detailed comparison
-    comparison = await gemini_service.generate_comparison_analysis(
-        original_resume=resume.raw_text,
-        optimized_resume=optimization_result.get("optimized_resume", ""),
-        job_description=job_description
-    )
+    # Comparison is now included in the optimization result (single Gemini call)
+    comparison = optimization_result.get("comparison", {})
     
     return {
         "resume_id": resume_id,

@@ -9,11 +9,12 @@ import secrets
 import logging
 
 from database import get_db
-from models import User, UserProfile, UserSkill
+from models import User, UserProfile, UserSkill, Recruiter
 from schemas import UserCreate, UserResponse, Token, UserProfileFullResponse, UserProfileUpdateRequest, SkillItem
 from services.auth_service import auth_service
 from services.email_service import email_service
 from services.google_oauth_service import google_oauth_service
+from services.linkedin_oauth_service import linkedin_oauth_service
 from services.college_service import college_service
 from config import settings, get_frontend_origin
 
@@ -110,6 +111,14 @@ async def login(
     user = result.scalar_one_or_none()
     
     if not user or not auth_service.verify_password(form_data.password, user.hashed_password):
+        # Check if this email belongs to a recruiter account
+        rec_result = await db.execute(select(Recruiter).where(Recruiter.email == form_data.username))
+        if rec_result.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="This email is registered as a recruiter. Please login at the Recruiter Portal (/recruiter/login).",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
@@ -540,5 +549,120 @@ async def google_token(code: str, redirect_uri: str = None, db: AsyncSession = D
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"OAuth failed: {str(e)}"
+        )
+
+
+# ─────────────────────────────────────────────────────
+# LinkedIn OAuth routes
+# ─────────────────────────────────────────────────────
+
+@router.get("/linkedin/login")
+async def linkedin_login():
+    """Return LinkedIn OAuth authorization URL."""
+    if not settings.linkedin_client_id:
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="LinkedIn OAuth is not configured. Set LINKEDIN_CLIENT_ID and LINKEDIN_CLIENT_SECRET.",
+        )
+    state = secrets.token_urlsafe(32)
+    auth_url = linkedin_oauth_service.get_authorization_url(state)
+    return {"auth_url": auth_url, "state": state}
+
+
+@router.post("/linkedin/token")
+async def linkedin_token(code: str, redirect_uri: str = None, db: AsyncSession = Depends(get_db)):
+    """Exchange LinkedIn authorization code for JWT tokens (SPA flow)."""
+    try:
+        if not code:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Authorization code missing",
+            )
+
+        # Exchange code for LinkedIn access token
+        token_response = await linkedin_oauth_service.exchange_code_for_token(
+            code, redirect_uri=redirect_uri
+        )
+        if not token_response or "access_token" not in token_response:
+            logger.error(f"LinkedIn token exchange failed")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to get LinkedIn access token",
+            )
+
+        access_token = token_response.get("access_token")
+
+        # Get user info from LinkedIn (OpenID Connect userinfo)
+        user_info = await linkedin_oauth_service.get_user_info(access_token)
+        if not user_info or "email" not in user_info:
+            logger.error("Failed to get LinkedIn user info")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to get user information from LinkedIn",
+            )
+
+        email = user_info.get("email")
+        name = user_info.get("name", "")
+        picture = user_info.get("picture", "")
+
+        # Find or create user
+        try:
+            result = await db.execute(select(User).where(User.email == email))
+            user = result.scalar_one_or_none()
+
+            if user is None:
+                user = User(
+                    email=email,
+                    full_name=name,
+                    hashed_password="",  # OAuth users don't need passwords
+                    is_verified=True,  # Trust LinkedIn's email verification
+                    profile_picture_url=picture,
+                )
+                db.add(user)
+                await db.commit()
+                await db.refresh(user)
+                logger.info(f"New user created via LinkedIn OAuth: {email}")
+                # Update college student status if invited
+                try:
+                    await college_service.update_student_status_on_register(
+                        db, user.id, user.email
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"College student status update failed for {email}: {e}"
+                    )
+            else:
+                # Update profile picture if available and not already set
+                if picture and not user.profile_picture_url:
+                    user.profile_picture_url = picture
+                    await db.commit()
+
+            # Generate JWT tokens
+            access_token_jwt = auth_service.create_access_token(user.id)
+            refresh_token = auth_service.create_refresh_token(user.id)
+            user_id = user.id
+        except Exception as db_error:
+            logger.error(f"Database error during LinkedIn OAuth for {email}: {db_error}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to process authentication: {str(db_error)}",
+            )
+
+        return {
+            "access_token": access_token_jwt,
+            "refresh_token": refresh_token,
+            "token_type": "bearer",
+            "user_id": user_id,
+            "email": email,
+            "name": name,
+            "picture": picture,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"LinkedIn OAuth error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"LinkedIn OAuth failed: {str(e)}",
         )
 

@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authFetch } from '../../services/authFetch';
 
@@ -50,14 +50,67 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
   const [jdLink, setJDLink] = useState('');
   const [jdTitle, setJDTitle] = useState('');
   const [processingStep, setProcessingStep] = useState(0);
+  const [smoothProgress, setSmoothProgress] = useState(0);
+  const [aiMessageIndex, setAiMessageIndex] = useState(0);
+  const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const messageTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const processingSteps = [
-    { icon: 'ri-upload-cloud-2-line', label: 'Uploading resume', detail: 'Sending your file to our servers' },
-    { icon: 'ri-file-search-line', label: 'Analyzing content', detail: 'Parsing resume & job requirements' },
-    { icon: 'ri-sparkling-2-fill', label: 'AI optimization', detail: 'Rewriting for keywords & impact' },
-    { icon: 'ri-shield-check-line', label: 'Finalizing results', detail: 'Scoring ATS compatibility' },
+    { icon: 'ri-upload-cloud-2-line', label: 'Uploading resume', detail: 'Sending your file securely' },
+    { icon: 'ri-file-search-line', label: 'Analyzing content', detail: 'Parsing resume structure & job requirements' },
+    { icon: 'ri-brain-line', label: 'Matching keywords', detail: 'Identifying skills gaps & keyword opportunities' },
+    { icon: 'ri-sparkling-2-fill', label: 'AI optimization', detail: 'Rewriting bullets for maximum impact' },
+    { icon: 'ri-bar-chart-box-line', label: 'Scoring ATS compatibility', detail: 'Evaluating format & keyword density' },
+    { icon: 'ri-shield-check-line', label: 'Finalizing results', detail: 'Preparing your optimized resume' },
   ];
+
+  const aiInsightMessages = [
+    { icon: 'ri-lightbulb-flash-line', text: 'Identifying action verbs that recruiters love...' },
+    { icon: 'ri-search-eye-line', text: 'Scanning for ATS-friendly formatting...' },
+    { icon: 'ri-focus-3-line', text: 'Matching your skills to job requirements...' },
+    { icon: 'ri-bar-chart-grouped-line', text: 'Adding quantifiable achievements...' },
+    { icon: 'ri-trophy-line', text: 'Highlighting your strongest experiences...' },
+    { icon: 'ri-file-text-line', text: 'Optimizing section headings for ATS...' },
+    { icon: 'ri-magic-line', text: 'Rewriting bullet points with impact metrics...' },
+    { icon: 'ri-shield-star-line', text: 'Ensuring keyword density is optimal...' },
+  ];
+
+  // Smooth progress animation during AI processing
+  const startSmoothProgress = useCallback((fromPercent: number, toPercent: number, durationMs: number) => {
+    if (progressTimerRef.current) clearInterval(progressTimerRef.current);
+    const steps = Math.ceil(durationMs / 80);
+    const increment = (toPercent - fromPercent) / steps;
+    let current = fromPercent;
+    progressTimerRef.current = setInterval(() => {
+      current += increment;
+      if (current >= toPercent) {
+        current = toPercent;
+        if (progressTimerRef.current) clearInterval(progressTimerRef.current);
+      }
+      setSmoothProgress(Math.round(current));
+    }, 80);
+  }, []);
+
+  // Cycle AI insight messages
+  useEffect(() => {
+    if (processingStep >= 3 && processingStep <= 4) {
+      messageTimerRef.current = setInterval(() => {
+        setAiMessageIndex(prev => (prev + 1) % aiInsightMessages.length);
+      }, 2500);
+    } else {
+      if (messageTimerRef.current) clearInterval(messageTimerRef.current);
+    }
+    return () => { if (messageTimerRef.current) clearInterval(messageTimerRef.current); };
+  }, [processingStep, aiInsightMessages.length]);
+
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      if (progressTimerRef.current) clearInterval(progressTimerRef.current);
+      if (messageTimerRef.current) clearInterval(messageTimerRef.current);
+    };
+  }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -101,8 +154,10 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
     }
 
     try {
-      // ── Step 1: Uploading resume ──
+      // ── Step 1: Uploading resume (0% → 15%) ──
       setProcessingStep(1);
+      setSmoothProgress(0);
+      startSmoothProgress(0, 15, 1500);
 
       const formData = new FormData();
       if (uploadedFile) {
@@ -125,20 +180,18 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
       const uploadedResume = await uploadResponse.json();
       const resumeId = uploadedResume.id;
 
-      // ── Step 2: Analyzing content ──
+      // ── Step 2: Analyzing content (15% → 30%) ──
       setProcessingStep(2);
+      startSmoothProgress(15, 30, 800);
 
       let jobTitle = 'Target Role';
       let jobDescription: string | undefined;
       let jobLink: string | undefined;
 
       if (jdMode === 'title') {
-        // Title-only mode: backend will generate a full JD from the title
         jobTitle = jdTitle;
-        // Don't send a fake job_description — let the backend handle it
       } else if (jdMode === 'paste') {
         jobDescription = jdPaste;
-        // Try to extract job title from the first meaningful line of the pasted JD
         const firstLine = jdPaste.trim().split('\n').find(l => l.trim().length > 3);
         if (firstLine && firstLine.trim().length < 100) {
           jobTitle = firstLine.trim();
@@ -147,11 +200,17 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
         jobLink = jdLink;
       }
 
-      // Brief pause so step 2 is visible before the long AI call
       await new Promise(resolve => setTimeout(resolve, 600));
 
-      // ── Step 3: AI optimization (the long call) ──
+      // ── Step 3: Matching keywords (30% → 40%) ──
       setProcessingStep(3);
+      startSmoothProgress(30, 40, 600);
+      await new Promise(resolve => setTimeout(resolve, 600));
+
+      // ── Step 4: AI optimization — the API call (40% → 88%, slow crawl) ──
+      setProcessingStep(4);
+      setAiMessageIndex(0);
+      startSmoothProgress(40, 88, 30000);
 
       const optimizeResponse = await authFetch(
         `${import.meta.env.VITE_API_URL}/resume/${resumeId}/optimize-for-job`,
@@ -174,8 +233,15 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
 
       const optimizationData = await optimizeResponse.json();
 
-      // ── Step 4: Finalizing results (only reached when backend has responded) ──
-      setProcessingStep(4);
+      // ── Step 5: Scoring ATS compatibility (→ 95%) ──
+      if (progressTimerRef.current) clearInterval(progressTimerRef.current);
+      setProcessingStep(5);
+      startSmoothProgress(Math.max(smoothProgress, 88), 95, 500);
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // ── Step 6: Finalizing (95% → 100%) ──
+      setProcessingStep(6);
+      startSmoothProgress(95, 100, 400);
 
       // Store optimization data for the comparison page
       sessionStorage.setItem('optimizationData', JSON.stringify({
@@ -183,8 +249,8 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
         ...optimizationData
       }));
 
-      // Short delay to let the user see 100% before navigating
-      await new Promise(resolve => setTimeout(resolve, 800));
+      // Brief completion moment
+      await new Promise(resolve => setTimeout(resolve, 600));
 
       navigate('/resume-comparison', {
         state: { optimizedResume: { resumeId, ...optimizationData } }
@@ -192,19 +258,25 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
       handleClose();
     } catch (error) {
       console.error('Optimization error:', error);
+      if (progressTimerRef.current) clearInterval(progressTimerRef.current);
       alert('Failed to optimize resume. Please try again.');
       setProcessingStep(0);
+      setSmoothProgress(0);
       setCurrentStep(2);
     }
   };
 
   const handleClose = () => {
+    if (progressTimerRef.current) clearInterval(progressTimerRef.current);
+    if (messageTimerRef.current) clearInterval(messageTimerRef.current);
     setCurrentStep(1);
     setUploadedFile(null);
     setJDPaste('');
     setJDLink('');
     setJDTitle('');
     setProcessingStep(0);
+    setSmoothProgress(0);
+    setAiMessageIndex(0);
     onClose();
   };
 
@@ -650,24 +722,76 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
             {/* ── STEP 3: Processing ── */}
             {currentStep === 3 && (
               <div className="py-2">
-                {/* Animated icon */}
-                <div className="flex flex-col items-center mb-7">
+                <style>{`
+                  @keyframes smoothPulse {
+                    0%, 100% { opacity: 1; transform: scale(1); }
+                    50% { opacity: 0.85; transform: scale(1.06); }
+                  }
+                  @keyframes rotateGlow {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
+                  }
+                  @keyframes fadeSlideUp {
+                    from { opacity: 0; transform: translateY(8px); }
+                    to { opacity: 1; transform: translateY(0); }
+                  }
+                  @keyframes shimmerProgress {
+                    0% { background-position: -200% center; }
+                    100% { background-position: 200% center; }
+                  }
+                  .smooth-pulse { animation: smoothPulse 2.4s ease-in-out infinite; }
+                  .rotate-glow { animation: rotateGlow 4s linear infinite; }
+                  .fade-slide-up { animation: fadeSlideUp 0.5s ease-out both; }
+                  .shimmer-bar {
+                    background: linear-gradient(90deg, #0d9488 0%, #2dd4bf 40%, #10b981 60%, #0d9488 100%);
+                    background-size: 200% auto;
+                    animation: shimmerProgress 2s linear infinite;
+                  }
+                `}</style>
+
+                {/* Animated header */}
+                <div className="flex flex-col items-center mb-6">
                   <div className="relative mb-4">
-                    <div className="w-20 h-20 rounded-2xl flex items-center justify-center shadow-xl shadow-teal-500/30"
+                    {/* Rotating glow ring */}
+                    <div className="absolute -inset-4 rounded-full rotate-glow" style={{
+                      background: 'conic-gradient(from 0deg, transparent, rgba(13,148,136,0.3), transparent, rgba(16,185,129,0.3), transparent)',
+                    }} />
+                    <div className="relative w-20 h-20 rounded-2xl flex items-center justify-center shadow-xl smooth-pulse"
                       style={{
                         background: 'radial-gradient(circle at 35% 30%, #2dd4bf, #0d9488 60%, #134e4a)',
                         boxShadow: '0 12px 32px rgba(13,148,136,0.45), inset 0 1px 0 rgba(255,255,255,0.25)',
                       }}>
-                      <i className="ri-sparkling-2-fill text-white text-4xl animate-pulse"></i>
+                      <i className={`text-white text-4xl ${smoothProgress >= 100 ? 'ri-check-double-line' : 'ri-sparkling-2-fill'}`}></i>
                     </div>
-                    <div className="absolute -inset-3 rounded-3xl bg-gradient-to-br from-teal-400/20 to-emerald-400/20 blur-xl animate-pulse" />
                   </div>
-                  <h3 className="text-lg font-extrabold text-gray-900">Optimizing Your Resume</h3>
-                  <p className="text-sm text-gray-500 mt-1">AI is working its magic...</p>
+                  <h3 className="text-lg font-extrabold text-gray-900">
+                    {smoothProgress >= 100 ? 'Optimization Complete!' : 'Optimizing Your Resume'}
+                  </h3>
+                  <p className="text-sm text-gray-500 mt-1">
+                    {smoothProgress >= 100
+                      ? 'Your tailored resume is ready'
+                      : smoothProgress < 30
+                        ? 'Preparing your resume for AI analysis...'
+                        : 'Our AI is tailoring your resume to the job...'}
+                  </p>
+                </div>
+
+                {/* Main progress bar */}
+                <div className="mb-5">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Progress</span>
+                    <span className="text-sm font-black text-teal-600 tabular-nums">{smoothProgress}%</span>
+                  </div>
+                  <div className="h-3 bg-gray-100 rounded-full overflow-hidden shadow-inner">
+                    <div
+                      className={`h-full rounded-full transition-all duration-300 ease-out ${smoothProgress >= 100 ? 'bg-gradient-to-r from-emerald-500 to-green-400' : 'shimmer-bar'}`}
+                      style={{ width: `${smoothProgress}%` }}
+                    />
+                  </div>
                 </div>
 
                 {/* Processing steps */}
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {processingSteps.map((step, index) => {
                     const stepNum = index + 1;
                     const isDone = processingStep > stepNum;
@@ -675,27 +799,27 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
                     return (
                       <div
                         key={index}
-                        className={`flex items-center gap-4 px-4 py-3.5 rounded-xl border transition-all duration-500 ${
+                        className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl border transition-all duration-500 ${
                           isDone
-                            ? 'bg-emerald-50 border-emerald-200'
+                            ? 'bg-emerald-50/70 border-emerald-200/60'
                             : isActive
-                            ? 'bg-teal-50 border-teal-200 shadow-sm'
-                            : 'bg-gray-50 border-gray-100 opacity-50'
+                            ? 'bg-teal-50 border-teal-200 shadow-sm shadow-teal-100'
+                            : 'bg-gray-50/50 border-gray-100/60 opacity-40'
                         }`}
                       >
-                        <div className={`w-9 h-9 flex items-center justify-center rounded-xl shrink-0 transition-all duration-300 ${
-                          isDone ? 'bg-emerald-500' : isActive ? 'bg-gradient-to-br from-teal-500 to-emerald-500' : 'bg-gray-200'
+                        <div className={`w-8 h-8 flex items-center justify-center rounded-lg shrink-0 transition-all duration-300 ${
+                          isDone ? 'bg-emerald-500' : isActive ? 'bg-gradient-to-br from-teal-500 to-emerald-500 shadow-md shadow-teal-200' : 'bg-gray-200'
                         }`}>
                           {isDone
-                            ? <i className="ri-check-line text-white text-base font-bold"></i>
-                            : <i className={`${step.icon} text-base ${isActive ? 'text-white animate-pulse' : 'text-gray-400'}`}></i>
+                            ? <i className="ri-check-line text-white text-sm font-bold"></i>
+                            : <i className={`${step.icon} text-sm ${isActive ? 'text-white animate-pulse' : 'text-gray-400'}`}></i>
                           }
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className={`text-sm font-bold ${isDone ? 'text-emerald-800' : isActive ? 'text-teal-800' : 'text-gray-500'}`}>
+                          <p className={`text-sm font-bold leading-tight ${isDone ? 'text-emerald-700' : isActive ? 'text-teal-800' : 'text-gray-500'}`}>
                             {step.label}
                           </p>
-                          <p className={`text-xs mt-0.5 ${isDone ? 'text-emerald-600' : isActive ? 'text-teal-600' : 'text-gray-400'}`}>
+                          <p className={`text-xs leading-tight ${isDone ? 'text-emerald-500' : isActive ? 'text-teal-600' : 'text-gray-400'}`}>
                             {step.detail}
                           </p>
                         </div>
@@ -707,25 +831,42 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
                             ))}
                           </div>
                         )}
-                        {isDone && <span className="text-xs font-bold text-emerald-600 shrink-0">Done</span>}
+                        {isDone && (
+                          <span className="text-xs font-bold text-emerald-500 shrink-0 flex items-center gap-0.5">
+                            <i className="ri-check-line text-xs"></i> Done
+                          </span>
+                        )}
                       </div>
                     );
                   })}
                 </div>
 
-                {/* Progress bar */}
-                <div className="mt-5">
-                  <div className="flex items-center justify-between text-xs text-gray-500 mb-1.5">
-                    <span>Progress</span>
-                    <span className="font-bold text-teal-600">{Math.round((processingStep / 4) * 100)}%</span>
+                {/* AI insight message — shows during the long AI step */}
+                {(processingStep === 3 || processingStep === 4) && smoothProgress < 90 && (
+                  <div className="mt-4 px-4 py-3 rounded-xl bg-gradient-to-r from-slate-50 to-teal-50/50 border border-teal-100/60 fade-slide-up" key={aiMessageIndex}>
+                    <div className="flex items-start gap-3">
+                      <div className="w-7 h-7 rounded-lg bg-teal-100 flex items-center justify-center shrink-0 mt-0.5">
+                        <i className={`${aiInsightMessages[aiMessageIndex]?.icon || 'ri-lightbulb-flash-line'} text-teal-600 text-sm`}></i>
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-teal-700 uppercase tracking-wider mb-0.5">AI Working</p>
+                        <p className="text-sm text-gray-600 leading-snug">{aiInsightMessages[aiMessageIndex]?.text || 'Processing...'}</p>
+                      </div>
+                    </div>
                   </div>
-                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-teal-500 to-emerald-500 rounded-full transition-all duration-700"
-                      style={{ width: `${(processingStep / 4) * 100}%` }}
-                    />
+                )}
+
+                {/* Completion celebration */}
+                {smoothProgress >= 100 && (
+                  <div className="mt-4 px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200/60 fade-slide-up">
+                    <div className="flex items-center gap-3">
+                      <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center shrink-0">
+                        <i className="ri-trophy-fill text-emerald-600 text-sm"></i>
+                      </div>
+                      <p className="text-sm font-semibold text-emerald-700">Your optimized resume is ready! Redirecting...</p>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             )}
           </div>

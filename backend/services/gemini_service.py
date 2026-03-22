@@ -312,7 +312,8 @@ Return ONLY the job description text, no extra commentary."""
         - You MAY improve bullet points, add relevant keywords, rewrite the summary, 
           and reorder/enhance skills — but ONLY using truthful information from the original resume.
         
-        Please provide a response in the following JSON format with BOTH text and structured data:
+        Please provide a response in the following JSON format with BOTH the optimized resume
+        AND a comparison analysis (so we can show before/after to the user):
         {{
             "optimized_resume": "<complete optimized resume text following ATS best practices>",
             "name": "<candidate full name — EXTRACT from original resume, or empty string>",
@@ -344,17 +345,37 @@ Return ONLY the job description text, no extra commentary."""
                     "section": "<section name>",
                     "what_changed": "<description of what changed>",
                     "why": "<explanation of why this change improves the match>"
-                }},
-                ...
+                }}
             ],
             "key_improvements": [
                 "<improvement 1>",
-                "<improvement 2>",
-                ...
+                "<improvement 2>"
             ],
-            "keywords_added": ["keyword1", "keyword2", ...],
+            "keywords_added": ["keyword1", "keyword2"],
             "match_score": <0-100>,
-            "ats_optimized": true/false
+            "ats_optimized": true,
+            "comparison": {{
+                "summary": "<brief summary of all changes made>",
+                "detailed_changes": [
+                    {{
+                        "before": "<original text snippet>",
+                        "after": "<optimized text snippet>",
+                        "reason": "<why this is better>",
+                        "impact": "<how this improves job matching>"
+                    }}
+                ],
+                "improvement_areas": [
+                    {{
+                        "area": "<section or aspect>",
+                        "improvements": "<list of improvements>"
+                    }}
+                ],
+                "ats_improvements": [
+                    "<improvement 1>",
+                    "<improvement 2>"
+                ],
+                "overall_improvement": "<percentage or assessment>"
+            }}
         }}
         
         Requirements:
@@ -366,6 +387,7 @@ Return ONLY the job description text, no extra commentary."""
         - Improve readability while maintaining professionalism
         - Include action verbs and impact metrics
         - NEVER fabricate personal details — only extract from the original resume
+        - For comparison.detailed_changes, include at most 5-7 key changes with specific before/after examples
         """
         
         max_retries = 2

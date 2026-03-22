@@ -86,7 +86,7 @@ export interface RecruiterJob {
   remote_policy?: string;
   salary_min?: number;
   salary_max?: number;
-  salary_currency?: string;
+  currency?: string;
   required_skills: string[];
   preferred_skills: string[];
   status: string;

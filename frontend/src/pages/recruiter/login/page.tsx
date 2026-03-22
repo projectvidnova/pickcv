@@ -19,9 +19,9 @@ export default function RecruiterLogin() {
       if (result.recruiter?.status === 'pending_verification') {
         setError('Please verify your email first. Check your inbox.');
       } else if (result.recruiter?.status === 'pending_approval') {
-        navigate('/recruiter/pending-approval');
+        navigate('/pending-approval');
       } else {
-        navigate('/recruiter/dashboard');
+        navigate('/dashboard');
       }
     } catch (err: any) {
       setError(err.message || 'Invalid credentials');
@@ -88,7 +88,7 @@ export default function RecruiterLogin() {
           <div className="mt-6 text-center">
             <p className="text-gray-400 text-sm">
               Don't have an account?{' '}
-              <Link to="/recruiter/register" className="text-blue-400 hover:text-blue-300 font-medium">Register here</Link>
+              <Link to="/register" className="text-blue-400 hover:text-blue-300 font-medium">Register here</Link>
             </p>
           </div>
         </div>

@@ -9,6 +9,8 @@ const footerLinks = {
     { label: 'About Us', href: '/about' },
     { label: 'Careers', href: '/careers' },
     { label: 'Contact Support', href: '/contact' },
+    { label: 'For Recruiters', href: '/for-recruiters' },
+    { label: 'For Colleges', href: '/for-colleges' },
   ],
   legal: [
     { label: 'Privacy Policy', href: '/privacy' },
@@ -25,12 +27,13 @@ export default function Footer() {
         <div className="grid md:grid-cols-4 gap-10 mb-12">
           {/* Brand */}
           <div>
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center text-white text-sm font-bold shadow-lg shadow-teal-500/30">
-                P
-              </div>
-              <span className="text-xl font-bold text-gray-900">PickCV</span>
-            </div>
+            <a href="/" className="inline-block mb-4">
+              <img
+                src="https://static.readdy.ai/image/118f59b514d655f060b6a8ef60c2b755/e0bd9983c8b60cb1b82cd43c64b6d0bd.png"
+                alt="PickCV"
+                className="h-16 w-auto"
+              />
+            </a>
             <p className="text-sm text-gray-500 leading-relaxed mb-5">
               AI-powered resume optimization that gets you past ATS and into interviews.
             </p>

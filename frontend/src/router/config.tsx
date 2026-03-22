@@ -26,6 +26,8 @@ const AdminColleges = lazy(() => import('../pages/admin/colleges/page'));
 const AdminPayments = lazy(() => import('../pages/admin/payments/page'));
 const AdminRecruiters = lazy(() => import('../pages/admin/recruiters/page'));
 const NotFound = lazy(() => import('../pages/NotFound'));
+const ForRecruitersPage = lazy(() => import('../pages/for-recruiters/page'));
+const ForCollegesPage = lazy(() => import('../pages/for-colleges/page'));
 
 // ─── Recruiter portal pages ───
 const RecruiterLogin = lazy(() => import('../pages/recruiter/login/page'));
@@ -141,6 +143,111 @@ const institutionRoutes: RouteObject[] = [
   },
 ];
 
+// ─── Recruiter portal routes (recruiters.pickcv.com) ───
+const recruiterRoutes: RouteObject[] = [
+  {
+    path: '/',
+    element: <RecruiterLogin />,
+  },
+  {
+    path: '/login',
+    element: <RecruiterLogin />,
+  },
+  {
+    path: '/register',
+    element: <RecruiterRegister />,
+  },
+  {
+    path: '/verify-email',
+    element: <RecruiterVerifyEmail />,
+  },
+  {
+    path: '/verify-email-sent',
+    element: <RecruiterVerifyEmailSent />,
+  },
+  {
+    path: '/pending-approval',
+    element: <RecruiterPendingApproval />,
+  },
+  {
+    path: '/dashboard',
+    element: <RecruiterDashboard />,
+  },
+  {
+    path: '/jobs',
+    element: <RecruiterJobs />,
+  },
+  {
+    path: '/jobs/new',
+    element: <RecruiterNewJob />,
+  },
+  {
+    path: '/jobs/:id',
+    element: <RecruiterJobDetail />,
+  },
+  {
+    path: '/jobs/:id/edit',
+    element: <RecruiterNewJob />,
+  },
+  {
+    path: '/interviewers',
+    element: <RecruiterInterviewers />,
+  },
+  {
+    path: '/offer-templates',
+    element: <RecruiterOfferTemplates />,
+  },
+  {
+    path: '/offers',
+    element: <RecruiterOffers />,
+  },
+  {
+    path: '/offer/:id',
+    element: <RecruiterOfferView />,
+  },
+  {
+    path: '/accept-invite',
+    element: <RecruiterAcceptInvite />,
+  },
+  // Legacy paths (redirect /recruiter/* → short paths)
+  {
+    path: '/recruiter/login',
+    element: <Navigate to="/login" replace />,
+  },
+  {
+    path: '/recruiter/register',
+    element: <Navigate to="/register" replace />,
+  },
+  {
+    path: '/recruiter/dashboard',
+    element: <Navigate to="/dashboard" replace />,
+  },
+  {
+    path: '/recruiter/jobs',
+    element: <Navigate to="/jobs" replace />,
+  },
+  {
+    path: '/recruiter/jobs/new',
+    element: <Navigate to="/jobs/new" replace />,
+  },
+  {
+    path: '/recruiter/interviewers',
+    element: <Navigate to="/interviewers" replace />,
+  },
+  {
+    path: '/recruiter/offer-templates',
+    element: <Navigate to="/offer-templates" replace />,
+  },
+  {
+    path: '/recruiter/offers',
+    element: <Navigate to="/offers" replace />,
+  },
+  {
+    path: '*',
+    element: <NotFound />,
+  },
+];
+
 // ─── Main site routes (pickcv.com) ───
 const mainRoutes: RouteObject[] = [
   {
@@ -194,6 +301,14 @@ const mainRoutes: RouteObject[] = [
   {
     path: '/contact',
     element: <Contact />,
+  },
+  {
+    path: '/for-recruiters',
+    element: <ForRecruitersPage />,
+  },
+  {
+    path: '/for-colleges',
+    element: <ForCollegesPage />,
   },
   // College & admin routes still accessible from main site
   {
@@ -302,6 +417,7 @@ const mainRoutes: RouteObject[] = [
 const routeMap: Record<SubdomainType, RouteObject[]> = {
   admin: adminRoutes,
   institution: institutionRoutes,
+  recruiter: recruiterRoutes,
   main: mainRoutes,
 };
 

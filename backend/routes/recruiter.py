@@ -27,6 +27,7 @@ from schemas.recruiter import (
     RecruiterResponse, RecruiterProfileUpdate,
     RecruiterJobCreate, RecruiterJobUpdate, RecruiterJobResponse, JobStatusUpdate,
     ApplicationCreateRequest, ApplicationStatusUpdate, ApplicationResponse,
+    CandidateApplicationDetail,
     InterviewPlanCreate, InterviewUpdate, InterviewFeedbackSubmit, InterviewResponse,
     InterviewerInviteRequest, InterviewerAcceptRequest, InterviewerResponse, InterviewerUpdate,
     OfferTemplateCreate, OfferTemplateUpdate, OfferTemplateResponse,
@@ -565,31 +566,61 @@ async def candidate_apply(
     )
 
 
-@router.get("/candidate/applications", response_model=List[ApplicationResponse])
+@router.get("/candidate/applications", response_model=List[CandidateApplicationDetail])
 async def get_my_applications(
     user: User = Depends(get_candidate_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get all applications for the current candidate."""
+    """Get all applications for the current candidate with full job details."""
     result = await db.execute(
-        select(CandidateApplication, RecruiterJob.title)
+        select(CandidateApplication, RecruiterJob, Recruiter.company_name, Recruiter.company_logo_url)
         .join(RecruiterJob, CandidateApplication.job_id == RecruiterJob.id)
+        .join(Recruiter, RecruiterJob.recruiter_id == Recruiter.id)
         .where(CandidateApplication.user_id == user.id)
         .order_by(CandidateApplication.applied_at.desc())
     )
     rows = result.all()
     out = []
-    for app, job_title in rows:
-        out.append(ApplicationResponse(
+    for app, job, company_name, company_logo in rows:
+        out.append(CandidateApplicationDetail(
             id=app.id, job_id=app.job_id, user_id=app.user_id,
             resume_id=app.resume_id, status=app.status,
             cover_letter=app.cover_letter, match_score=app.match_score,
             applied_at=app.applied_at, offer_response=app.offer_response,
-            candidate_name=user.full_name, candidate_email=user.email,
-            total_rounds=0, completed_rounds=0,
             created_at=app.created_at,
+            # Job details
+            job_title=job.title,
+            company_name=company_name,
+            company_logo_url=company_logo,
+            job_location=job.location,
+            job_type=job.job_type,
+            experience_level=job.experience_level,
+            salary_min=job.salary_min,
+            salary_max=job.salary_max,
+            currency=job.currency,
+            remote_policy=job.remote_policy,
+            job_status=job.status,
         ))
     return out
+
+
+@router.get("/candidate/applied/{job_id}")
+async def check_if_applied(
+    job_id: int,
+    user: User = Depends(get_candidate_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Check if the current user has already applied to a specific job."""
+    dup = await db.execute(
+        select(CandidateApplication.id, CandidateApplication.status).where(
+            CandidateApplication.job_id == job_id,
+            CandidateApplication.user_id == user.id,
+        )
+    )
+    row = dup.first()
+    if row:
+        return {"applied": True, "application_id": row[0], "status": row[1]}
+    return {"applied": False}
 
 
 # ─── Recruiter: view applications ─────────────────────

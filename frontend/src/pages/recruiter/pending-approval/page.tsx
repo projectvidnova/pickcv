@@ -19,7 +19,7 @@ export default function RecruiterPendingApproval() {
               This usually takes less than 24 hours.
             </p>
           </div>
-          <Link to="/recruiter/login"
+          <Link to="/login"
             className="inline-flex items-center gap-2 px-6 py-3 bg-gray-700 text-white rounded-xl hover:bg-gray-600 transition-all">
             <i className="ri-arrow-left-line" /> Back to Login
           </Link>

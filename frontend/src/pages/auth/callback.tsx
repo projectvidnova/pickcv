@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { googleAuthService } from '../../services/googleAuthService';
+import { linkedinAuthService } from '../../services/linkedinAuthService';
 
 /**
  * OAuth Callback Handler
- * Processes the authorization code from Google and exchanges it for JWT tokens
+ * Processes the authorization code from Google or LinkedIn and exchanges it for JWT tokens
  */
 export default function OAuthCallback() {
   const navigate = useNavigate();
@@ -41,15 +42,38 @@ export default function OAuthCallback() {
           googleAuthService.storeUserInfo(userName, userEmail);
 
           setIsProcessing(false);
-          // Redirect to home
           navigate('/', { replace: true });
+          return;
+        }
+
+        // Determine which OAuth provider initiated this callback
+        const oauthProvider = sessionStorage.getItem('oauth_provider');
+
+        if (oauthProvider === 'linkedin') {
+          // LinkedIn OAuth flow
+          const tokens = await linkedinAuthService.handleCallback();
+          if (tokens) {
+            linkedinAuthService.storeTokens(tokens);
+            linkedinAuthService.storeUserInfo(
+              tokens.name || 'User',
+              tokens.email || '',
+              tokens.picture
+            );
+            setIsProcessing(false);
+            navigate('/', { replace: true });
+          } else {
+            throw new Error('No tokens received from LinkedIn');
+          }
         } else {
-          // Try to exchange code for tokens (for SPA implementations)
+          // Default: Google OAuth flow
           const tokens = await googleAuthService.handleCallback();
           if (tokens) {
             googleAuthService.storeTokens(tokens);
-            // Store user info including picture from the response
-            googleAuthService.storeUserInfo(tokens.name || 'User', tokens.email || '', tokens.picture);
+            googleAuthService.storeUserInfo(
+              tokens.name || 'User',
+              tokens.email || '',
+              tokens.picture
+            );
             setIsProcessing(false);
             navigate('/', { replace: true });
           } else {

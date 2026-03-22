@@ -12,7 +12,7 @@ export default function InterviewersPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!recruiterApi.isLoggedIn()) { navigate('/recruiter/login'); return; }
+    if (!recruiterApi.isLoggedIn()) { navigate('/login'); return; }
     load();
   }, []);
 
@@ -21,7 +21,7 @@ export default function InterviewersPage() {
     try {
       const data = await recruiterApi.listInterviewers();
       setInterviewers(data);
-    } catch { navigate('/recruiter/login'); }
+    } catch { navigate('/login'); }
     setLoading(false);
   };
 
@@ -58,17 +58,17 @@ export default function InterviewersPage() {
     <div className="min-h-screen bg-gray-900">
       <nav className="border-b border-gray-800 bg-gray-900/80 backdrop-blur-xl sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <Link to="/recruiter/dashboard" className="flex items-center gap-2">
+          <Link to="/dashboard" className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center">
               <i className="ri-building-2-fill text-white text-sm" />
             </div>
             <span className="text-lg font-bold text-white">PickCV Recruiter</span>
           </Link>
           <div className="flex items-center gap-6">
-            <Link to="/recruiter/dashboard" className="text-gray-400 hover:text-white text-sm">Dashboard</Link>
-            <Link to="/recruiter/jobs" className="text-gray-400 hover:text-white text-sm">Jobs</Link>
-            <Link to="/recruiter/interviewers" className="text-white text-sm font-medium">Interviewers</Link>
-            <Link to="/recruiter/offers" className="text-gray-400 hover:text-white text-sm">Offers</Link>
+            <Link to="/dashboard" className="text-gray-400 hover:text-white text-sm">Dashboard</Link>
+            <Link to="/jobs" className="text-gray-400 hover:text-white text-sm">Jobs</Link>
+            <Link to="/interviewers" className="text-white text-sm font-medium">Interviewers</Link>
+            <Link to="/offers" className="text-gray-400 hover:text-white text-sm">Offers</Link>
           </div>
         </div>
       </nav>

@@ -35,6 +35,24 @@ interface ResumeEntry {
   updated_at: string | null;
 }
 
+interface ApplicationEntry {
+  id: number;
+  job_id: number;
+  status: string;
+  applied_at: string;
+  job_title?: string;
+  company_name?: string;
+  company_logo_url?: string;
+  job_location?: string;
+  job_type?: string;
+  experience_level?: string;
+  salary_min?: number;
+  salary_max?: number;
+  currency?: string;
+  remote_policy?: string;
+  job_status?: string;
+}
+
 const expLevelLabels: Record<string, { label: string; icon: string; color: string }> = {
   entry: { label: 'Entry Level', icon: 'ri-seedling-line', color: 'text-emerald-600 bg-emerald-50 border-emerald-100' },
   mid:   { label: 'Mid Level',   icon: 'ri-plant-line',    color: 'text-teal-600 bg-teal-50 border-teal-100' },
@@ -55,7 +73,7 @@ const EMPTY_PROFILE: ProfileData = {
   targetRole: '', preferredLocations: [], experienceLevel: '', workMode: '', skills: [],
 };
 
-type TabKey = 'resumes' | 'profile';
+type TabKey = 'resumes' | 'applications' | 'profile';
 
 const templateColors: Record<string, string> = {
   modern: 'from-teal-500 to-emerald-500', minimal: 'from-violet-500 to-purple-500',
@@ -247,14 +265,146 @@ function ResumesTab({ resumes, loading, onDelete }: { resumes: ResumeEntry[]; lo
   );
 }
 
+/* Applications Tab */
+const statusConfig: Record<string, { label: string; color: string; icon: string }> = {
+  applied:      { label: 'Applied',      color: 'bg-blue-50 text-blue-700 border-blue-100',     icon: 'ri-send-plane-fill' },
+  in_review:    { label: 'In Review',    color: 'bg-amber-50 text-amber-700 border-amber-100',  icon: 'ri-eye-line' },
+  shortlisted:  { label: 'Shortlisted',  color: 'bg-purple-50 text-purple-700 border-purple-100', icon: 'ri-star-line' },
+  interviewing: { label: 'Interviewing', color: 'bg-indigo-50 text-indigo-700 border-indigo-100', icon: 'ri-video-chat-line' },
+  offered:      { label: 'Offered',      color: 'bg-emerald-50 text-emerald-700 border-emerald-100', icon: 'ri-gift-line' },
+  hired:        { label: 'Hired',        color: 'bg-green-50 text-green-700 border-green-100',  icon: 'ri-checkbox-circle-fill' },
+  rejected:     { label: 'Rejected',     color: 'bg-red-50 text-red-700 border-red-100',        icon: 'ri-close-circle-line' },
+};
+
+function ApplicationsTab({ applications, loading }: { applications: ApplicationEntry[]; loading: boolean }) {
+  if (loading) {
+    return (
+      <div className="space-y-4 animate-pulse">
+        {[1,2,3].map(i => (<div key={i} className="glass-card rounded-2xl h-32" />))}
+      </div>
+    );
+  }
+
+  if (applications.length === 0) {
+    return (
+      <div className="glass-card rounded-2xl p-12 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
+          <i className="ri-briefcase-line text-3xl text-slate-300" />
+        </div>
+        <h3 className="text-lg font-extrabold text-slate-800 mb-2">No applications yet</h3>
+        <p className="text-sm text-slate-400 mb-6">Browse open positions and apply to start tracking your progress.</p>
+        <Link to="/jobs" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-500 text-white text-sm font-bold hover:from-teal-600 hover:to-emerald-600 transition-all shadow-sm shadow-teal-200">
+          <i className="ri-search-line text-base" />Browse Jobs
+        </Link>
+      </div>
+    );
+  }
+
+  const formatSalary = (app: ApplicationEntry) => {
+    const sym = app.currency === 'INR' ? '₹' : app.currency === 'EUR' ? '€' : app.currency === 'GBP' ? '£' : '$';
+    const fmt = (n: number) => app.currency === 'INR' ? `${(n / 100000).toFixed(1)}L` : `${(n / 1000).toFixed(0)}k`;
+    if (app.salary_min && app.salary_max) return `${sym}${fmt(app.salary_min)} - ${sym}${fmt(app.salary_max)}`;
+    if (app.salary_min) return `${sym}${fmt(app.salary_min)}+`;
+    if (app.salary_max) return `Up to ${sym}${fmt(app.salary_max)}`;
+    return null;
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-bold text-slate-700">{applications.length} application{applications.length !== 1 ? 's' : ''}</p>
+          <p className="text-xs text-slate-400 mt-0.5">Track your job application status</p>
+        </div>
+        <Link to="/jobs" className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-500 text-white text-sm font-bold hover:from-teal-600 hover:to-emerald-600 transition-all cursor-pointer shadow-sm shadow-teal-200 whitespace-nowrap">
+          <div className="w-4 h-4 flex items-center justify-center"><i className="ri-search-line text-sm" /></div>Browse Jobs
+        </Link>
+      </div>
+
+      <div className="space-y-3">
+        {applications.map((app) => {
+          const st = statusConfig[app.status] || statusConfig.applied;
+          const salary = formatSalary(app);
+          return (
+            <Link
+              key={app.id}
+              to={`/jobs/${app.job_id}`}
+              className="glass-card rounded-2xl p-5 hover:shadow-md transition-all block group"
+            >
+              <div className="flex items-start gap-4">
+                {/* Company Logo */}
+                <div className="w-14 h-14 flex-shrink-0">
+                  {app.company_logo_url ? (
+                    <img src={app.company_logo_url} alt={app.company_name || ''} className="w-full h-full object-cover rounded-xl" />
+                  ) : (
+                    <div className="w-full h-full rounded-xl bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center">
+                      <span className="text-white font-bold text-xl">{(app.company_name || 'C')[0].toUpperCase()}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Job Details */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-extrabold text-slate-900 group-hover:text-teal-700 transition-colors truncate">
+                        {app.job_title || 'Untitled Position'}
+                      </h3>
+                      <p className="text-xs font-semibold text-slate-500 mt-0.5">{app.company_name}</p>
+                    </div>
+                    {/* Status Badge */}
+                    <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border flex-shrink-0 ${st.color}`}>
+                      <i className={`${st.icon} text-xs`} />
+                      {st.label}
+                    </span>
+                  </div>
+
+                  {/* Meta */}
+                  <div className="flex flex-wrap items-center gap-3 mt-2.5 text-xs text-slate-400">
+                    {app.job_location && (
+                      <span className="flex items-center gap-1">
+                        <i className="ri-map-pin-line text-xs" />{app.job_location}
+                      </span>
+                    )}
+                    {app.job_type && (
+                      <span className="flex items-center gap-1">
+                        <i className="ri-briefcase-line text-xs" />{app.job_type}
+                      </span>
+                    )}
+                    {salary && (
+                      <span className="flex items-center gap-1">
+                        <i className="ri-money-dollar-circle-line text-xs" />{salary}
+                      </span>
+                    )}
+                    {app.remote_policy && (
+                      <span className="flex items-center gap-1">
+                        <i className="ri-home-wifi-line text-xs" />{app.remote_policy}
+                      </span>
+                    )}
+                    <span className="flex items-center gap-1">
+                      <i className="ri-calendar-line text-xs" />Applied {formatDate(app.applied_at)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </Link>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function ProfilePage() {
   const [profile, setProfile] = useState<ProfileData>(EMPTY_PROFILE);
   const [resumes, setResumes] = useState<ResumeEntry[]>([]);
+  const [applications, setApplications] = useState<ApplicationEntry[]>([]);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [savedBanner, setSavedBanner] = useState(false);
   const [activeTab, setActiveTab] = useState<TabKey>('profile');
   const [loading, setLoading] = useState(true);
   const [resumesLoading, setResumesLoading] = useState(true);
+  const [applicationsLoading, setApplicationsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -298,11 +448,21 @@ export default function ProfilePage() {
     finally { setResumesLoading(false); }
   }, []);
 
+  const fetchApplications = useCallback(async () => {
+    setApplicationsLoading(true);
+    try {
+      const result = await apiService.getMyRecruiterApplications();
+      if (result.success && result.applications) setApplications(result.applications);
+    } catch { /* silent */ }
+    finally { setApplicationsLoading(false); }
+  }, []);
+
   useEffect(() => {
     if (!isLoggedIn) return;
     fetchProfile();
     fetchResumes();
-  }, [isLoggedIn, fetchProfile, fetchResumes]);
+    fetchApplications();
+  }, [isLoggedIn, fetchProfile, fetchResumes, fetchApplications]);
 
   const handleSave = async (updated: ProfileData) => {
     setSaving(true);
@@ -367,6 +527,7 @@ export default function ProfilePage() {
 
   const tabs: { key: TabKey; label: string; icon: string; count?: number }[] = [
     { key: 'resumes', label: 'My Resumes', icon: 'ri-file-text-line', count: resumes.length },
+    { key: 'applications', label: 'Applied Jobs', icon: 'ri-briefcase-line', count: applications.length },
     { key: 'profile', label: 'Profile', icon: 'ri-user-3-line' },
   ];
 
@@ -410,6 +571,8 @@ export default function ProfilePage() {
         </div>
 
         {activeTab === 'resumes' && <ResumesTab resumes={resumes} loading={resumesLoading} onDelete={handleDeleteResume} />}
+
+        {activeTab === 'applications' && <ApplicationsTab applications={applications} loading={applicationsLoading} />}
 
         {activeTab === 'profile' && (
           <div className="grid grid-cols-3 gap-6">

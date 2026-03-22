@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiService } from '../../services/api';
 import { googleAuthService } from '../../services/googleAuthService';
+import { linkedinAuthService } from '../../services/linkedinAuthService';
+import { getPortalUrl } from '../../utils/subdomain';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -63,8 +65,14 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   };
 
   const handleLinkedInSignIn = () => {
-    // LinkedIn OAuth not yet configured — coming soon
-    setError('LinkedIn sign-in is coming soon. Please use Google or email.');
+    setLinkedinLoading(true);
+    try {
+      linkedinAuthService.redirectToLinkedInLogin();
+    } catch (error) {
+      console.error('LinkedIn sign in error:', error);
+      setError(error instanceof Error ? error.message : 'Failed to sign in with LinkedIn');
+      setLinkedinLoading(false);
+    }
   };
 
   const handleResendVerification = async (email: string) => {
@@ -106,6 +114,13 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
           });
         } else {
           const msg = result.error || 'Login failed';
+          // Detect recruiter account trying to log in through user portal
+          if (msg.toLowerCase().includes('recruiter')) {
+            setError(null);
+            onClose();
+            window.location.href = getPortalUrl('recruiter', '/login');
+            return;
+          }
           setError(msg);
           // Detect "verify your email" errors and show resend button
           if (msg.toLowerCase().includes('verify')) {

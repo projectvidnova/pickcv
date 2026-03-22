@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import { recruiterApi } from '../../../../services/recruiterService';
 
 const JOB_TYPES = ['Full-time', 'Part-time', 'Contract', 'Internship', 'Freelance'];
@@ -8,14 +8,48 @@ const REMOTE = ['On-site', 'Remote', 'Hybrid'];
 
 export default function NewJob() {
   const navigate = useNavigate();
+  const { id } = useParams();
+  const isEdit = Boolean(id);
+  const jobId = Number(id);
+
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [fetching, setFetching] = useState(isEdit);
   const [form, setForm] = useState({
     title: '', description: '', requirements: '', responsibilities: '', benefits: '',
     job_type: 'Full-time', experience_level: 'Mid', location: '', remote_policy: 'On-site',
-    salary_min: '', salary_max: '', salary_currency: 'INR',
+    salary_min: '', salary_max: '', currency: 'INR',
     required_skills: '', preferred_skills: '', pause_date: '',
   });
+
+  useEffect(() => {
+    if (!isEdit) return;
+    (async () => {
+      try {
+        const job = await recruiterApi.getJob(jobId);
+        setForm({
+          title: job.title || '',
+          description: job.description || '',
+          requirements: job.requirements || '',
+          responsibilities: job.responsibilities || '',
+          benefits: job.benefits || '',
+          job_type: job.job_type || 'Full-time',
+          experience_level: job.experience_level || 'Mid',
+          location: job.location || '',
+          remote_policy: job.remote_policy || 'On-site',
+          salary_min: job.salary_min != null ? String(job.salary_min) : '',
+          salary_max: job.salary_max != null ? String(job.salary_max) : '',
+          currency: job.currency || 'INR',
+          required_skills: (job.required_skills || []).join(', '),
+          preferred_skills: (job.preferred_skills || []).join(', '),
+          pause_date: job.pause_date ? job.pause_date.substring(0, 10) : '',
+        });
+      } catch (err: any) {
+        setError(err.message || 'Failed to load job');
+      }
+      setFetching(false);
+    })();
+  }, [isEdit, jobId]);
 
   const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }));
 
@@ -25,7 +59,7 @@ export default function NewJob() {
     setError('');
     setLoading(true);
     try {
-      await recruiterApi.createJob({
+      const payload = {
         title: form.title, description: form.description,
         requirements: form.requirements || undefined,
         responsibilities: form.responsibilities || undefined,
@@ -34,22 +68,33 @@ export default function NewJob() {
         location: form.location, remote_policy: form.remote_policy,
         salary_min: form.salary_min ? Number(form.salary_min) : undefined,
         salary_max: form.salary_max ? Number(form.salary_max) : undefined,
-        salary_currency: form.salary_currency,
+        currency: form.currency,
         required_skills: form.required_skills ? form.required_skills.split(',').map(s => s.trim()).filter(Boolean) : [],
         preferred_skills: form.preferred_skills ? form.preferred_skills.split(',').map(s => s.trim()).filter(Boolean) : [],
         pause_date: form.pause_date || undefined,
-      });
-      navigate('/recruiter/jobs');
-    } catch (err: any) { setError(err.message || 'Failed to create job'); }
+      };
+      if (isEdit) {
+        await recruiterApi.updateJob(jobId, payload);
+      } else {
+        await recruiterApi.createJob(payload);
+      }
+      navigate('/jobs');
+    } catch (err: any) { setError(err.message || (isEdit ? 'Failed to update job' : 'Failed to create job')); }
     setLoading(false);
   };
+
+  if (fetching) return (
+    <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+      <i className="ri-loader-4-line animate-spin text-blue-400 text-3xl" />
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-gray-900">
       <nav className="border-b border-gray-800 bg-gray-900/80 backdrop-blur-xl sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center gap-4">
-          <Link to="/recruiter/jobs" className="text-gray-400 hover:text-white"><i className="ri-arrow-left-line text-lg" /></Link>
-          <span className="text-lg font-bold text-white">Post New Job</span>
+          <Link to="/jobs" className="text-gray-400 hover:text-white"><i className="ri-arrow-left-line text-lg" /></Link>
+          <span className="text-lg font-bold text-white">{isEdit ? 'Edit Job' : 'Post New Job'}</span>
         </div>
       </nav>
       <div className="max-w-3xl mx-auto px-6 py-8">
@@ -133,7 +178,7 @@ export default function NewJob() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-1">Currency</label>
-                <select value={form.salary_currency} onChange={e => set('salary_currency', e.target.value)}
+                <select value={form.currency} onChange={e => set('currency', e.target.value)}
                   className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50">
                   <option>INR</option><option>USD</option><option>EUR</option><option>GBP</option>
                 </select>
@@ -162,10 +207,10 @@ export default function NewJob() {
           </div>
 
           <div className="flex gap-3">
-            <Link to="/recruiter/jobs" className="flex-1 py-3 text-center border border-gray-600 text-gray-300 rounded-xl hover:bg-gray-800 transition-all">Cancel</Link>
+            <Link to="/jobs" className="flex-1 py-3 text-center border border-gray-600 text-gray-300 rounded-xl hover:bg-gray-800 transition-all">Cancel</Link>
             <button type="submit" disabled={loading}
               className="flex-1 py-3 bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-semibold rounded-xl hover:from-blue-600 hover:to-indigo-600 transition-all disabled:opacity-50">
-              {loading ? <span><i className="ri-loader-4-line animate-spin mr-1" />Publishing...</span> : 'Publish Job'}
+              {loading ? <span><i className="ri-loader-4-line animate-spin mr-1" />{isEdit ? 'Saving...' : 'Publishing...'}</span> : (isEdit ? 'Save Changes' : 'Publish Job')}
             </button>
           </div>
         </form>

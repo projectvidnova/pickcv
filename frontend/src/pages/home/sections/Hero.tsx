@@ -54,12 +54,14 @@ export default function Hero() {
                 <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold text-gray-900 leading-[1.1] tracking-tight mb-6">
                   From Resume →
                   <br />
-                  Get{' '}
-                  <span
-                    className="bg-gradient-to-r from-teal-600 to-emerald-500 bg-clip-text text-transparent inline-block pb-2"
-                    style={{ fontFamily: "'Pacifico', cursive" }}
-                  >
-                    Hired
+                  <span className="inline-flex items-baseline pb-3">
+                    Get{' '}
+                    <span
+                      className="bg-gradient-to-r from-teal-600 to-emerald-500 bg-clip-text text-transparent inline-block pl-3 pb-4"
+                      style={{ fontFamily: "'Pacifico', cursive", lineHeight: 1.4 }}
+                    >
+                      Hired
+                    </span>
                   </span>
                 </h1>
 

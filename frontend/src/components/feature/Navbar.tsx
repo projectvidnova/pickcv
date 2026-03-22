@@ -68,13 +68,13 @@ export default function Navbar() {
   const handleCollegesClick = () => {
     setIsToolsOpen(false);
     setIsMobileMenuOpen(false);
-    navigate('/college/login');
+    navigate('/for-colleges');
   };
 
   const handleRecruitersClick = () => {
     setIsToolsOpen(false);
     setIsMobileMenuOpen(false);
-    navigate('/recruiter/login');
+    navigate('/for-recruiters');
   };
 
   return (

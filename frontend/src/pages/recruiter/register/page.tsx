@@ -45,7 +45,7 @@ export default function RecruiterRegister() {
         company_size: form.company_size || undefined,
         industry: form.industry || undefined, designation: form.designation || undefined,
       });
-      navigate('/recruiter/verify-email-sent');
+      navigate('/verify-email-sent');
     } catch (err: any) {
       setError(err.message || 'Registration failed');
     }
@@ -167,7 +167,7 @@ export default function RecruiterRegister() {
           <div className="mt-6 text-center">
             <p className="text-gray-400 text-sm">
               Already have an account?{' '}
-              <Link to="/recruiter/login" className="text-blue-400 hover:text-blue-300 font-medium">Sign in</Link>
+              <Link to="/login" className="text-blue-400 hover:text-blue-300 font-medium">Sign in</Link>
             </p>
           </div>
         </div>

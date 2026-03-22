@@ -37,7 +37,7 @@ export default function RecruiterVerifyEmail() {
                   <span>You'll receive an email once your account is approved. You can then log in and start using your recruiter dashboard.</span>
                 </p>
               </div>
-              <Link to="/recruiter/pending-approval"
+              <Link to="/pending-approval"
                 className="inline-flex items-center gap-2 px-6 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-all">
                 Got it <i className="ri-check-line" />
               </Link>
@@ -50,7 +50,7 @@ export default function RecruiterVerifyEmail() {
               </div>
               <h1 className="text-2xl font-bold text-white mb-3">Verification Failed</h1>
               <p className="text-gray-400 mb-6">{message}</p>
-              <Link to="/recruiter/login"
+              <Link to="/login"
                 className="inline-flex items-center gap-2 px-6 py-3 bg-gray-700 text-white rounded-xl hover:bg-gray-600 transition-all">
                 <i className="ri-arrow-left-line" /> Back to Login
               </Link>

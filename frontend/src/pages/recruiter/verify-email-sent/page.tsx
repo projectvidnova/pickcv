@@ -17,7 +17,7 @@ export default function VerifyEmailSent() {
             After verification, your account will be reviewed by our admin team.
             You'll receive a welcome email once approved.
           </p>
-          <Link to="/recruiter/login"
+          <Link to="/login"
             className="inline-flex items-center gap-2 px-6 py-3 bg-gray-700 text-white rounded-xl hover:bg-gray-600 transition-all">
             <i className="ri-arrow-left-line" /> Back to Login
           </Link>

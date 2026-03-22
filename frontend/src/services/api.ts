@@ -471,7 +471,7 @@ class ApiService {
   }
 
   /**
-   * Apply for a job
+   * Apply for a job (original jobs table)
    */
   async applyForJob(jobId: number, resumeId: number, coverLetter?: string) {
     try {
@@ -497,6 +497,67 @@ class ApiService {
       return { success: true, application };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Failed to apply for job' };
+    }
+  }
+
+  /**
+   * Apply for a recruiter job (candidate applies to recruiter_jobs)
+   */
+  async applyToRecruiterJob(jobId: number, resumeId?: number, coverLetter?: string) {
+    try {
+      const response = await fetch(`${this.baseUrl}/recruiter/candidate/apply`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          job_id: jobId,
+          resume_id: resumeId || null,
+          cover_letter: coverLetter || null,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to apply for job');
+      }
+
+      const application = await response.json();
+      return { success: true, application };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to apply for job' };
+    }
+  }
+
+  /**
+   * Check if user already applied to a recruiter job
+   */
+  async checkIfApplied(jobId: number) {
+    try {
+      const response = await fetch(`${this.baseUrl}/recruiter/candidate/applied/${jobId}`, {
+        headers: { 'Authorization': `Bearer ${this.token}` },
+      });
+      if (!response.ok) return { applied: false };
+      return await response.json();
+    } catch {
+      return { applied: false };
+    }
+  }
+
+  /**
+   * Get candidate's applications to recruiter jobs (with full job details)
+   */
+  async getMyRecruiterApplications() {
+    try {
+      const response = await fetch(`${this.baseUrl}/recruiter/candidate/applications`, {
+        headers: { 'Authorization': `Bearer ${this.token}` },
+      });
+      if (!response.ok) throw new Error('Failed to fetch applications');
+      const data = await response.json();
+      return { success: true, applications: data };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to fetch applications', applications: [] };
     }
   }
 

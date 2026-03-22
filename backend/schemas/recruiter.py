@@ -200,6 +200,35 @@ class ApplicationResponse(BaseModel):
         from_attributes = True
 
 
+class CandidateApplicationDetail(BaseModel):
+    """Extended application response with job details – for candidate's 'My Applications' view."""
+    id: int
+    job_id: int
+    user_id: int
+    resume_id: Optional[int] = None
+    status: str
+    cover_letter: Optional[str] = None
+    match_score: Optional[float] = None
+    applied_at: Optional[datetime] = None
+    offer_response: Optional[str] = None
+    created_at: Optional[datetime] = None
+    # Job details
+    job_title: Optional[str] = None
+    company_name: Optional[str] = None
+    company_logo_url: Optional[str] = None
+    job_location: Optional[str] = None
+    job_type: Optional[str] = None
+    experience_level: Optional[str] = None
+    salary_min: Optional[int] = None
+    salary_max: Optional[int] = None
+    currency: Optional[str] = None
+    remote_policy: Optional[str] = None
+    job_status: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
 class InterviewPlanCreate(BaseModel):
     """Plan interview rounds for a shortlisted candidate."""
     rounds: List["InterviewRoundCreate"]

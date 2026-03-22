@@ -17,13 +17,16 @@ export default function JobDetail() {
   const [showInterviewModal, setShowInterviewModal] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState<Interview | null>(null);
 
+  const [error, setError] = useState('');
+
   useEffect(() => {
-    if (!recruiterApi.isLoggedIn()) { navigate('/recruiter/login'); return; }
+    if (!recruiterApi.isLoggedIn()) { navigate('/login'); return; }
     loadData();
   }, [jobId]);
 
   const loadData = async () => {
     setLoading(true);
+    setError('');
     try {
       const [j, apps, ivs] = await Promise.all([
         recruiterApi.getJob(jobId),
@@ -31,7 +34,15 @@ export default function JobDetail() {
         recruiterApi.listInterviewers(),
       ]);
       setJob(j); setApplications(apps); setInterviewers(ivs);
-    } catch { navigate('/recruiter/jobs'); }
+    } catch (err: any) {
+      const msg = err.message || '';
+      if (msg.includes('401') || msg.includes('not authenticated') || msg.includes('Not authenticated')) {
+        recruiterApi.logout();
+        navigate('/login');
+      } else {
+        setError(msg || 'Failed to load job details');
+      }
+    }
     setLoading(false);
   };
 
@@ -63,11 +74,28 @@ export default function JobDetail() {
 
   if (loading) return <div className="min-h-screen bg-gray-900 flex items-center justify-center"><i className="ri-loader-4-line animate-spin text-blue-400 text-3xl" /></div>;
 
+  if (error) return (
+    <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+      <div className="text-center">
+        <i className="ri-error-warning-line text-red-400 text-4xl mb-4" />
+        <p className="text-red-300 mb-4">{error}</p>
+        <div className="flex gap-3 justify-center">
+          <button onClick={loadData} className="px-4 py-2 bg-blue-500 text-white text-sm rounded-xl hover:bg-blue-600">
+            <i className="ri-refresh-line mr-1" />Retry
+          </button>
+          <Link to="/jobs" className="px-4 py-2 border border-gray-600 text-gray-300 text-sm rounded-xl hover:bg-gray-800">
+            Back to Jobs
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-gray-900">
       <nav className="border-b border-gray-800 bg-gray-900/80 backdrop-blur-xl sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center gap-4">
-          <Link to="/recruiter/jobs" className="text-gray-400 hover:text-white"><i className="ri-arrow-left-line text-lg" /></Link>
+          <Link to="/jobs" className="text-gray-400 hover:text-white"><i className="ri-arrow-left-line text-lg" /></Link>
           <span className="text-lg font-bold text-white">{job?.title}</span>
           <span className={`ml-2 px-2.5 py-0.5 text-xs rounded-full ${statusColors[job?.status || ''] || 'bg-gray-700 text-gray-300'}`}>{job?.status}</span>
         </div>
