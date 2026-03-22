@@ -299,6 +299,63 @@ class ResumeAnalysis(Base):
     resume = relationship("Resume", back_populates="analyses")
 
 
+class ScrapedJob(Base):
+    """Scraped jobs from external sources (LinkedIn, Indeed, etc.)."""
+    __tablename__ = "scraped_jobs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    
+    # Job details
+    job_title = Column(String(255), nullable=False, index=True)
+    company_name = Column(String(255), nullable=False, index=True)
+    company_logo_url = Column(String(500))
+    description = Column(Text, nullable=False)
+    requirements = Column(Text)
+    benefits = Column(Text)
+    
+    # Job attributes
+    location = Column(String(255), index=True)
+    remote_policy = Column(String(50))  # Fully Remote, Hybrid, On-site, Unknown
+    job_type = Column(String(50))  # Full-time, Part-time, Contract
+    experience_level = Column(String(50))
+    industry = Column(String(255))
+    
+    # Compensation
+    salary_min = Column(Integer)
+    salary_max = Column(Integer)
+    currency = Column(String(10), default="USD")
+    
+    # Source tracking
+    source = Column(String(100), nullable=False, index=True)  # indeed, linkedin, etc.
+    external_job_id = Column(String(255), index=True)  # Original job ID from source
+    external_url = Column(String(500), nullable=False, unique=True)  # Direct link to apply
+    
+    # Deduplication
+    job_hash = Column(String(64), unique=True, index=True)  # SHA256 of title+company+location
+    
+    # Keywords and embeddings
+    keywords = Column(ARRAY(String(255)))
+    embedding = Column(Vector(768))  # For semantic search
+    
+    # Metadata
+    posted_date = Column(DateTime(timezone=True), index=True)
+    scraped_date = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    expiry_date = Column(DateTime(timezone=True))
+    is_active = Column(Boolean, default=True, index=True)
+    last_verified = Column(DateTime(timezone=True), index=True)
+    scrape_count = Column(Integer, default=1)  # How many times we've seen this
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Indexes for performance
+    __table_args__ = (
+        Index("idx_scraped_jobs_source_active", "source", "is_active"),
+        Index("idx_scraped_jobs_location_active", "location", "is_active"),
+        Index("idx_scraped_jobs_title_active", "job_title", "is_active"),
+    )
+
+
 class AuditLog(Base):
     """Audit log for tracking changes and user actions."""
     __tablename__ = "audit_logs"

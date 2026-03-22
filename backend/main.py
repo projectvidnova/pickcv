@@ -7,13 +7,14 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
 from config import settings
-from routes import resume, jobs, auth, analysis, college, admin
+from routes import resume, jobs, auth, analysis, college, admin, scraped_jobs
 from routes import departments as departments_routes
 from routes import coe as coe_routes
 from routes import skills as skills_routes
 from routes import payments as payments_routes
 from routes import e2e as e2e_routes
 from routes import recruiter as recruiter_routes
+from services.job_scheduler_service import scheduler
 from security import get_security_headers
 
 # Configure logging
@@ -116,6 +117,7 @@ app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(resume.router, prefix="/api/resume", tags=["Resume"])
 app.include_router(analysis.router, prefix="/api/analysis", tags=["Analysis"])
 app.include_router(jobs.router, prefix="/api/jobs", tags=["Jobs"])
+app.include_router(scraped_jobs.router, tags=["Scraped Jobs"])
 app.include_router(college.router, prefix="/api/college", tags=["College"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 
@@ -168,6 +170,13 @@ async def startup_event():
     logger.info(f"PickCV API starting up in {settings.environment} mode")
     logger.info(f"CORS enabled for: {settings.origins_list}")
     
+    # Start job scraper scheduler
+    try:
+        scheduler.start()
+        logger.info("Job scraper scheduler started successfully")
+    except Exception as e:
+        logger.warning(f"Failed to start job scraper scheduler: {e}")
+    
     # Auto-create database tables
     from database import engine, Base
     from models import User, Admin, College, CollegeStudent, SharedProfile, Payment  # noqa: F401 - Import to register models
@@ -179,6 +188,7 @@ async def startup_event():
         Recruiter, RecruiterJob, CandidateApplication, Interview,
         Interviewer, OfferTemplate, Offer
     )
+    from models import ScrapedJob  # noqa: F401 - Scraper models
     from sqlalchemy import text
     
     try:
@@ -215,8 +225,15 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    """Log application shutdown."""
+    """Stop scheduler and log application shutdown."""
     logger.info("PickCV API shutting down")
+    
+    # Stop job scraper scheduler
+    try:
+        scheduler.stop()
+        logger.info("Job scraper scheduler stopped successfully")
+    except Exception as e:
+        logger.warning(f"Failed to stop job scraper scheduler: {e}")
 
 
 if __name__ == "__main__":
