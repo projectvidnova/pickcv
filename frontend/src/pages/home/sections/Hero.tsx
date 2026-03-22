@@ -1,9 +1,11 @@
 
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import AuthModal from '../../../components/feature/AuthModal';
 import OptimizeModal from '../../../components/feature/OptimizeModal';
 
 export default function Hero() {
+  const navigate = useNavigate();
   const [activeStep, setActiveStep] = useState(0);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isOptimizeModalOpen, setIsOptimizeModalOpen] = useState(false);
@@ -53,15 +55,15 @@ export default function Hero() {
 
               {/* Left Content */}
               <div className="max-w-2xl lg:pr-8">
-                <div className="inline-flex items-center gap-2 glass-badge text-red-600 px-5 py-2.5 rounded-full text-sm font-medium mb-8">
-                  <i className="ri-error-warning-fill text-red-500"></i>
-                  Only 57% of resumes pass ATS parsing checks, PickCV ensures yours does.
+                <div className="inline-flex items-center gap-2 glass-badge text-emerald-700 px-5 py-2.5 rounded-full text-sm font-medium mb-8" style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.25)' }}>
+                  <i className="ri-shield-check-fill text-emerald-500"></i>
+                  Only 57% of resumes pass ATS parsing checks — PickCV ensures yours does.
                 </div>
 
               <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold text-gray-900 leading-[1.2] tracking-tight mb-6">
                   From Resume →<br />
                   <span className="inline-flex items-baseline">
-                    Get 
+                    Getting
                     <span 
                       className="bg-gradient-to-r from-teal-600 to-emerald-500 bg-clip-text text-transparent inline-block pl-3 pr-12 pt-2 pb-10 align-middle" 
                       style={{ fontFamily: "'Pacifico', cursive", lineHeight: "1.6" }}
@@ -78,13 +80,18 @@ export default function Hero() {
                 <div className="glass-card rounded-2xl p-6 mb-6">
                   <div className="flex items-center justify-between gap-4">
                     {/* Step 1: Upload */}
-                    <div className="flex-1 flex flex-col items-center text-center">
+                    <button
+                      type="button"
+                      onClick={() => setIsOptimizeModalOpen(true)}
+                      className="flex-1 flex flex-col items-center text-center cursor-pointer hover:scale-[1.02] transition-transform"
+                      aria-label="Upload your resume"
+                    >
                       <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-teal-500 to-teal-600 flex items-center justify-center text-white mb-3 shadow-lg shadow-teal-500/30">
                         <i className="ri-upload-cloud-2-line text-2xl"></i>
                       </div>
                       <p className="text-sm font-bold text-gray-900">Upload</p>
                       <p className="text-xs text-gray-500 mt-1">Your Resume</p>
-                    </div>
+                    </button>
 
                     {/* Arrow */}
                     <div className="flex items-center justify-center -mt-8">
@@ -106,13 +113,18 @@ export default function Hero() {
                     </div>
 
                     {/* Step 3: Apply */}
-                    <div className="flex-1 flex flex-col items-center text-center">
+                    <button
+                      type="button"
+                      onClick={() => navigate('/jobs')}
+                      className="flex-1 flex flex-col items-center text-center cursor-pointer hover:scale-[1.02] transition-transform"
+                      aria-label="Go to jobs page"
+                    >
                       <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center text-white mb-3 shadow-lg shadow-green-500/30">
                         <i className="ri-briefcase-4-line text-2xl"></i>
                       </div>
                       <p className="text-sm font-bold text-gray-900">Apply</p>
                       <p className="text-xs text-gray-500 mt-1">Get Hired</p>
-                    </div>
+                    </button>
                   </div>
                 </div>
 

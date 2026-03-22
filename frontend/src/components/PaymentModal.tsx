@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import paymentService, { PaymentConfig, PaymentSession, PlanInfo } from '../services/paymentService';
 
 // Zoho widget types
@@ -10,7 +10,7 @@ declare global {
       otherOptions: { api_key: string };
     }) => {
       requestPaymentMethod: (options: {
-        amount: number;
+        amount: string;
         currency_code: string;
         payments_session_id: string;
         description?: string;
@@ -19,6 +19,7 @@ declare global {
         signature: string;
         message: string;
       }>;
+      close: () => Promise<void>;
     };
   }
 }
@@ -42,10 +43,12 @@ export default function PaymentModal({
   const [status, setStatus] = useState<'idle' | 'loading' | 'processing' | 'verifying' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
   const [pendingResult, setPendingResult] = useState<{ subscriptionActivated: boolean } | null>(null);
+  const [successHandled, setSuccessHandled] = useState(false);
 
   const selectedPlanInfo = plans.find((p) => p.plan_type === selectedPlan) || plans[0];
 
   const handlePayment = useCallback(async () => {
+    setSuccessHandled(false);
     setStatus('loading');
     setErrorMessage('');
 
@@ -80,14 +83,29 @@ export default function PaymentModal({
         otherOptions: { api_key: config.api_key },
       });
 
-      // Step 5: Open payment widget (ensure amount is numeric)
-      const numericAmount = typeof session.amount === 'string' ? parseFloat(session.amount) : session.amount;
-      const result = await zpayInstance.requestPaymentMethod({
-        amount: numericAmount,
-        currency_code: session.currency,
-        payments_session_id: session.payments_session_id,
-        description: selectedPlanInfo?.label || 'PickCV Payment',
-      });
+      // Step 5: Open payment widget (Zoho requires amount as a string)
+      const stringAmount = String(typeof session.amount === 'string' ? session.amount : session.amount.toFixed(2));
+      let result: { payment_id: string; signature: string; message: string } | null = null;
+      try {
+        result = await zpayInstance.requestPaymentMethod({
+          amount: stringAmount,
+          currency_code: session.currency,
+          payments_session_id: session.payments_session_id,
+          description: selectedPlanInfo?.label || 'PickCV Payment',
+        });
+      } finally {
+        // Per Zoho docs, explicitly close widget to prevent stuck overlay states
+        try {
+          await zpayInstance.close();
+        } catch {
+          // no-op
+        }
+      }
+
+      if (!result) {
+        setStatus('idle');
+        return;
+      }
 
       // Step 6: Verify payment on backend
       setStatus('verifying');
@@ -107,18 +125,46 @@ export default function PaymentModal({
         setStatus('error');
       }
     } catch (error: any) {
-      console.error('Payment error:', error);
       if (error?.message?.includes('cancelled') || error?.message?.includes('closed')) {
         setStatus('idle');
         return;
       }
+      // Already paid for this resume — treat as success and let them download
+      if (error?.status === 409 || (error as any)?.code === 'already_paid' || error?.message?.toLowerCase().includes('already paid')) {
+        setStatus('success');
+        setPendingResult({ subscriptionActivated: false });
+        return;
+      }
+      console.error('Payment error:', error);
       setErrorMessage(error?.message || 'Payment failed. Please try again.');
       setStatus('error');
     }
   }, [resumeId, selectedPlan, selectedPlanInfo]);
 
-  /** User clicks "Download Now" after successful payment */
+  /** Auto-proceed 1.2 s after payment succeeds (brief green flash, then close + download) */
+  useEffect(() => {
+    if (!isOpen || status !== 'success' || !pendingResult || successHandled) return;
+    const timer = setTimeout(() => {
+      setSuccessHandled(true);
+      onPaymentSuccess(pendingResult.subscriptionActivated);
+      onClose();
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [isOpen, status, pendingResult, successHandled, onPaymentSuccess, onClose]);
+
+  /** Reset modal state whenever it's closed to avoid stale success re-firing */
+  useEffect(() => {
+    if (isOpen) return;
+    setStatus('idle');
+    setErrorMessage('');
+    setPendingResult(null);
+    setSuccessHandled(false);
+  }, [isOpen]);
+
+  /** Manual fallback if user clicks the button before the timer fires */
   const handleDownloadNow = () => {
+    if (successHandled) return;
+    setSuccessHandled(true);
     if (pendingResult) {
       onPaymentSuccess(pendingResult.subscriptionActivated);
     }

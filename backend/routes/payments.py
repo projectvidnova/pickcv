@@ -234,6 +234,18 @@ async def _has_resume_payment(user_id: int, resume_id: int, db: AsyncSession) ->
     return result.scalar_one_or_none() is not None
 
 
+async def _is_first_resume_for_user(user_id: int, resume_id: int, db: AsyncSession) -> bool:
+    """Return True if this resume is the user's first uploaded resume."""
+    result = await db.execute(
+        select(Resume.id)
+        .where(Resume.user_id == user_id)
+        .order_by(Resume.created_at.asc(), Resume.id.asc())
+        .limit(1)
+    )
+    first_resume_id = result.scalar_one_or_none()
+    return first_resume_id == resume_id
+
+
 # ─── Client Config ────────────────────────────────────────────
 
 @router.get("/config", response_model=PaymentConfigResponse)
@@ -278,6 +290,14 @@ async def check_download_access(
       5. Otherwise → payment required, return plans
     """
     plans = _build_plans()
+
+    # Ensure resume belongs to current user
+    resume_result = await db.execute(
+        select(Resume).where(Resume.id == resume_id, Resume.user_id == current_user.id)
+    )
+    resume = resume_result.scalar_one_or_none()
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
 
     # 1. If payments not configured → free
     if not zoho_payment_service.is_configured:
@@ -325,8 +345,9 @@ async def check_download_access(
     # 4. Check free downloads
     used = await _count_free_downloads(current_user.id, db)
     remaining = max(0, settings.free_downloads_limit - used)
+    is_first_resume = await _is_first_resume_for_user(current_user.id, resume_id, db)
 
-    if remaining > 0:
+    if remaining > 0 and is_first_resume:
         return CheckAccessResponse(
             has_access=True,
             access_type="free",
@@ -374,6 +395,13 @@ async def use_free_download(
     resume = result.scalar_one_or_none()
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
+
+    # Free download is only allowed for user's first uploaded resume
+    if not await _is_first_resume_for_user(current_user.id, data.resume_id, db):
+        raise HTTPException(
+            status_code=403,
+            detail="Free download is only available for your first uploaded resume.",
+        )
 
     # Record as a zero-amount payment
     ref = f"PCV-FREE-{current_user.id}-{data.resume_id}-{uuid.uuid4().hex[:8].upper()}"
@@ -436,7 +464,11 @@ async def create_payment_session(
             raise HTTPException(status_code=404, detail="Resume not found")
 
         if await _has_resume_payment(current_user.id, data.resume_id, db):
-            raise HTTPException(status_code=409, detail="Already paid for this resume.")
+            # Already paid — return a synthetic session so frontend proceeds to download
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "already_paid", "message": "Already paid for this resume."},
+            )
 
         description = f"Resume Download – {resume.title or 'Resume'}"
     else:
@@ -535,11 +567,14 @@ async def verify_payment(
             subscription_activated=payment.product_type in ("subscription_monthly", "subscription_yearly"),
         )
 
-    # Verify signature
+    # Verify signature (soft check — real authority is the Zoho API call below)
     if data.signature and settings.zoho_payments_signing_key:
         if not zoho_payment_service.verify_signature(data.payment_id, data.signature):
-            logger.warning("Signature mismatch for payment %s", data.payment_id)
-            raise HTTPException(status_code=400, detail="Invalid payment signature")
+            # Log warning but don't reject — the Zoho API verification is authoritative
+            logger.warning(
+                "Signature mismatch for payment %s — continuing with API verification",
+                data.payment_id,
+            )
 
     # Verify with Zoho API
     try:

@@ -61,6 +61,12 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
   const [showPaywall, setShowPaywall] = useState(false);
   const [paywallResumeId, setPaywallResumeId] = useState<number | null>(null);
   const [paywallPlans, setPaywallPlans] = useState<PlanInfo[]>([]);
+  const [pendingOptimization, setPendingOptimization] = useState<{
+    resumeId: number;
+    jobTitle: string;
+    jobDescription?: string;
+    jobLink?: string;
+  } | null>(null);
   const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const messageTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -141,32 +147,9 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
         setShowAuthModal(true);
         return;
       }
-      // Check if user already has optimized resumes (2nd+ resume → paywall)
-      try {
-        const res = await authFetch(`${API_URL}/resume/`);
-        if (res.ok) {
-          const resumes = await res.json();
-          const optimizedResumes = resumes.filter((r: any) => r.is_optimized);
-          if (optimizedResumes.length > 0) {
-            // Grab the last optimized resume ID for payment context
-            setPaywallResumeId(optimizedResumes[optimizedResumes.length - 1].id);
-            // Fetch pricing plans
-            try {
-              const plans = await paymentService.getPlans();
-              setPaywallPlans(plans);
-            } catch { /* plans will be empty, modal handles gracefully */ }
-            setShowPaywall(true);
-            return;
-          }
-        }
-      } catch (err) {
-        console.error('Error checking existing resumes:', err);
-        // Fail open — let user proceed if check fails
-      }
       setCurrentStep(2);
     }
     else if (currentStep === 2 && isJDValid()) {
-      setCurrentStep(3);
       startProcessing();
     }
   };
@@ -182,62 +165,14 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
     return false;
   };
 
-  const startProcessing = async () => {
-    // Check if user is authenticated
-    const token = localStorage.getItem('access_token');
-    if (!token) {
-      setShowAuthModal(true);
-      return;
-    }
-
+  const runOptimization = async (
+    resumeId: number,
+    jobTitle: string,
+    jobDescription?: string,
+    jobLink?: string,
+  ) => {
     try {
-      // ── Step 1: Uploading resume (0% → 15%) ──
-      setProcessingStep(1);
-      setSmoothProgress(0);
-      startSmoothProgress(0, 15, 1500);
-
-      const formData = new FormData();
-      if (uploadedFile) {
-        formData.append('file', uploadedFile);
-        formData.append('title', uploadedFile.name.replace(/\.[^/.]+$/, ""));
-      }
-
-      console.log('Uploading resume with token:', token.substring(0, 20) + '...');
-      const uploadResponse = await authFetch(`${import.meta.env.VITE_API_URL}/resume/upload`, {
-        method: 'POST',
-        body: formData
-      });
-
-      if (!uploadResponse.ok) {
-        const errorText = await uploadResponse.text();
-        console.error('Upload failed:', uploadResponse.status, errorText);
-        throw new Error(`Failed to upload resume (${uploadResponse.status}): ${errorText}`);
-      }
-
-      const uploadedResume = await uploadResponse.json();
-      const resumeId = uploadedResume.id;
-
-      // ── Step 2: Analyzing content (15% → 30%) ──
-      setProcessingStep(2);
-      startSmoothProgress(15, 30, 800);
-
-      let jobTitle = 'Target Role';
-      let jobDescription: string | undefined;
-      let jobLink: string | undefined;
-
-      if (jdMode === 'title') {
-        jobTitle = jdTitle;
-      } else if (jdMode === 'paste') {
-        jobDescription = jdPaste;
-        const firstLine = jdPaste.trim().split('\n').find(l => l.trim().length > 3);
-        if (firstLine && firstLine.trim().length < 100) {
-          jobTitle = firstLine.trim();
-        }
-      } else if (jdMode === 'link') {
-        jobLink = jdLink;
-      }
-
-      await new Promise(resolve => setTimeout(resolve, 600));
+      setCurrentStep(3);
 
       // ── Step 3: Matching keywords (30% → 40%) ──
       setProcessingStep(3);
@@ -282,17 +217,92 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
 
       // Store optimization data for the comparison page
       sessionStorage.setItem('optimizationData', JSON.stringify({
+        ...optimizationData,
         resumeId,
-        ...optimizationData
       }));
 
       // Brief completion moment
       await new Promise(resolve => setTimeout(resolve, 600));
 
       navigate('/resume-comparison', {
-        state: { optimizedResume: { resumeId, ...optimizationData } }
+        state: { optimizedResume: { ...optimizationData, resumeId } }
       });
       handleClose();
+    } catch (error) {
+      console.error('Optimization error:', error);
+      if (progressTimerRef.current) clearInterval(progressTimerRef.current);
+      alert('Failed to optimize resume. Please try again.');
+      setProcessingStep(0);
+      setSmoothProgress(0);
+      setCurrentStep(2);
+    }
+  };
+
+  const startProcessing = async () => {
+    // Check if user is authenticated
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+      setShowAuthModal(true);
+      return;
+    }
+
+    try {
+      // Ask for payment BEFORE optimization:
+      // 1) Upload resume
+      // 2) Check access/paywall
+      // 3) Only then run optimize-for-job
+
+      // ── Uploading resume (background prep before optimization screen) ──
+      setSmoothProgress(15);
+
+      const formData = new FormData();
+      if (uploadedFile) {
+        formData.append('file', uploadedFile);
+        formData.append('title', uploadedFile.name.replace(/\.[^/.]+$/, ""));
+      }
+
+      console.log('Uploading resume with token:', token.substring(0, 20) + '...');
+      const uploadResponse = await authFetch(`${import.meta.env.VITE_API_URL}/resume/upload`, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!uploadResponse.ok) {
+        const errorText = await uploadResponse.text();
+        console.error('Upload failed:', uploadResponse.status, errorText);
+        throw new Error(`Failed to upload resume (${uploadResponse.status}): ${errorText}`);
+      }
+
+      const uploadedResume = await uploadResponse.json();
+      const resumeId = uploadedResume.id;
+
+      let jobTitle = 'Target Role';
+      let jobDescription: string | undefined;
+      let jobLink: string | undefined;
+
+      if (jdMode === 'title') {
+        jobTitle = jdTitle;
+      } else if (jdMode === 'paste') {
+        jobDescription = jdPaste;
+        const firstLine = jdPaste.trim().split('\n').find(l => l.trim().length > 3);
+        if (firstLine && firstLine.trim().length < 100) {
+          jobTitle = firstLine.trim();
+        }
+      } else if (jdMode === 'link') {
+        jobLink = jdLink;
+      }
+
+      // Check payment access before optimization starts
+      const access = await paymentService.checkAccess(resumeId);
+      if (!access.has_access) {
+        setPaywallResumeId(resumeId);
+        setPaywallPlans(access.plans || []);
+        setPendingOptimization({ resumeId, jobTitle, jobDescription, jobLink });
+        setShowPaywall(true);
+        return;
+      }
+
+      await runOptimization(resumeId, jobTitle, jobDescription, jobLink);
     } catch (error) {
       console.error('Optimization error:', error);
       if (progressTimerRef.current) clearInterval(progressTimerRef.current);
@@ -315,6 +325,9 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
     setSmoothProgress(0);
     setAiMessageIndex(0);
     setShowPaywall(false);
+    setPaywallResumeId(null);
+    setPaywallPlans([]);
+    setPendingOptimization(null);
     onClose();
   };
 
@@ -928,7 +941,7 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
           // After successful login, continue where the user left off
           if (currentStep === 1 && uploadedFile) {
             setCurrentStep(2);
-          } else if (currentStep === 3) {
+          } else if (currentStep === 2 && isJDValid()) {
             startProcessing();
           }
         }}
@@ -941,10 +954,16 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
           resumeId={paywallResumeId}
           plans={paywallPlans}
           onClose={() => setShowPaywall(false)}
-          onPaymentSuccess={(subscriptionActivated) => {
+          onPaymentSuccess={async () => {
             setShowPaywall(false);
-            // After payment, let user proceed to step 2
-            setCurrentStep(2);
+            if (pendingOptimization) {
+              await runOptimization(
+                pendingOptimization.resumeId,
+                pendingOptimization.jobTitle,
+                pendingOptimization.jobDescription,
+                pendingOptimization.jobLink,
+              );
+            }
           }}
         />
       )}

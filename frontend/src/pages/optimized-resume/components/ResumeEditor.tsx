@@ -32,9 +32,10 @@ export default function ResumeEditor({ data, onDataChange, templateId, children 
       const optimizationData = sessionStorage.getItem('optimizationData');
       if (optimizationData) {
         const parsed = JSON.parse(optimizationData);
-        if (parsed.resumeId) {
-          setResumeId(parsed.resumeId);
-          checkPaymentAccess(parsed.resumeId);
+        const parsedResumeId = Number(parsed.resumeId ?? parsed.resume_id);
+        if (parsedResumeId) {
+          setResumeId(parsedResumeId);
+          checkPaymentAccess(parsedResumeId);
         }
       }
     } catch (error) {
@@ -65,7 +66,7 @@ export default function ResumeEditor({ data, onDataChange, templateId, children 
       if (!optimizationData) return;
       
       const parsedData = JSON.parse(optimizationData);
-      const resumeId = parsedData.resumeId;
+      const resumeId = Number(parsedData.resumeId ?? parsedData.resume_id);
       
       if (!resumeId) return;
 

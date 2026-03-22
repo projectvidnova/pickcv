@@ -2,23 +2,73 @@ import { useState } from 'react';
 
 const faqs = [
   {
-    question: 'Can I create resumes for different jobs?',
-    answer: 'Yes! Upload the same resume with different job descriptions and PickCV will tailor keywords, tone, and formatting for each specific role. Optimize once, apply everywhere.',
+    question: 'How does the resume builder work?',
+    answer: `PickCV converts your input into structured hiring intelligence, not just a formatted document.
+
+• You enter details like education, projects, skills, and internships
+• The system organizes this into a standardized, machine-readable format
+• AI improves clarity and specificity without adding or fabricating information
+• Skills are extracted (both explicit and inferred from your experience)
+
+Your resume is then:
+• Tailored to align with hiring system expectations and role requirements
+• Optimized for both automated screening and recruiter readability
+• Structured to highlight relevant skills, projects, and outcomes
+
+Outputs include:
+• Resume Quality Score (0–100)
+• ATS Compatibility Score
+• Multiple role-specific resumes from a single profile`,
     icon: 'ri-file-list-3-line',
   },
   {
-    question: 'How accurate is the ATS matching?',
-    answer: 'Our AI analyzes your resume against the same algorithms used by top ATS platforms like Workday, Greenhouse, and Lever. Users typically see scores improve from 30–40% to 85–94% after optimization.',
+    question: 'Is my data safe and private?',
+    answer: `Yes. PickCV is designed with strict data protection and user control.
+
+Security measures:
+• Encryption in transit (TLS) and at rest (AES-256)
+• Role-based access control (RBAC)
+• Session expiry after inactivity
+
+Privacy controls:
+• Explicit consent before data processing
+• Ability to delete your account and all associated data
+• Profile visibility settings (Public or Private)
+
+Important:
+• Your data is never sold to third parties
+• AI does not fabricate or alter your information`,
     icon: 'ri-shield-check-line',
   },
   {
-    question: 'Is my data secure?',
-    answer: 'Absolutely. We are DPDP (Digital Personal Data Protection) compliant. Your resume data is encrypted in transit and at rest. We never share your personal information with third parties.',
+    question: 'Is there a free plan?',
+    answer: `Yes. You can start without any payment.
+
+• First resume download: Free
+• After that: ₹49 per resume (Go plan)
+
+Paid plans:
+• Pro (₹499/month)
+  - Unlimited resume generation and downloads
+  - Role-specific resume versions
+  - Advanced optimization features
+
+• Max (₹999/year)
+  - Same features as Pro
+  - Better suited for long-term use (e.g., students preparing for placements)
+
+Note: Free resumes include a watermark.`,
     icon: 'ri-lock-line',
   },
   {
-    question: 'Is there a free plan?',
-    answer: 'Yes — you can upload and get your ATS score for free, no signup required. Our premium plan unlocks full optimization, talent signal conversion, and unlimited downloads.',
+    question: 'How long does it take to build a resume?',
+    answer: `Most users complete their first resume quickly.
+
+• Manual input: ~5–10 minutes
+• AI optimization: ~30–60 seconds
+• Uploading an existing resume: near-instant parsing
+
+The system processes heavy tasks in the background, so the experience remains fast and responsive.`,
     icon: 'ri-gift-line',
   },
   {
@@ -101,8 +151,8 @@ export default function FAQ() {
                   </div>
                 </button>
 
-                <div className={`transition-all duration-300 ease-in-out overflow-hidden ${isOpen ? 'max-h-64 opacity-100' : 'max-h-0 opacity-0'}`}>
-                  <p className="px-6 pb-6 pl-20 text-gray-600 leading-relaxed text-sm">
+                <div className={`transition-all duration-300 ease-in-out overflow-hidden ${isOpen ? 'max-h-[1200px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                  <p className="px-6 pb-6 pl-20 text-gray-600 leading-relaxed text-sm whitespace-pre-line">
                     {faq.answer}
                   </p>
                 </div>

@@ -138,7 +138,12 @@ class PaymentService {
     });
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.detail || 'Failed to create payment session');
+      const detail = error.detail;
+      const message = typeof detail === 'object' ? detail.message : (detail || 'Failed to create payment session');
+      const err = new Error(message) as Error & { status: number; code?: string };
+      err.status = response.status;
+      if (typeof detail === 'object') err.code = detail.code;
+      throw err;
     }
     return response.json();
   }

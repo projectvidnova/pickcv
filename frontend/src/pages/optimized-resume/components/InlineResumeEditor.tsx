@@ -189,9 +189,10 @@ export default function InlineResumeEditor({
         const raw = sessionStorage.getItem('optimizationData');
         if (raw) {
           const parsed = JSON.parse(raw);
-          if (parsed.resumeId) {
-            setResumeId(parsed.resumeId);
-            const access = await paymentService.checkAccess(parsed.resumeId);
+          const parsedResumeId = Number(parsed.resumeId ?? parsed.resume_id);
+          if (parsedResumeId) {
+            setResumeId(parsedResumeId);
+            const access = await paymentService.checkAccess(parsedResumeId);
             setHasPaymentAccess(access.has_access);
             setAccessType(access.access_type);
             setFreeDownloadsRemaining(access.free_downloads_remaining);
@@ -298,9 +299,10 @@ export default function InlineResumeEditor({
       const raw = sessionStorage.getItem('optimizationData');
       if (!raw) { setIsSaving(false); return; }
       const parsed = JSON.parse(raw);
-      if (!parsed.resumeId) { setIsSaving(false); return; }
+      const parsedResumeId = Number(parsed.resumeId ?? parsed.resume_id);
+      if (!parsedResumeId) { setIsSaving(false); return; }
 
-      const res = await authFetch(`${import.meta.env.VITE_API_URL}/resume/${parsed.resumeId}/save-edited`, {
+      const res = await authFetch(`${import.meta.env.VITE_API_URL}/resume/${parsedResumeId}/save-edited`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...data, template_id: `${templateId}-${theme.id}` }),
@@ -333,7 +335,10 @@ export default function InlineResumeEditor({
     // Case 3: Payment required — show pricing modal
     if (resumeId) {
       setShowPaymentModal(true);
+      return;
     }
+
+    alert('Could not determine resume ID. Please re-optimize your resume and try again.');
   };
 
   const handleCouponSubmit = async () => {
