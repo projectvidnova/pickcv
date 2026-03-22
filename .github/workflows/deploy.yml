@@ -26,7 +26,7 @@ jobs:
       CLOUD_RUN_SERVICE: pickcv-backend
       CLOUD_SQL_INSTANCE: pickcv-prod-001:us-central1:pickcv-postgres
       HOSTING_URL: https://studio-1324640898-76b00.web.app
-      API_URL: https://pickcv-backend-318698650933.us-central1.run.app/api
+      API_URL: https://pickcv-backend-lqi6d4p6pq-uc.a.run.app/api
 
     steps:
       - name: Checkout
