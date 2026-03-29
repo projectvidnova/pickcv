@@ -14,7 +14,7 @@ from routes import skills as skills_routes
 from routes import payments as payments_routes
 from routes import e2e as e2e_routes
 from routes import recruiter as recruiter_routes
-from security import get_security_headers
+from security import get_security_headers, rate_limiter
 
 # Configure logging
 logging.basicConfig(level=settings.log_level, format=settings.log_format)
@@ -73,6 +73,28 @@ async def add_security_headers(request: Request, call_next):
         del response.headers["X-Powered-By"]
     
     return response
+
+
+# ============= RATE LIMITING MIDDLEWARE =============
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    """Enforce per-IP rate limiting."""
+    # Skip rate limiting for health checks
+    if request.url.path in ("/", "/health", "/api/health"):
+        return await call_next(request)
+
+    client_ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown")
+    # Use the first IP if X-Forwarded-For contains a chain
+    if "," in client_ip:
+        client_ip = client_ip.split(",")[0].strip()
+
+    if not rate_limiter.is_allowed(client_ip):
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "Too many requests. Please try again later."},
+        )
+
+    return await call_next(request)
 
 
 # ============= ERROR HANDLERS =============

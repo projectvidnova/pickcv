@@ -41,27 +41,23 @@ export const googleAuthService = {
    */
   async exchangeCodeForToken(code: string): Promise<GoogleAuthResponse> {
     try {
-      const url = `${API_URL}/auth/google/token?code=${encodeURIComponent(code)}&redirect_uri=${encodeURIComponent(getRedirectUri())}`;
-      console.log('Calling backend token exchange:', url);
-      
-      const response = await fetch(url, {
+      const response = await fetch(`${API_URL}/auth/google/token`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
+        body: JSON.stringify({
+          code,
+          redirect_uri: getRedirectUri(),
+        }),
       });
 
       if (!response.ok) {
-        const errorBody = await response.text();
-        console.error('Backend error response:', errorBody);
         throw new Error(`Token exchange failed: ${response.status} ${response.statusText}`);
       }
 
-      const data = await response.json();
-      console.log('Token exchange successful:', data);
-      return data;
+      return await response.json();
     } catch (error) {
-      console.error('Token exchange error:', error);
       throw new Error(`Failed to exchange code for token: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   },
@@ -94,11 +90,11 @@ export const googleAuthService = {
     const code = params.get('code');
     const state = params.get('state');
 
-    // Verify state for CSRF protection (warning instead of error for now)
+    // Verify state for CSRF protection — MUST match to prevent login-CSRF
     const savedState = sessionStorage.getItem('oauth_state');
-    if (state && savedState && state !== savedState) {
-      console.warn('State mismatch - CSRF check warning (non-blocking)');
-      // Continue anyway for now in development
+    if (!state || !savedState || state !== savedState) {
+      sessionStorage.removeItem('oauth_state');
+      throw new Error('OAuth state mismatch — possible CSRF attack. Please try again.');
     }
 
     if (!code) {
@@ -106,23 +102,22 @@ export const googleAuthService = {
     }
 
     try {
-      console.log('Exchanging code for token...');
       const response = await this.exchangeCodeForToken(code);
       sessionStorage.removeItem('oauth_state');
       return response;
     } catch (error) {
       sessionStorage.removeItem('oauth_state');
-      console.error('Token exchange error:', error);
       throw error;
     }
   },
 
   /**
-   * Generate random state for CSRF protection
+   * Generate cryptographically secure random state for CSRF protection
    */
   generateState(): string {
-    return Math.random().toString(36).substring(2, 15) +
-      Math.random().toString(36).substring(2, 15);
+    const array = new Uint8Array(24);
+    crypto.getRandomValues(array);
+    return Array.from(array, (b) => b.toString(16).padStart(2, '0')).join('');
   },
 
   /**

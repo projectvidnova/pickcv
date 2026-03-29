@@ -458,17 +458,40 @@ async def google_callback(code: str, state: str, request: Request, db: AsyncSess
     access_token_jwt = auth_service.create_access_token(user.id)
     refresh_token = auth_service.create_refresh_token(user.id)
     
-    # Redirect to frontend with tokens and user info
+    # Redirect to frontend using URL fragment (hash) instead of query params.
+    # Fragments are NOT sent to the server in subsequent requests and don't
+    # leak via the Referer header, making them safer for token transport.
     frontend_url = get_frontend_origin(request)
-    redirect_url = f"{frontend_url}/auth/callback?access_token={access_token_jwt}&refresh_token={refresh_token}&user_id={user.id}&email={user.email}&name={user.full_name}"
+    from urllib.parse import urlencode, quote
+    params = urlencode({
+        "access_token": access_token_jwt,
+        "refresh_token": refresh_token,
+        "user_id": user.id,
+        "email": user.email,
+        "name": user.full_name or "",
+    })
+    redirect_url = f"{frontend_url}/auth/callback#{params}"
     
     return RedirectResponse(url=redirect_url)
 
 
 @router.post("/google/token")
-async def google_token(code: str, redirect_uri: str = None, db: AsyncSession = Depends(get_db)):
+async def google_token(request: Request, db: AsyncSession = Depends(get_db)):
     """Exchange Google authorization code for JWT tokens (mobile/SPA friendly)."""
     try:
+        # Accept code from JSON body or query params for backward compatibility
+        code = None
+        redirect_uri = None
+        try:
+            body = await request.json()
+            code = body.get("code")
+            redirect_uri = body.get("redirect_uri")
+        except Exception:
+            pass
+        if not code:
+            params = request.query_params
+            code = params.get("code")
+            redirect_uri = redirect_uri or params.get("redirect_uri")
         if not code:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -570,9 +593,22 @@ async def linkedin_login():
 
 
 @router.post("/linkedin/token")
-async def linkedin_token(code: str, redirect_uri: str = None, db: AsyncSession = Depends(get_db), background_tasks: BackgroundTasks = BackgroundTasks()):
+async def linkedin_token(request: Request, db: AsyncSession = Depends(get_db), background_tasks: BackgroundTasks = BackgroundTasks()):
     """Exchange LinkedIn authorization code for JWT tokens (SPA flow)."""
     try:
+        # Accept code from JSON body or query params for backward compatibility
+        code = None
+        redirect_uri = None
+        try:
+            body = await request.json()
+            code = body.get("code")
+            redirect_uri = body.get("redirect_uri")
+        except Exception:
+            pass
+        if not code:
+            params = request.query_params
+            code = params.get("code")
+            redirect_uri = redirect_uri or params.get("redirect_uri")
         if not code:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
