@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { ResumeData, SectionId, ResumeSection, ColorTheme, TemplateId } from '../types';
-import { RESUME_TEMPLATES, getDefaultTheme } from './themes';
+import { RESUME_TEMPLATES, getDefaultTheme, getVariantTemplates } from './themes';
 import TemplatePicker from './TemplatePicker';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -144,14 +144,32 @@ function SectionHeading({ label, icon, color, borderColor, style }: { label: str
 export default function InlineResumeEditor({
   data,
   onDataChange,
+  initialTemplateId = 'v1-stack-first',
+  variantId,
+  variantRationale,
 }: {
   data: ResumeData;
   onDataChange: (d: ResumeData) => void;
+  initialTemplateId?: TemplateId;
+  variantId?: string;
+  variantRationale?: string;
 }) {
-  const [templateId, setTemplateId] = useState<TemplateId>('classic');
-  const template = RESUME_TEMPLATES.find((t) => t.id === templateId)!;
-  const [theme, setTheme] = useState<ColorTheme>(template.colors[0]);
+  const [templateId, setTemplateId] = useState<TemplateId>(initialTemplateId);
+  const variantTemplates = variantId ? getVariantTemplates(variantId) : RESUME_TEMPLATES.slice(0, 5);
+  const template = variantTemplates.find((t) => t.id === templateId) || variantTemplates[0];
+  const [theme, setTheme] = useState<ColorTheme>(template?.colors[0] || getDefaultTheme(templateId));
   const [showAddSection, setShowAddSection] = useState(false);
+
+  // Sync when the recommended template changes from the parent
+  useEffect(() => {
+    if (initialTemplateId !== templateId) {
+      setTemplateId(initialTemplateId);
+      const tpl = variantTemplates.find((t) => t.id === initialTemplateId) || variantTemplates[0];
+      if (tpl) setTheme(tpl.colors[0]);
+    }
+  // only re-run when initialTemplateId prop changes, not on internal template switches
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialTemplateId]);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle');
@@ -181,6 +199,23 @@ export default function InlineResumeEditor({
   ]);
 
   const visibleSections = sections.filter((s) => s.visible);
+
+  // ─── Page-awareness: track content height for visual page boundaries ───
+  const A4_PAGE_HEIGHT = 866; // A4 page height in px at 612px width
+  const [resumeContentHeight, setResumeContentHeight] = useState(A4_PAGE_HEIGHT);
+
+  useEffect(() => {
+    if (!resumeRef.current) return;
+    const obs = new ResizeObserver((entries) => {
+      for (const entry of entries) setResumeContentHeight(entry.contentRect.height);
+    });
+    obs.observe(resumeRef.current);
+    return () => obs.disconnect();
+  }, [templateId, theme]);
+
+  const totalPages = Math.max(1, Math.ceil(resumeContentHeight / A4_PAGE_HEIGHT));
+  const pageBreakPositions: number[] = [];
+  for (let p = 1; p < totalPages; p++) pageBreakPositions.push(p * A4_PAGE_HEIGHT);
 
   // Check payment access on mount
   useEffect(() => {
@@ -214,8 +249,8 @@ export default function InlineResumeEditor({
   /* Switch template → pick first color of that template */
   const switchTemplate = (id: TemplateId) => {
     setTemplateId(id);
-    const tpl = RESUME_TEMPLATES.find((t) => t.id === id)!;
-    setTheme(tpl.colors[0]);
+    const tpl = variantTemplates.find((t) => t.id === id) || RESUME_TEMPLATES.find((t) => t.id === id);
+    if (tpl) setTheme(tpl.colors[0]);
   };
 
   /* ─── data helpers ─── */
@@ -403,26 +438,56 @@ export default function InlineResumeEditor({
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 0; // edge-to-edge
+      const margin = 6; // mm — small margin so content doesn't touch edges
+      const usableWidth = pageWidth - 2 * margin;
+      const usableHeight = pageHeight - 2 * margin;
 
-      // Scale image to fit page width
-      const imgWidth = pageWidth - margin * 2;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      const scaledWidth = usableWidth;
+      const scaledHeight = (canvas.height * usableWidth) / canvas.width;
 
-      // If it fits on one page, just add it
-      if (imgHeight <= pageHeight) {
-        pdf.addImage(imgData, 'PNG', margin, 0, imgWidth, imgHeight);
+      /**
+       * Smart page-break helper: scans a ±range band around `targetRow`
+       * and picks the row with the most white pixels (natural whitespace
+       * between sections / entries).
+       */
+      const findCleanBreak = (cvs: HTMLCanvasElement, targetRow: number, range = 60): number => {
+        const ctx2 = cvs.getContext('2d');
+        if (!ctx2) return targetRow;
+        const startRow = Math.max(0, targetRow - range);
+        const bandHeight = Math.min(range * 2, cvs.height - startRow);
+        const band = ctx2.getImageData(0, startRow, cvs.width, bandHeight);
+        const d = band.data;
+        const w = cvs.width;
+        let bestRow = targetRow;
+        let bestScore = -1;
+        for (let r = 0; r < bandHeight; r++) {
+          let score = 0;
+          const base = r * w * 4;
+          for (let x = 0; x < w * 4; x += 4) {
+            if (d[base + x] > 245 && d[base + x + 1] > 245 && d[base + x + 2] > 245) score++;
+          }
+          if (score > bestScore) { bestScore = score; bestRow = startRow + r; }
+        }
+        return bestRow;
+      };
+
+      if (scaledHeight <= usableHeight) {
+        // Fits on one page
+        const offsetX = margin + (usableWidth - scaledWidth) / 2;
+        pdf.addImage(imgData, 'PNG', offsetX, margin, scaledWidth, scaledHeight);
       } else {
-        // Multi-page: slice the canvas into page-sized chunks
-        const scaledPageHeight = (pageHeight * canvas.width) / imgWidth;
+        // Multi-page with smart break detection
+        const nominalSlice = (usableHeight / scaledHeight) * canvas.height;
         let yOffset = 0;
-        let pageNum = 0;
+        let pageIndex = 0;
 
         while (yOffset < canvas.height) {
-          if (pageNum > 0) pdf.addPage();
-
-          // Create a slice of the canvas for this page
-          const sliceHeight = Math.min(scaledPageHeight, canvas.height - yOffset);
+          let endRow = Math.min(yOffset + nominalSlice, canvas.height);
+          // For non-last pages, search for a clean whitespace row near the boundary
+          if (endRow < canvas.height) {
+            endRow = findCleanBreak(canvas, Math.round(endRow));
+          }
+          const sliceHeight = endRow - yOffset;
           const pageCanvas = document.createElement('canvas');
           pageCanvas.width = canvas.width;
           pageCanvas.height = sliceHeight;
@@ -430,12 +495,13 @@ export default function InlineResumeEditor({
           if (ctx) {
             ctx.drawImage(canvas, 0, yOffset, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight);
             const pageImgData = pageCanvas.toDataURL('image/png');
-            const renderedHeight = (sliceHeight * imgWidth) / canvas.width;
-            pdf.addImage(pageImgData, 'PNG', margin, 0, imgWidth, renderedHeight);
-          }
+            const sliceScaledHeight = (sliceHeight * usableWidth) / canvas.width;
 
-          yOffset += scaledPageHeight;
-          pageNum++;
+            if (pageIndex > 0) pdf.addPage();
+            pdf.addImage(pageImgData, 'PNG', margin, margin, usableWidth, sliceScaledHeight);
+          }
+          yOffset = endRow;
+          pageIndex++;
         }
       }
 
@@ -582,233 +648,90 @@ export default function InlineResumeEditor({
   };
 
   /* ════════════════════════════════════════════
-     Template renderers
+     Layout Configuration System
+     Each template maps to a layout config to avoid
+     50 separate component definitions.
      ════════════════════════════════════════════ */
 
-  /* ── 1. Classic — colored top header, single column ── */
-  const ClassicTemplate = () => (
-    <div ref={resumeRef} className="w-[612px] bg-white shadow-2xl rounded-sm overflow-hidden" style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif" }}>
-      <div className="px-8 py-5" style={{ backgroundColor: theme.headerBg }}>
-        <EditableText value={data.name} onChange={(v) => update('name', v)} tag="h1" className="text-xl font-bold mb-0.5" style={{ color: theme.headerText }} placeholder="Your Name" />
-        <EditableText value={data.title} onChange={(v) => update('title', v)} tag="p" className="text-sm font-medium mb-3 opacity-85" style={{ color: theme.headerText }} placeholder="Professional Title" />
-        <ContactRow color={`${theme.headerText}cc`} />
-      </div>
-      <div className="px-8 py-6">
-        {visibleSections.map((s, i) => renderSection(s, i, 'underline', 'tags'))}
-      </div>
-    </div>
-  );
+  type LayoutType = 'header-single' | 'sidebar-left' | 'sidebar-right' | 'centered' | 'minimal' | 'bold-bars' | 'timeline' | 'two-col';
+  type HeadingStyle = 'underline' | 'pill' | 'side' | 'caps';
+  type SkillLayout = 'tags' | 'list';
 
-  /* ── 2. Modern — left sidebar, right body ── */
-  const ModernTemplate = () => (
-    <div ref={resumeRef} className="w-[612px] bg-white shadow-2xl rounded-sm overflow-hidden flex" style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif" }}>
-      {/* Sidebar */}
-      <div className="w-[190px] flex-shrink-0 px-5 py-6" style={{ backgroundColor: theme.headerBg }}>
-        <EditableText value={data.name} onChange={(v) => update('name', v)} tag="h1" className="text-[16px] font-bold mb-0.5 leading-tight" style={{ color: theme.headerText }} placeholder="Your Name" />
-        <EditableText value={data.title} onChange={(v) => update('title', v)} tag="p" className="text-[10px] font-medium mb-5 opacity-80" style={{ color: theme.headerText }} placeholder="Title" />
+  interface LayoutConfig {
+    layout: LayoutType;
+    headingStyle: HeadingStyle;
+    skillLayout: SkillLayout;
+    font: 'sans' | 'serif';
+    sidebarSections?: SectionId[];
+  }
 
-        {/* Contact */}
-        <div className="mb-5">
-          <h3 className="text-[9px] font-bold uppercase tracking-[0.25em] mb-2 opacity-60" style={{ color: theme.headerText }}>Contact</h3>
-          <div className="space-y-1.5 text-[9px]" style={{ color: `${theme.headerText}cc` }}>
-            <div className="flex items-start gap-1.5"><i className="ri-mail-line mt-0.5 flex-shrink-0 text-[8px]" /><EditableText value={data.email} onChange={(v) => update('email', v)} placeholder="Email" /></div>
-            <div className="flex items-start gap-1.5"><i className="ri-phone-line mt-0.5 flex-shrink-0 text-[8px]" /><EditableText value={data.phone} onChange={(v) => update('phone', v)} placeholder="Phone" /></div>
-            <div className="flex items-start gap-1.5"><i className="ri-linkedin-box-line mt-0.5 flex-shrink-0 text-[8px]" /><EditableText value={data.linkedin} onChange={(v) => update('linkedin', v)} placeholder="LinkedIn" /></div>
-            <div className="flex items-start gap-1.5"><i className="ri-map-pin-line mt-0.5 flex-shrink-0 text-[8px]" /><EditableText value={data.location} onChange={(v) => update('location', v)} placeholder="Location" /></div>
-          </div>
-        </div>
+  const FONT_SANS = "'Inter', 'Segoe UI', system-ui, sans-serif";
+  const FONT_SERIF = "'Georgia', 'Times New Roman', serif";
 
-        {/* Skills in sidebar */}
-        {visibleSections.find((s) => s.id === 'skills') && (
-          <div className="mb-5">
-            <h3 className="text-[9px] font-bold uppercase tracking-[0.25em] mb-2 opacity-60" style={{ color: theme.headerText }}>Skills</h3>
-            <div className="flex flex-wrap gap-1">
-              {data.skills.map((skill, i) => (
-                <div key={i} className="group/skill flex items-center gap-0.5 px-2 py-0.5 rounded text-[8px] font-medium" style={{ backgroundColor: 'rgba(255,255,255,0.12)', color: `${theme.headerText}dd` }}>
-                  <EditableText value={skill} onChange={(v) => updateSkill(i, v)} className="text-[8px]" placeholder="Skill" />
-                  <button onClick={() => removeSkill(i)} className="opacity-0 group-hover/skill:opacity-100 text-red-300 hover:text-red-100 text-[8px]"><i className="ri-close-line" /></button>
-                </div>
-              ))}
-              <button onClick={addSkill} className="opacity-0 group-hover:opacity-100 px-1.5 py-0.5 rounded text-[8px] font-medium" style={{ backgroundColor: 'rgba(255,255,255,0.08)', color: `${theme.headerText}99` }}><i className="ri-add-line" /></button>
-            </div>
-          </div>
-        )}
-
-        {/* Education in sidebar */}
-        {visibleSections.find((s) => s.id === 'education') && (
-          <div>
-            <h3 className="text-[9px] font-bold uppercase tracking-[0.25em] mb-2 opacity-60" style={{ color: theme.headerText }}>Education</h3>
-            <div className="space-y-2">
-              {data.education.map((edu, i) => (
-                <div key={i} className="group/edu">
-                  <EditableText value={edu.degree} onChange={(v) => { const ed = [...data.education]; ed[i] = { ...ed[i], degree: v }; update('education', ed); }} tag="p" className="text-[9px] font-bold" style={{ color: theme.headerText }} placeholder="Degree" />
-                  <EditableText value={edu.school} onChange={(v) => { const ed = [...data.education]; ed[i] = { ...ed[i], school: v }; update('education', ed); }} tag="p" className="text-[8px] opacity-70" style={{ color: theme.headerText }} placeholder="School" />
-                  <EditableText value={edu.period} onChange={(v) => { const ed = [...data.education]; ed[i] = { ...ed[i], period: v }; update('education', ed); }} tag="p" className="text-[8px] opacity-50" style={{ color: theme.headerText }} placeholder="Year" />
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Main body — only summary & experience */}
-      <div className="flex-1 px-6 py-6">
-        {visibleSections
-          .filter((s) => s.id === 'summary' || s.id === 'experience')
-          .map((s, i) => renderSection(s, i, 'side'))}
-      </div>
-    </div>
-  );
-
-  /* ── 3. Executive — centered name, thin accent line, single column ── */
-  const ExecutiveTemplate = () => (
-    <div ref={resumeRef} className="w-[612px] bg-white shadow-2xl rounded-sm overflow-hidden" style={{ fontFamily: "'Georgia', 'Times New Roman', serif" }}>
-      {/* Accent top bar */}
-      <div className="h-2" style={{ backgroundColor: theme.primary }} />
-      <div className="px-10 pt-6 pb-4 text-center">
-        <EditableText value={data.name} onChange={(v) => update('name', v)} tag="h1" className="text-2xl font-bold tracking-wide mb-0.5" style={{ color: theme.primary, fontFamily: "'Georgia', serif" }} placeholder="Your Name" />
-        <EditableText value={data.title} onChange={(v) => update('title', v)} tag="p" className="text-[12px] font-normal uppercase tracking-[0.3em] text-gray-500 mb-4" placeholder="Professional Title" />
-        <div className="w-16 h-px mx-auto mb-3" style={{ backgroundColor: theme.primary }} />
-        <ContactRow color="#6b7280" separator="|" />
-      </div>
-      <div className="px-10 py-4">
-        {visibleSections.map((s, i) => renderSection(s, i, 'caps', 'tags'))}
-      </div>
-    </div>
-  );
-
-  /* ── 4. Minimal — no color header, clean black & white ── */
-  const MinimalTemplate = () => (
-    <div ref={resumeRef} className="w-[612px] bg-white shadow-2xl rounded-sm overflow-hidden" style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif" }}>
-      <div className="px-8 pt-7 pb-4">
-        <EditableText value={data.name} onChange={(v) => update('name', v)} tag="h1" className="text-xl font-extrabold text-gray-900 mb-0.5" placeholder="Your Name" />
-        <EditableText value={data.title} onChange={(v) => update('title', v)} tag="p" className="text-[12px] text-gray-500 mb-3" placeholder="Professional Title" />
-        <div className="h-px bg-gray-200 mb-3" />
-        <ContactRow color="#6b7280" />
-      </div>
-      <div className="px-8 pb-6">
-        {visibleSections.map((s, i) => renderSection(s, i, 'underline', 'tags'))}
-      </div>
-    </div>
-  );
-
-  /* ── 5. Professional — top header + two-column body (skills sidebar right) ── */
-  const ProfessionalTemplate = () => {
-    const mainSections = visibleSections.filter((s) => s.id === 'summary' || s.id === 'experience');
-    const rightSections = visibleSections.filter((s) => s.id === 'skills' || s.id === 'education');
-
-    return (
-      <div ref={resumeRef} className="w-[612px] bg-white shadow-2xl rounded-sm overflow-hidden" style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif" }}>
-        {/* Header */}
-        <div className="px-8 py-5 flex items-end justify-between" style={{ backgroundColor: theme.headerBg }}>
-          <div>
-            <EditableText value={data.name} onChange={(v) => update('name', v)} tag="h1" className="text-lg font-bold mb-0.5" style={{ color: theme.headerText }} placeholder="Your Name" />
-            <EditableText value={data.title} onChange={(v) => update('title', v)} tag="p" className="text-[11px] font-medium opacity-80" style={{ color: theme.headerText }} placeholder="Title" />
-          </div>
-          <div className="text-right space-y-0.5 text-[9px]" style={{ color: `${theme.headerText}cc` }}>
-            <div className="flex items-center gap-1 justify-end"><EditableText value={data.email} onChange={(v) => update('email', v)} placeholder="Email" /><i className="ri-mail-line" /></div>
-            <div className="flex items-center gap-1 justify-end"><EditableText value={data.phone} onChange={(v) => update('phone', v)} placeholder="Phone" /><i className="ri-phone-line" /></div>
-            <div className="flex items-center gap-1 justify-end"><EditableText value={data.location} onChange={(v) => update('location', v)} placeholder="Location" /><i className="ri-map-pin-line" /></div>
-          </div>
-        </div>
-
-        {/* Two-col body */}
-        <div className="flex">
-          <div className="flex-1 px-6 py-5 border-r border-gray-100">
-            {mainSections.map((s, i) => renderSection(s, i, 'pill'))}
-          </div>
-          <div className="w-[185px] flex-shrink-0 px-4 py-5" style={{ backgroundColor: theme.primaryLight }}>
-            {rightSections.map((s, i) => renderSection(s, i, 'side', 'list'))}
-          </div>
-        </div>
-      </div>
-    );
+  const TEMPLATE_LAYOUTS: Record<string, LayoutConfig> = {
+    // V1: Signal Stack (Tech)
+    'v1-stack-first':  { layout: 'header-single', headingStyle: 'underline', skillLayout: 'tags', font: 'sans' },
+    'v1-dev-card':     { layout: 'minimal', headingStyle: 'side', skillLayout: 'tags', font: 'sans' },
+    'v1-tech-grid':    { layout: 'two-col', headingStyle: 'underline', skillLayout: 'tags', font: 'sans' },
+    'v1-system-arch':  { layout: 'sidebar-left', headingStyle: 'side', skillLayout: 'list', font: 'sans', sidebarSections: ['skills', 'education'] },
+    'v1-terminal':     { layout: 'minimal', headingStyle: 'caps', skillLayout: 'tags', font: 'sans' },
+    // V2: Outcome Ledger (Business)
+    'v2-metric-hero':  { layout: 'header-single', headingStyle: 'pill', skillLayout: 'tags', font: 'sans' },
+    'v2-impact-first': { layout: 'centered', headingStyle: 'underline', skillLayout: 'tags', font: 'sans' },
+    'v2-results-dash': { layout: 'two-col', headingStyle: 'underline', skillLayout: 'tags', font: 'sans' },
+    'v2-board-ready':  { layout: 'sidebar-right', headingStyle: 'caps', skillLayout: 'list', font: 'serif', sidebarSections: ['skills', 'education'] },
+    'v2-numbers-lead': { layout: 'sidebar-right', headingStyle: 'side', skillLayout: 'list', font: 'sans', sidebarSections: ['skills', 'education'] },
+    // V3: Authority Frame (Enterprise)
+    'v3-corporate':    { layout: 'header-single', headingStyle: 'underline', skillLayout: 'tags', font: 'sans' },
+    'v3-governance':   { layout: 'bold-bars', headingStyle: 'pill', skillLayout: 'tags', font: 'sans' },
+    'v3-enterprise':   { layout: 'header-single', headingStyle: 'caps', skillLayout: 'tags', font: 'sans' },
+    'v3-process':      { layout: 'sidebar-right', headingStyle: 'side', skillLayout: 'list', font: 'serif', sidebarSections: ['skills', 'education'] },
+    'v3-compliance':   { layout: 'minimal', headingStyle: 'underline', skillLayout: 'tags', font: 'sans' },
+    // V4: Leadership Thesis (Senior)
+    'v4-exec-brief':   { layout: 'centered', headingStyle: 'caps', skillLayout: 'tags', font: 'serif' },
+    'v4-leadership':   { layout: 'bold-bars', headingStyle: 'pill', skillLayout: 'tags', font: 'sans' },
+    'v4-csuite':       { layout: 'sidebar-right', headingStyle: 'side', skillLayout: 'list', font: 'sans', sidebarSections: ['skills', 'education'] },
+    'v4-strategy':     { layout: 'centered', headingStyle: 'underline', skillLayout: 'tags', font: 'serif' },
+    'v4-board-deck':   { layout: 'header-single', headingStyle: 'pill', skillLayout: 'tags', font: 'sans' },
+    // V5: Proof Sheet (Research)
+    'v5-academic':     { layout: 'centered', headingStyle: 'caps', skillLayout: 'tags', font: 'serif' },
+    'v5-method':       { layout: 'header-single', headingStyle: 'underline', skillLayout: 'tags', font: 'sans' },
+    'v5-paper':        { layout: 'header-single', headingStyle: 'caps', skillLayout: 'tags', font: 'serif' },
+    'v5-lab':          { layout: 'sidebar-left', headingStyle: 'side', skillLayout: 'list', font: 'sans', sidebarSections: ['skills', 'education'] },
+    'v5-scholar':      { layout: 'centered', headingStyle: 'underline', skillLayout: 'tags', font: 'serif' },
+    // V6: Problem-Solver (Ops)
+    'v6-case-study':   { layout: 'sidebar-right', headingStyle: 'side', skillLayout: 'list', font: 'sans', sidebarSections: ['skills', 'education'] },
+    'v6-consultant':   { layout: 'header-single', headingStyle: 'pill', skillLayout: 'tags', font: 'sans' },
+    'v6-matrix':       { layout: 'bold-bars', headingStyle: 'underline', skillLayout: 'tags', font: 'sans' },
+    'v6-sar':          { layout: 'header-single', headingStyle: 'side', skillLayout: 'tags', font: 'sans' },
+    'v6-process-flow': { layout: 'timeline', headingStyle: 'underline', skillLayout: 'tags', font: 'sans' },
+    // V7: Portfolio Lead (Design)
+    'v7-portfolio-hero':  { layout: 'centered', headingStyle: 'caps', skillLayout: 'tags', font: 'sans' },
+    'v7-case-gallery':    { layout: 'header-single', headingStyle: 'pill', skillLayout: 'tags', font: 'sans' },
+    'v7-design-process':  { layout: 'sidebar-left', headingStyle: 'side', skillLayout: 'list', font: 'sans', sidebarSections: ['skills', 'education'] },
+    'v7-creative-min':    { layout: 'minimal', headingStyle: 'caps', skillLayout: 'tags', font: 'sans' },
+    'v7-studio':          { layout: 'header-single', headingStyle: 'side', skillLayout: 'tags', font: 'sans' },
+    // V8: Versatility Map (Generalist)
+    'v8-flexi-grid':   { layout: 'sidebar-left', headingStyle: 'side', skillLayout: 'list', font: 'sans', sidebarSections: ['skills', 'education'] },
+    'v8-cross-func':   { layout: 'two-col', headingStyle: 'underline', skillLayout: 'tags', font: 'sans' },
+    'v8-adaptive':     { layout: 'header-single', headingStyle: 'underline', skillLayout: 'tags', font: 'sans' },
+    'v8-breadth':      { layout: 'bold-bars', headingStyle: 'pill', skillLayout: 'tags', font: 'sans' },
+    'v8-hybrid':       { layout: 'sidebar-right', headingStyle: 'side', skillLayout: 'list', font: 'sans', sidebarSections: ['skills', 'education'] },
+    // V9: Domain Expert (Specialist)
+    'v9-authority':    { layout: 'header-single', headingStyle: 'underline', skillLayout: 'tags', font: 'sans' },
+    'v9-specialist':   { layout: 'header-single', headingStyle: 'caps', skillLayout: 'tags', font: 'sans' },
+    'v9-credential':   { layout: 'centered', headingStyle: 'underline', skillLayout: 'tags', font: 'sans' },
+    'v9-industry':     { layout: 'header-single', headingStyle: 'caps', skillLayout: 'tags', font: 'serif' },
+    'v9-expert':       { layout: 'sidebar-left', headingStyle: 'side', skillLayout: 'list', font: 'sans', sidebarSections: ['skills', 'education'] },
+    // V10: Transition Narrative
+    'v10-pivot-bridge': { layout: 'centered', headingStyle: 'underline', skillLayout: 'tags', font: 'sans' },
+    'v10-new-chapter':  { layout: 'header-single', headingStyle: 'underline', skillLayout: 'tags', font: 'sans' },
+    'v10-transfer':     { layout: 'sidebar-right', headingStyle: 'side', skillLayout: 'list', font: 'sans', sidebarSections: ['skills', 'education'] },
+    'v10-fresh-start':  { layout: 'minimal', headingStyle: 'side', skillLayout: 'tags', font: 'sans' },
+    'v10-narrative':    { layout: 'timeline', headingStyle: 'caps', skillLayout: 'tags', font: 'serif' },
   };
 
-  /* ── 6. Elegant — serif font, refined top-border accents ── */
-  const ElegantTemplate = () => (
-    <div ref={resumeRef} className="w-[612px] bg-white shadow-2xl rounded-sm overflow-hidden" style={{ fontFamily: "'Georgia', 'Palatino Linotype', 'Times New Roman', serif" }}>
-      {/* Thin top accent */}
-      <div className="h-1" style={{ backgroundColor: theme.primary }} />
-      <div className="px-10 pt-6 pb-3">
-        <EditableText value={data.name} onChange={(v) => update('name', v)} tag="h1" className="text-2xl font-normal tracking-[0.05em] mb-1" style={{ color: theme.primary }} placeholder="Your Name" />
-        <EditableText value={data.title} onChange={(v) => update('title', v)} tag="p" className="text-[12px] italic text-gray-500 mb-3" placeholder="Professional Title" />
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-gray-500 border-t border-b py-2" style={{ borderColor: `${theme.primary}30` }}>
-          <span className="flex items-center gap-1"><i className="ri-mail-line" /><EditableText value={data.email} onChange={(v) => update('email', v)} placeholder="email" /></span>
-          <span className="flex items-center gap-1"><i className="ri-phone-line" /><EditableText value={data.phone} onChange={(v) => update('phone', v)} placeholder="Phone" /></span>
-          <span className="flex items-center gap-1"><i className="ri-linkedin-box-line" /><EditableText value={data.linkedin} onChange={(v) => update('linkedin', v)} placeholder="LinkedIn" /></span>
-          <span className="flex items-center gap-1"><i className="ri-map-pin-line" /><EditableText value={data.location} onChange={(v) => update('location', v)} placeholder="Location" /></span>
-        </div>
-      </div>
-      <div className="px-10 py-4">
-        {visibleSections.map((s, i) => renderSection(s, i, 'caps', 'tags'))}
-      </div>
-      <div className="h-1" style={{ backgroundColor: theme.primary }} />
-    </div>
-  );
-
-  /* ── 7. Compact — dense two-column body with colored header ── */
-  const CompactTemplate = () => {
-    const leftSections = visibleSections.filter((s) => s.id === 'experience');
-    const rightSections = visibleSections.filter((s) => s.id === 'summary' || s.id === 'skills' || s.id === 'education');
-
-    return (
-      <div ref={resumeRef} className="w-[612px] bg-white shadow-2xl rounded-sm overflow-hidden" style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif" }}>
-        {/* Compact header */}
-        <div className="px-6 py-3 flex items-center justify-between" style={{ backgroundColor: theme.headerBg }}>
-          <div>
-            <EditableText value={data.name} onChange={(v) => update('name', v)} tag="h1" className="text-base font-bold" style={{ color: theme.headerText }} placeholder="Your Name" />
-            <EditableText value={data.title} onChange={(v) => update('title', v)} tag="p" className="text-[10px] font-medium opacity-70" style={{ color: theme.headerText }} placeholder="Title" />
-          </div>
-          <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[8px] justify-end max-w-[280px]" style={{ color: `${theme.headerText}cc` }}>
-            <span className="flex items-center gap-0.5"><i className="ri-mail-line" /><EditableText value={data.email} onChange={(v) => update('email', v)} placeholder="email" /></span>
-            <span className="flex items-center gap-0.5"><i className="ri-phone-line" /><EditableText value={data.phone} onChange={(v) => update('phone', v)} placeholder="Phone" /></span>
-            <span className="flex items-center gap-0.5"><i className="ri-linkedin-box-line" /><EditableText value={data.linkedin} onChange={(v) => update('linkedin', v)} placeholder="LinkedIn" /></span>
-            <span className="flex items-center gap-0.5"><i className="ri-map-pin-line" /><EditableText value={data.location} onChange={(v) => update('location', v)} placeholder="Location" /></span>
-          </div>
-        </div>
-        {/* Two columns */}
-        <div className="flex">
-          <div className="flex-1 px-5 py-4">
-            {leftSections.map((s, i) => renderSection(s, i, 'underline'))}
-          </div>
-          <div className="w-[200px] flex-shrink-0 px-4 py-4 border-l" style={{ borderColor: `${theme.primary}15`, backgroundColor: `${theme.primaryLight}80` }}>
-            {rightSections.map((s, i) => renderSection(s, i, 'side', 'list'))}
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  /* ── 8. Bold — oversized name, strong section bars ── */
-  const BoldTemplate = () => (
-    <div ref={resumeRef} className="w-[612px] bg-white shadow-2xl rounded-sm overflow-hidden" style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif" }}>
-      <div className="px-8 pt-6 pb-3">
-        <EditableText value={data.name} onChange={(v) => update('name', v)} tag="h1" className="text-3xl font-black tracking-tight mb-0" style={{ color: theme.primary }} placeholder="Your Name" />
-        <EditableText value={data.title} onChange={(v) => update('title', v)} tag="p" className="text-[13px] font-semibold uppercase tracking-[0.15em] text-gray-400 mb-3" placeholder="Professional Title" />
-        <ContactRow color="#6b7280" separator="|" />
-      </div>
-      <div className="px-8 py-4">
-        {visibleSections.map((s, i) => (
-          <div key={s.id}>
-            {/* Bold full-width section bar */}
-            <div className="flex items-center gap-2 px-3 py-1.5 -mx-1 mb-3 rounded" style={{ backgroundColor: theme.primary }}>
-              <i className={`${s.icon} text-[10px] text-white/80`} />
-              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-white">{s.label}</span>
-            </div>
-            <SectionWrapper section={s} index={i} total={visibleSections.length} onMove={moveSection} onToggle={toggleSection}>
-              {s.id === 'summary' && <SummaryBlockNoHeading />}
-              {s.id === 'experience' && <ExperienceBlockNoHeading />}
-              {s.id === 'skills' && <SkillsBlockNoHeading />}
-              {s.id === 'education' && <EducationBlockNoHeading />}
-            </SectionWrapper>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-
-  /* No-heading variants for Bold template (section bar replaces heading) */
+  /* No-heading variants for bold-bars layout */
   const SummaryBlockNoHeading = () => (
     <div className="mb-5">
       <EditableText value={data.summary} onChange={(v) => update('summary', v)} tag="p" className="text-[11px] leading-[1.65] text-gray-600" placeholder="Write a compelling summary..." multiline />
@@ -874,121 +797,282 @@ export default function InlineResumeEditor({
     </div>
   );
 
-  /* ── 9. Timeline — dotted timeline connector for experience ── */
-  const TimelineTemplate = () => (
-    <div ref={resumeRef} className="w-[612px] bg-white shadow-2xl rounded-sm overflow-hidden" style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif" }}>
-      <div className="px-8 pt-6 pb-3">
-        <EditableText value={data.name} onChange={(v) => update('name', v)} tag="h1" className="text-xl font-extrabold mb-0.5" style={{ color: theme.primary }} placeholder="Your Name" />
-        <EditableText value={data.title} onChange={(v) => update('title', v)} tag="p" className="text-[12px] text-gray-500 mb-3" placeholder="Professional Title" />
-        <ContactRow color="#6b7280" />
-      </div>
+  /* ════════════════════════════════════════════
+     Dynamic Template Renderer
+     Renders any template based on its layout config
+     ════════════════════════════════════════════ */
 
-      <div className="px-8 py-4">
-        {/* Summary */}
-        {visibleSections.find((s) => s.id === 'summary') && (
-          <SectionWrapper section={visibleSections.find((s) => s.id === 'summary')!} index={0} total={visibleSections.length} onMove={moveSection} onToggle={toggleSection}>
-            <SummaryBlock headingStyle="underline" />
-          </SectionWrapper>
-        )}
+  const renderTemplate = () => {
+    const config = TEMPLATE_LAYOUTS[templateId] || TEMPLATE_LAYOUTS['v1-stack-first'];
+    const fontFamily = config.font === 'serif' ? FONT_SERIF : FONT_SANS;
+    const sidebarSections = config.sidebarSections || ['skills', 'education'];
+    const mainSections = visibleSections.filter((s) => !sidebarSections.includes(s.id));
+    const sidebarVisible = visibleSections.filter((s) => sidebarSections.includes(s.id));
 
-        {/* Experience with timeline */}
-        {visibleSections.find((s) => s.id === 'experience') && (
-          <div className="mb-5">
-            <SectionHeading label="Work Experience" icon="ri-briefcase-line" color={theme.sectionLine} borderColor={theme.sectionLine} style="underline" />
-            <div className="relative ml-3 mt-2">
-              {/* Dotted timeline */}
-              <div className="absolute left-0 top-0 bottom-0 w-px border-l-2 border-dashed" style={{ borderColor: `${theme.primary}35` }} />
+    /* ─── Layout: header-single ─── */
+    if (config.layout === 'header-single') {
+      return (
+        <div ref={resumeRef} className="w-[612px] bg-white shadow-2xl rounded-sm overflow-hidden" style={{ fontFamily }}>
+          <div className="px-8 py-5" style={{ backgroundColor: theme.headerBg }}>
+            <EditableText value={data.name} onChange={(v) => update('name', v)} tag="h1" className="text-xl font-bold mb-0.5" style={{ color: theme.headerText }} placeholder="Your Name" />
+            <EditableText value={data.title} onChange={(v) => update('title', v)} tag="p" className="text-sm font-medium mb-3 opacity-85" style={{ color: theme.headerText }} placeholder="Professional Title" />
+            <ContactRow color={`${theme.headerText}cc`} />
+          </div>
+          <div className="px-8 py-6">
+            {visibleSections.map((s, i) => renderSection(s, i, config.headingStyle, config.skillLayout))}
+          </div>
+        </div>
+      );
+    }
 
-              <div className="space-y-5 pl-6">
-                {data.experience.map((exp, i) => (
-                  <div key={i} className="relative group/exp">
-                    {/* Timeline dot */}
-                    <div className="absolute -left-[29px] top-1 w-3 h-3 rounded-full border-2 bg-white" style={{ borderColor: theme.primary }} />
-                    <div className="flex items-start justify-between mb-0.5">
-                      <div className="flex-1 min-w-0">
-                        <EditableText value={exp.role} onChange={(v) => updateExp(i, 'role', v)} tag="h4" className="text-[12px] font-bold text-gray-900" placeholder="Job Title" />
-                        <div className="flex items-center gap-1 text-[11px]">
-                          <EditableText value={exp.company} onChange={(v) => updateExp(i, 'company', v)} className="font-semibold" style={{ color: theme.bulletColor }} placeholder="Company" />
-                          <span className="text-gray-400">·</span>
-                          <EditableText value={exp.location} onChange={(v) => updateExp(i, 'location', v)} className="text-gray-500" placeholder="Location" />
-                        </div>
-                      </div>
-                      <EditableText value={exp.period} onChange={(v) => updateExp(i, 'period', v)} className="text-[10px] text-gray-400 whitespace-nowrap ml-3 flex-shrink-0 px-2 py-0.5 rounded-full" style={{ backgroundColor: `${theme.primary}10`, color: theme.primary }} placeholder="Period" />
-                    </div>
-                    <ul className="mt-1.5 space-y-1">
-                      {exp.bullets.map((b, j) => (
-                        <li key={j} className="flex items-start gap-1.5 group/bullet text-[11px] text-gray-600">
-                          <span className="mt-[5px] flex-shrink-0 w-1 h-1 rounded-full" style={{ backgroundColor: theme.bulletColor }} />
-                          <EditableText value={b} onChange={(v) => updateBullet(i, j, v)} className="flex-1" placeholder="Achievement..." multiline />
-                          <button onClick={() => removeBullet(i, j)} className="opacity-0 group-hover/bullet:opacity-100 flex-shrink-0 text-red-400 hover:text-red-600 text-[10px] mt-0.5"><i className="ri-close-line" /></button>
-                        </li>
-                      ))}
-                    </ul>
-                    <button onClick={() => addBullet(i)} className="opacity-0 group-hover/exp:opacity-100 text-[10px] text-gray-400 hover:text-blue-600 mt-1 ml-2.5"><i className="ri-add-line mr-0.5" />Add bullet</button>
-                  </div>
-                ))}
+    /* ─── Layout: sidebar-left ─── */
+    if (config.layout === 'sidebar-left') {
+      return (
+        <div ref={resumeRef} className="w-[612px] bg-white shadow-2xl rounded-sm overflow-hidden flex" style={{ fontFamily }}>
+          {/* Sidebar */}
+          <div className="w-[190px] flex-shrink-0 px-5 py-6" style={{ backgroundColor: theme.headerBg }}>
+            <EditableText value={data.name} onChange={(v) => update('name', v)} tag="h1" className="text-[16px] font-bold mb-0.5 leading-tight" style={{ color: theme.headerText }} placeholder="Your Name" />
+            <EditableText value={data.title} onChange={(v) => update('title', v)} tag="p" className="text-[10px] font-medium mb-5 opacity-80" style={{ color: theme.headerText }} placeholder="Title" />
+            {/* Contact */}
+            <div className="mb-5">
+              <h3 className="text-[9px] font-bold uppercase tracking-[0.25em] mb-2 opacity-60" style={{ color: theme.headerText }}>Contact</h3>
+              <div className="space-y-1.5 text-[9px]" style={{ color: `${theme.headerText}cc` }}>
+                <div className="flex items-start gap-1.5"><i className="ri-mail-line mt-0.5 flex-shrink-0 text-[8px]" /><EditableText value={data.email} onChange={(v) => update('email', v)} placeholder="Email" /></div>
+                <div className="flex items-start gap-1.5"><i className="ri-phone-line mt-0.5 flex-shrink-0 text-[8px]" /><EditableText value={data.phone} onChange={(v) => update('phone', v)} placeholder="Phone" /></div>
+                <div className="flex items-start gap-1.5"><i className="ri-linkedin-box-line mt-0.5 flex-shrink-0 text-[8px]" /><EditableText value={data.linkedin} onChange={(v) => update('linkedin', v)} placeholder="LinkedIn" /></div>
+                <div className="flex items-start gap-1.5"><i className="ri-map-pin-line mt-0.5 flex-shrink-0 text-[8px]" /><EditableText value={data.location} onChange={(v) => update('location', v)} placeholder="Location" /></div>
               </div>
+            </div>
+            {/* Sidebar: Skills */}
+            {sidebarVisible.find((s) => s.id === 'skills') && (
+              <div className="mb-5">
+                <h3 className="text-[9px] font-bold uppercase tracking-[0.25em] mb-2 opacity-60" style={{ color: theme.headerText }}>Skills</h3>
+                <div className="flex flex-wrap gap-1">
+                  {data.skills.map((skill, i) => (
+                    <div key={i} className="group/skill flex items-center gap-0.5 px-2 py-0.5 rounded text-[8px] font-medium" style={{ backgroundColor: 'rgba(255,255,255,0.12)', color: `${theme.headerText}dd` }}>
+                      <EditableText value={skill} onChange={(v) => updateSkill(i, v)} className="text-[8px]" placeholder="Skill" />
+                      <button onClick={() => removeSkill(i)} className="opacity-0 group-hover/skill:opacity-100 text-red-300 hover:text-red-100 text-[8px]"><i className="ri-close-line" /></button>
+                    </div>
+                  ))}
+                  <button onClick={addSkill} className="opacity-0 group-hover:opacity-100 px-1.5 py-0.5 rounded text-[8px] font-medium" style={{ backgroundColor: 'rgba(255,255,255,0.08)', color: `${theme.headerText}99` }}><i className="ri-add-line" /></button>
+                </div>
+              </div>
+            )}
+            {/* Sidebar: Education */}
+            {sidebarVisible.find((s) => s.id === 'education') && (
+              <div>
+                <h3 className="text-[9px] font-bold uppercase tracking-[0.25em] mb-2 opacity-60" style={{ color: theme.headerText }}>Education</h3>
+                <div className="space-y-2">
+                  {data.education.map((edu, i) => (
+                    <div key={i}>
+                      <EditableText value={edu.degree} onChange={(v) => { const ed = [...data.education]; ed[i] = { ...ed[i], degree: v }; update('education', ed); }} tag="p" className="text-[9px] font-bold" style={{ color: theme.headerText }} placeholder="Degree" />
+                      <EditableText value={edu.school} onChange={(v) => { const ed = [...data.education]; ed[i] = { ...ed[i], school: v }; update('education', ed); }} tag="p" className="text-[8px] opacity-70" style={{ color: theme.headerText }} placeholder="School" />
+                      <EditableText value={edu.period} onChange={(v) => { const ed = [...data.education]; ed[i] = { ...ed[i], period: v }; update('education', ed); }} tag="p" className="text-[8px] opacity-50" style={{ color: theme.headerText }} placeholder="Year" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          {/* Main body */}
+          <div className="flex-1 px-6 py-6">
+            {mainSections.map((s, i) => renderSection(s, i, config.headingStyle, config.skillLayout))}
+          </div>
+        </div>
+      );
+    }
+
+    /* ─── Layout: sidebar-right ─── */
+    if (config.layout === 'sidebar-right') {
+      return (
+        <div ref={resumeRef} className="w-[612px] bg-white shadow-2xl rounded-sm overflow-hidden" style={{ fontFamily }}>
+          <div className="px-8 py-5 flex items-end justify-between" style={{ backgroundColor: theme.headerBg }}>
+            <div>
+              <EditableText value={data.name} onChange={(v) => update('name', v)} tag="h1" className="text-lg font-bold mb-0.5" style={{ color: theme.headerText }} placeholder="Your Name" />
+              <EditableText value={data.title} onChange={(v) => update('title', v)} tag="p" className="text-[11px] font-medium opacity-80" style={{ color: theme.headerText }} placeholder="Title" />
+            </div>
+            <div className="text-right space-y-0.5 text-[9px]" style={{ color: `${theme.headerText}cc` }}>
+              <div className="flex items-center gap-1 justify-end"><EditableText value={data.email} onChange={(v) => update('email', v)} placeholder="Email" /><i className="ri-mail-line" /></div>
+              <div className="flex items-center gap-1 justify-end"><EditableText value={data.phone} onChange={(v) => update('phone', v)} placeholder="Phone" /><i className="ri-phone-line" /></div>
+              <div className="flex items-center gap-1 justify-end"><EditableText value={data.location} onChange={(v) => update('location', v)} placeholder="Location" /><i className="ri-map-pin-line" /></div>
             </div>
           </div>
-        )}
+          <div className="flex">
+            <div className="flex-1 px-6 py-5 border-r border-gray-100">
+              {mainSections.map((s, i) => renderSection(s, i, config.headingStyle, config.skillLayout))}
+            </div>
+            <div className="w-[185px] flex-shrink-0 px-4 py-5" style={{ backgroundColor: theme.primaryLight }}>
+              {sidebarVisible.map((s, i) => renderSection(s, i, 'side', 'list'))}
+            </div>
+          </div>
+        </div>
+      );
+    }
 
-        {/* Skills & Education */}
-        {visibleSections.filter((s) => s.id === 'skills' || s.id === 'education').map((s, i) => renderSection(s, i, 'underline', 'tags'))}
-      </div>
-    </div>
-  );
+    /* ─── Layout: centered ─── */
+    if (config.layout === 'centered') {
+      return (
+        <div ref={resumeRef} className="w-[612px] bg-white shadow-2xl rounded-sm overflow-hidden" style={{ fontFamily }}>
+          <div className="h-2" style={{ backgroundColor: theme.primary }} />
+          <div className="px-10 pt-6 pb-4 text-center">
+            <EditableText value={data.name} onChange={(v) => update('name', v)} tag="h1" className="text-2xl font-bold tracking-wide mb-0.5" style={{ color: theme.primary }} placeholder="Your Name" />
+            <EditableText value={data.title} onChange={(v) => update('title', v)} tag="p" className="text-[12px] font-normal uppercase tracking-[0.3em] text-gray-500 mb-4" placeholder="Professional Title" />
+            <div className="w-16 h-px mx-auto mb-3" style={{ backgroundColor: theme.primary }} />
+            <ContactRow color="#6b7280" separator="|" />
+          </div>
+          <div className="px-10 py-4">
+            {visibleSections.map((s, i) => renderSection(s, i, config.headingStyle, config.skillLayout))}
+          </div>
+        </div>
+      );
+    }
 
-  /* ── 10. Clean — airy whitespace-driven, subtle color lines ── */
-  const CleanTemplate = () => (
-    <div ref={resumeRef} className="w-[612px] bg-white shadow-2xl rounded-sm overflow-hidden" style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif" }}>
-      <div className="px-10 pt-8 pb-4">
-        <EditableText value={data.name} onChange={(v) => update('name', v)} tag="h1" className="text-xl font-bold mb-1 tracking-tight" style={{ color: theme.primary }} placeholder="Your Name" />
-        <EditableText value={data.title} onChange={(v) => update('title', v)} tag="p" className="text-[12px] font-medium mb-4" style={{ color: `${theme.primary}88` }} placeholder="Professional Title" />
-        <div className="h-px mb-4" style={{ backgroundColor: `${theme.primary}20` }} />
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-[10px] text-gray-400">
-          <span className="flex items-center gap-1.5"><i className="ri-mail-line text-[9px]" style={{ color: theme.primary }} /><EditableText value={data.email} onChange={(v) => update('email', v)} placeholder="email" /></span>
-          <span className="flex items-center gap-1.5"><i className="ri-phone-line text-[9px]" style={{ color: theme.primary }} /><EditableText value={data.phone} onChange={(v) => update('phone', v)} placeholder="Phone" /></span>
-          <span className="flex items-center gap-1.5"><i className="ri-linkedin-box-line text-[9px]" style={{ color: theme.primary }} /><EditableText value={data.linkedin} onChange={(v) => update('linkedin', v)} placeholder="LinkedIn" /></span>
-          <span className="flex items-center gap-1.5"><i className="ri-map-pin-line text-[9px]" style={{ color: theme.primary }} /><EditableText value={data.location} onChange={(v) => update('location', v)} placeholder="Location" /></span>
+    /* ─── Layout: minimal ─── */
+    if (config.layout === 'minimal') {
+      return (
+        <div ref={resumeRef} className="w-[612px] bg-white shadow-2xl rounded-sm overflow-hidden" style={{ fontFamily }}>
+          <div className="px-8 pt-7 pb-4">
+            <EditableText value={data.name} onChange={(v) => update('name', v)} tag="h1" className="text-xl font-extrabold text-gray-900 mb-0.5" placeholder="Your Name" />
+            <EditableText value={data.title} onChange={(v) => update('title', v)} tag="p" className="text-[12px] text-gray-500 mb-3" placeholder="Professional Title" />
+            <div className="h-px bg-gray-200 mb-3" />
+            <ContactRow color="#6b7280" />
+          </div>
+          <div className="px-8 pb-6">
+            {visibleSections.map((s, i) => renderSection(s, i, config.headingStyle, config.skillLayout))}
+          </div>
+        </div>
+      );
+    }
+
+    /* ─── Layout: bold-bars ─── */
+    if (config.layout === 'bold-bars') {
+      return (
+        <div ref={resumeRef} className="w-[612px] bg-white shadow-2xl rounded-sm overflow-hidden" style={{ fontFamily }}>
+          <div className="px-8 pt-6 pb-3">
+            <EditableText value={data.name} onChange={(v) => update('name', v)} tag="h1" className="text-3xl font-black tracking-tight mb-0" style={{ color: theme.primary }} placeholder="Your Name" />
+            <EditableText value={data.title} onChange={(v) => update('title', v)} tag="p" className="text-[13px] font-semibold uppercase tracking-[0.15em] text-gray-400 mb-3" placeholder="Professional Title" />
+            <ContactRow color="#6b7280" separator="|" />
+          </div>
+          <div className="px-8 py-4">
+            {visibleSections.map((s, i) => (
+              <div key={s.id}>
+                <div className="flex items-center gap-2 px-3 py-1.5 -mx-1 mb-3 rounded" style={{ backgroundColor: theme.primary }}>
+                  <i className={`${s.icon} text-[10px] text-white/80`} />
+                  <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-white">{s.label}</span>
+                </div>
+                <SectionWrapper section={s} index={i} total={visibleSections.length} onMove={moveSection} onToggle={toggleSection}>
+                  {s.id === 'summary' && <SummaryBlockNoHeading />}
+                  {s.id === 'experience' && <ExperienceBlockNoHeading />}
+                  {s.id === 'skills' && <SkillsBlockNoHeading />}
+                  {s.id === 'education' && <EducationBlockNoHeading />}
+                </SectionWrapper>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    /* ─── Layout: timeline ─── */
+    if (config.layout === 'timeline') {
+      return (
+        <div ref={resumeRef} className="w-[612px] bg-white shadow-2xl rounded-sm overflow-hidden" style={{ fontFamily }}>
+          <div className="px-8 pt-6 pb-3">
+            <EditableText value={data.name} onChange={(v) => update('name', v)} tag="h1" className="text-xl font-extrabold mb-0.5" style={{ color: theme.primary }} placeholder="Your Name" />
+            <EditableText value={data.title} onChange={(v) => update('title', v)} tag="p" className="text-[12px] text-gray-500 mb-3" placeholder="Professional Title" />
+            <ContactRow color="#6b7280" />
+          </div>
+          <div className="px-8 py-4">
+            {visibleSections.find((s) => s.id === 'summary') && (
+              <SectionWrapper section={visibleSections.find((s) => s.id === 'summary')!} index={0} total={visibleSections.length} onMove={moveSection} onToggle={toggleSection}>
+                <SummaryBlock headingStyle={config.headingStyle} />
+              </SectionWrapper>
+            )}
+            {visibleSections.find((s) => s.id === 'experience') && (
+              <div className="mb-5">
+                <SectionHeading label="Work Experience" icon="ri-briefcase-line" color={theme.sectionLine} borderColor={theme.sectionLine} style={config.headingStyle} />
+                <div className="relative ml-3 mt-2">
+                  <div className="absolute left-0 top-0 bottom-0 w-px border-l-2 border-dashed" style={{ borderColor: `${theme.primary}35` }} />
+                  <div className="space-y-5 pl-6">
+                    {data.experience.map((exp, i) => (
+                      <div key={i} className="relative group/exp">
+                        <div className="absolute -left-[29px] top-1 w-3 h-3 rounded-full border-2 bg-white" style={{ borderColor: theme.primary }} />
+                        <div className="flex items-start justify-between mb-0.5">
+                          <div className="flex-1 min-w-0">
+                            <EditableText value={exp.role} onChange={(v) => updateExp(i, 'role', v)} tag="h4" className="text-[12px] font-bold text-gray-900" placeholder="Job Title" />
+                            <div className="flex items-center gap-1 text-[11px]">
+                              <EditableText value={exp.company} onChange={(v) => updateExp(i, 'company', v)} className="font-semibold" style={{ color: theme.bulletColor }} placeholder="Company" />
+                              <span className="text-gray-400">·</span>
+                              <EditableText value={exp.location} onChange={(v) => updateExp(i, 'location', v)} className="text-gray-500" placeholder="Location" />
+                            </div>
+                          </div>
+                          <EditableText value={exp.period} onChange={(v) => updateExp(i, 'period', v)} className="text-[10px] text-gray-400 whitespace-nowrap ml-3 flex-shrink-0 px-2 py-0.5 rounded-full" style={{ backgroundColor: `${theme.primary}10`, color: theme.primary }} placeholder="Period" />
+                        </div>
+                        <ul className="mt-1.5 space-y-1">
+                          {exp.bullets.map((b, j) => (
+                            <li key={j} className="flex items-start gap-1.5 group/bullet text-[11px] text-gray-600">
+                              <span className="mt-[5px] flex-shrink-0 w-1 h-1 rounded-full" style={{ backgroundColor: theme.bulletColor }} />
+                              <EditableText value={b} onChange={(v) => updateBullet(i, j, v)} className="flex-1" placeholder="Achievement..." multiline />
+                              <button onClick={() => removeBullet(i, j)} className="opacity-0 group-hover/bullet:opacity-100 flex-shrink-0 text-red-400 hover:text-red-600 text-[10px] mt-0.5"><i className="ri-close-line" /></button>
+                            </li>
+                          ))}
+                        </ul>
+                        <button onClick={() => addBullet(i)} className="opacity-0 group-hover/exp:opacity-100 text-[10px] text-gray-400 hover:text-blue-600 mt-1 ml-2.5"><i className="ri-add-line mr-0.5" />Add bullet</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+            {visibleSections.filter((s) => s.id === 'skills' || s.id === 'education').map((s, i) => renderSection(s, i, config.headingStyle, config.skillLayout))}
+          </div>
+        </div>
+      );
+    }
+
+    /* ─── Layout: two-col ─── */
+    if (config.layout === 'two-col') {
+      const leftSections = visibleSections.filter((s) => s.id === 'experience');
+      const rightSections = visibleSections.filter((s) => s.id === 'summary' || s.id === 'skills' || s.id === 'education');
+      return (
+        <div ref={resumeRef} className="w-[612px] bg-white shadow-2xl rounded-sm overflow-hidden" style={{ fontFamily }}>
+          <div className="px-6 py-3 flex items-center justify-between" style={{ backgroundColor: theme.headerBg }}>
+            <div>
+              <EditableText value={data.name} onChange={(v) => update('name', v)} tag="h1" className="text-base font-bold" style={{ color: theme.headerText }} placeholder="Your Name" />
+              <EditableText value={data.title} onChange={(v) => update('title', v)} tag="p" className="text-[10px] font-medium opacity-70" style={{ color: theme.headerText }} placeholder="Title" />
+            </div>
+            <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[8px] justify-end max-w-[280px]" style={{ color: `${theme.headerText}cc` }}>
+              <span className="flex items-center gap-0.5"><i className="ri-mail-line" /><EditableText value={data.email} onChange={(v) => update('email', v)} placeholder="email" /></span>
+              <span className="flex items-center gap-0.5"><i className="ri-phone-line" /><EditableText value={data.phone} onChange={(v) => update('phone', v)} placeholder="Phone" /></span>
+              <span className="flex items-center gap-0.5"><i className="ri-linkedin-box-line" /><EditableText value={data.linkedin} onChange={(v) => update('linkedin', v)} placeholder="LinkedIn" /></span>
+              <span className="flex items-center gap-0.5"><i className="ri-map-pin-line" /><EditableText value={data.location} onChange={(v) => update('location', v)} placeholder="Location" /></span>
+            </div>
+          </div>
+          <div className="flex">
+            <div className="flex-1 px-5 py-4">
+              {leftSections.map((s, i) => renderSection(s, i, config.headingStyle, config.skillLayout))}
+            </div>
+            <div className="w-[200px] flex-shrink-0 px-4 py-4 border-l" style={{ borderColor: `${theme.primary}15`, backgroundColor: `${theme.primaryLight}80` }}>
+              {rightSections.map((s, i) => renderSection(s, i, 'side', 'list'))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    /* fallback — header-single */
+    return (
+      <div ref={resumeRef} className="w-[612px] bg-white shadow-2xl rounded-sm overflow-hidden" style={{ fontFamily: FONT_SANS }}>
+        <div className="px-8 py-5" style={{ backgroundColor: theme.headerBg }}>
+          <EditableText value={data.name} onChange={(v) => update('name', v)} tag="h1" className="text-xl font-bold mb-0.5" style={{ color: theme.headerText }} placeholder="Your Name" />
+          <EditableText value={data.title} onChange={(v) => update('title', v)} tag="p" className="text-sm font-medium mb-3 opacity-85" style={{ color: theme.headerText }} placeholder="Professional Title" />
+          <ContactRow color={`${theme.headerText}cc`} />
+        </div>
+        <div className="px-8 py-6">
+          {visibleSections.map((s, i) => renderSection(s, i, 'underline', 'tags'))}
         </div>
       </div>
-      <div className="px-10 py-4">
-        {visibleSections.map((s, i) => {
-          return (
-            <div key={s.id} className="mb-6">
-              {/* Clean section header with subtle left accent */}
-              <div className="flex items-center gap-2.5 mb-3">
-                <div className="w-1 h-5 rounded-full" style={{ backgroundColor: theme.primary }} />
-                <span className="text-[11px] font-bold uppercase tracking-[0.15em]" style={{ color: theme.primary }}>{s.label}</span>
-              </div>
-              <SectionWrapper section={s} index={i} total={visibleSections.length} onMove={moveSection} onToggle={toggleSection}>
-                {s.id === 'summary' && <SummaryBlockNoHeading />}
-                {s.id === 'experience' && <ExperienceBlockNoHeading />}
-                {s.id === 'skills' && <SkillsBlockNoHeading />}
-                {s.id === 'education' && <EducationBlockNoHeading />}
-              </SectionWrapper>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-
-  /* Template map */
-  const renderTemplate = () => {
-    switch (templateId) {
-      case 'classic': return <ClassicTemplate />;
-      case 'modern': return <ModernTemplate />;
-      case 'executive': return <ExecutiveTemplate />;
-      case 'minimal': return <MinimalTemplate />;
-      case 'professional': return <ProfessionalTemplate />;
-      case 'elegant': return <ElegantTemplate />;
-      case 'compact': return <CompactTemplate />;
-      case 'bold': return <BoldTemplate />;
-      case 'timeline': return <TimelineTemplate />;
-      case 'clean': return <CleanTemplate />;
-      default: return <ClassicTemplate />;
-    }
+    );
   };
 
   /* ════════════════════════════════════════════
@@ -1004,6 +1088,8 @@ export default function InlineResumeEditor({
           activeTheme={theme}
           onSelectTemplate={switchTemplate}
           onSelectTheme={setTheme}
+          variantId={variantId}
+          variantRationale={variantRationale}
         />
       </div>
 
@@ -1083,7 +1169,36 @@ export default function InlineResumeEditor({
 
       {/* ─── Resume Preview ─── */}
       <div className="relative pl-12">
-        {renderTemplate()}
+        <div className="relative w-[612px]" style={{ minHeight: A4_PAGE_HEIGHT }}>
+          {renderTemplate()}
+
+          {/* Visual page-break indicators */}
+          {pageBreakPositions.map((y, idx) => (
+            <div
+              key={idx}
+              className="absolute left-0 right-0 z-10 pointer-events-none"
+              style={{ top: y }}
+            >
+              <div className="relative flex items-center">
+                <div className="w-full border-t-2 border-dashed border-orange-300/70" />
+                <div className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-1 bg-orange-50 px-2.5 py-0.5 text-[9px] font-semibold text-orange-500 border border-orange-200 rounded-full shadow-sm whitespace-nowrap">
+                  <i className="ri-scissors-cut-line text-[10px]" />
+                  Page {idx + 1} ends here
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Page count indicator */}
+        <div className={`mt-3 text-center text-xs font-medium ${
+          totalPages > 1 ? 'text-amber-600' : 'text-emerald-600'
+        }`}>
+          {totalPages === 1
+            ? <span className="flex items-center justify-center gap-1"><i className="ri-checkbox-circle-line" />Fits on 1 page</span>
+            : <span className="flex items-center justify-center gap-1"><i className="ri-file-copy-2-line" />{totalPages} pages — consider condensing to fit on 1 page</span>
+          }
+        </div>
       </div>
 
       {/* Click-outside to close section picker */}

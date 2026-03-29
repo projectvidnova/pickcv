@@ -49,7 +49,9 @@ export interface ColorTheme {
   skillText: string;      /* skill tag text */
 }
 
-export type TemplateId = 'classic' | 'modern' | 'executive' | 'minimal' | 'professional' | 'elegant' | 'compact' | 'bold' | 'timeline' | 'clean';
+export type TemplateId = string;
+
+export type VariantId = 'V1' | 'V2' | 'V3' | 'V4' | 'V5' | 'V6' | 'V7' | 'V8' | 'V9' | 'V10';
 
 export interface ResumeTemplate {
   id: TemplateId;
@@ -58,4 +60,12 @@ export interface ResumeTemplate {
   icon: string;
   atsScore: number;       /* 1-5 ATS friendliness rating */
   colors: ColorTheme[];   /* available color palettes for this template */
+}
+
+export interface VariantMeta {
+  id: VariantId;
+  name: string;
+  focus: string;
+  tagline: string;           /* short human-readable reason for choosing this variant */
+  templates: ResumeTemplate[];  /* 5 visual templates designed for this variant */
 }
