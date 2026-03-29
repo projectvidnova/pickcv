@@ -37,6 +37,18 @@ class ResumeOptimizationRequest(BaseModel):
     class Config:
         from_attributes = True
 
+
+# Resume Compression Request
+class ResumeCompressRequest(BaseModel):
+    variant_id: str = Field(..., min_length=1, max_length=5)
+    variant_data: Dict[str, Any]
+    target_pages: int = Field(..., ge=1, le=2)
+    role_dna: Dict[str, Any] = Field(default_factory=dict)
+    deprioritize: Optional[Dict[str, Any]] = None
+
+    class Config:
+        from_attributes = True
+
 # Resume Schemas
 class ResumeBase(BaseModel):
     title: str

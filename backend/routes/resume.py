@@ -7,11 +7,12 @@ import logging
 
 from database import get_db
 from models import User, Resume
-from schemas import ResumeResponse, ResumeDetail, ResumeOptimizationRequest
+from schemas import ResumeResponse, ResumeDetail, ResumeOptimizationRequest, ResumeCompressRequest
 from routes.auth import get_current_user
 from services.resume_processor import resume_processor
 from services.gemini_service import gemini_service
 from services.scraper_service import scraper_service
+from services.resume_os_orchestrator import resume_os_orchestrator
 from services.gcs_service import gcs_service
 from services.college_service import college_service
 from config import settings
@@ -75,8 +76,14 @@ async def upload_resume(
     if file.content_type not in allowed_types:
         raise HTTPException(status_code=400, detail="Invalid file type. Only PDF and DOCX allowed.")
     
-    # Read file
+    # Read file with size limit enforcement
+    max_bytes = settings.max_upload_size_mb * 1024 * 1024
     file_data = await file.read()
+    if len(file_data) > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Maximum size is {settings.max_upload_size_mb} MB."
+        )
     
     # Extract text
     try:
@@ -287,11 +294,44 @@ async def optimize_resume_for_job(
         # ── Mode 3: Pasted JD — use it directly ──
         logger.info(f"Optimize mode: PASTE — using provided JD ({len(job_description)} chars)")
     
-    # Optimize resume for the specific job (includes comparison in single call)
-    optimization_result = await gemini_service.optimize_resume_for_job(
+    # Resume OS agentic orchestration + optimization
+    github_url = None
+    github_context = None
+    try:
+        github_url = scraper_service.extract_github_profile_url(resume.raw_text or "")
+
+        # Secondary fallback: check known contact/link fields if present
+        if not github_url and isinstance(resume.contact_info, dict):
+            for key in ("github", "github_url", "portfolio", "website", "links"):
+                value = resume.contact_info.get(key)
+                if isinstance(value, str):
+                    github_url = scraper_service.extract_github_profile_url(value)
+                    if github_url:
+                        break
+                elif isinstance(value, list):
+                    for item in value:
+                        if isinstance(item, str):
+                            github_url = scraper_service.extract_github_profile_url(item)
+                            if github_url:
+                                break
+                    if github_url:
+                        break
+
+        if github_url:
+            github_context = scraper_service.build_github_resume_context(github_url)
+            if github_context:
+                logger.info(f"GitHub enrichment enabled for resume {resume_id}: {github_url}")
+            else:
+                logger.info(f"GitHub URL found but enrichment unavailable for resume {resume_id}: {github_url}")
+    except Exception as e:
+        logger.warning(f"GitHub enrichment skipped for resume {resume_id}: {e}")
+
+    optimization_result = await resume_os_orchestrator.optimize(
         resume_text=resume.raw_text,
+        job_title=job_title,
         job_description=job_description,
-        job_title=job_title
+        job_link=job_link,
+        github_context=github_context,
     )
     
     if "error" in optimization_result:
@@ -320,8 +360,53 @@ async def optimize_resume_for_job(
         "match_score": optimization_result.get("match_score", 0),
         "ats_optimized": optimization_result.get("ats_optimized", False),
         "comparison": comparison,
-        "job_link": job_link
+        "resume_variants": optimization_result.get("resume_variants", []),
+        "job_link": job_link,
+        "github_profile_url": github_url,
+        "github_enrichment_used": bool(github_context),
+        "resume_os": optimization_result.get("resume_os", {}),
     }
+
+
+@router.post("/compress-variant")
+async def compress_resume_variant(
+    request: ResumeCompressRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """Compress a resume variant to a target page count with user-controlled deprioritization.
+
+    Accepts the full variant data from a prior optimization, and returns a compressed
+    version fitting within `target_pages` (1 or 2). Users can select predefined
+    deprioritization categories and/or provide free-text instructions.
+
+    Request body:
+        variant_id: "V1" - "V10"
+        variant_data: { name, summary, experience[], skills[], education[], ... }
+        target_pages: 1 or 2
+        role_dna: { cluster, level, environment, ... }
+        deprioritize: {
+            categories: ["older_experience", "reduce_bullets", ...],
+            custom_text: "Remove my internship from 2018"
+        }
+
+    Returns compressed variant data + rendered text + compression notes.
+    """
+    try:
+        result = resume_os_orchestrator.compress_variant(
+            variant_data=request.variant_data,
+            target_pages=request.target_pages,
+            role_dna=request.role_dna,
+            variant_id=request.variant_id,
+            deprioritize=request.deprioritize,
+        )
+        return {
+            "variant_id": request.variant_id,
+            "target_pages": request.target_pages,
+            **result,
+        }
+    except Exception as e:
+        logger.error(f"Variant compression failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Compression failed: {str(e)}")
 
 
 @router.delete("/{resume_id}")
