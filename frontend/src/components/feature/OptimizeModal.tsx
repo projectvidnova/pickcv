@@ -72,23 +72,23 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const processingSteps = [
-    { icon: 'ri-upload-cloud-2-line', label: 'Uploading resume', detail: 'Sending your file securely' },
-    { icon: 'ri-file-search-line', label: 'Analyzing content', detail: 'Parsing resume structure & job requirements' },
-    { icon: 'ri-brain-line', label: 'Matching keywords', detail: 'Identifying skills gaps & keyword opportunities' },
-    { icon: 'ri-sparkling-2-fill', label: 'AI optimization', detail: 'Rewriting bullets for maximum impact' },
-    { icon: 'ri-bar-chart-box-line', label: 'Scoring ATS compatibility', detail: 'Evaluating format & keyword density' },
-    { icon: 'ri-shield-check-line', label: 'Finalizing results', detail: 'Preparing your optimized resume' },
+    { icon: 'ri-upload-cloud-2-line', label: 'Uploading resume', detail: 'Securely processing your document' },
+    { icon: 'ri-file-search-line', label: 'Parsing structure', detail: 'Extracting sections, roles & skills from your resume' },
+    { icon: 'ri-focus-3-line', label: 'Analyzing job fit', detail: 'Comparing your profile against job requirements' },
+    { icon: 'ri-sparkling-2-fill', label: 'Optimizing content', detail: 'Using the best models to rewrite for maximum impact' },
+    { icon: 'ri-bar-chart-box-line', label: 'Scoring & ranking', detail: 'Evaluating ATS compatibility & keyword density' },
+    { icon: 'ri-shield-check-line', label: 'Finalizing resume', detail: 'Generating optimized variants & final checks' },
   ];
 
   const aiInsightMessages = [
-    { icon: 'ri-lightbulb-flash-line', text: 'Identifying action verbs that recruiters love...' },
-    { icon: 'ri-search-eye-line', text: 'Scanning for ATS-friendly formatting...' },
-    { icon: 'ri-focus-3-line', text: 'Matching your skills to job requirements...' },
-    { icon: 'ri-bar-chart-grouped-line', text: 'Adding quantifiable achievements...' },
-    { icon: 'ri-trophy-line', text: 'Highlighting your strongest experiences...' },
-    { icon: 'ri-file-text-line', text: 'Optimizing section headings for ATS...' },
-    { icon: 'ri-magic-line', text: 'Rewriting bullet points with impact metrics...' },
-    { icon: 'ri-shield-star-line', text: 'Ensuring keyword density is optimal...' },
+    { icon: 'ri-lightbulb-flash-line', text: 'Extracting key qualifications from the job posting...' },
+    { icon: 'ri-search-eye-line', text: 'Mapping your experience to required competencies...' },
+    { icon: 'ri-focus-3-line', text: 'Identifying missing keywords and skills gaps...' },
+    { icon: 'ri-bar-chart-grouped-line', text: 'Quantifying achievements with impact metrics...' },
+    { icon: 'ri-trophy-line', text: 'Selecting the strongest bullet points for this role...' },
+    { icon: 'ri-file-text-line', text: 'Restructuring sections for maximum recruiter impact...' },
+    { icon: 'ri-magic-line', text: 'Applying domain-specific optimization rules...' },
+    { icon: 'ri-shield-star-line', text: 'Running final ATS compatibility checks...' },
   ];
 
   // Smooth progress animation during AI processing
@@ -261,7 +261,7 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
         formData.append('title', uploadedFile.name.replace(/\.[^/.]+$/, ""));
       }
 
-      console.log('Uploading resume with token:', token.substring(0, 20) + '...');
+      console.log('Uploading resume...');
       const uploadResponse = await authFetch(`${import.meta.env.VITE_API_URL}/resume/upload`, {
         method: 'POST',
         body: formData
@@ -822,8 +822,8 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
                     {smoothProgress >= 100
                       ? 'Your tailored resume is ready'
                       : smoothProgress < 30
-                        ? 'Preparing your resume for AI analysis...'
-                        : 'Our AI is tailoring your resume to the job...'}
+                        ? 'Preparing your resume for optimization...'
+                        : 'Using the best possible models to tailor your resume...'}
                   </p>
                 </div>
 
@@ -900,7 +900,7 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
                         <i className={`${aiInsightMessages[aiMessageIndex]?.icon || 'ri-lightbulb-flash-line'} text-teal-600 text-sm`}></i>
                       </div>
                       <div>
-                        <p className="text-xs font-bold text-teal-700 uppercase tracking-wider mb-0.5">AI Working</p>
+                        <p className="text-xs font-bold text-teal-700 uppercase tracking-wider mb-0.5">Processing</p>
                         <p className="text-sm text-gray-600 leading-snug">{aiInsightMessages[aiMessageIndex]?.text || 'Processing...'}</p>
                       </div>
                     </div>
