@@ -7,11 +7,11 @@ interface Props {
 
 export default function TemplateCompact({ data }: Props) {
   return (
-    <div className="bg-white font-sans text-gray-900 p-8 min-h-[1000px]">
+    <div className="w-full bg-white font-sans text-gray-900 p-6 leading-[1.3]">
       {/* Header - inline horizontal */}
-      <div className="flex items-start justify-between border-b-4 border-teal-500 pb-5 mb-6">
+      <div className="flex items-start justify-between border-b-4 border-teal-500 pb-4 mb-4">
         <div>
-          <h2 className="text-2xl font-black text-gray-900 tracking-tight">{data.name}</h2>
+          <h2 className="text-xl font-black text-gray-900 tracking-tight">{data.name}</h2>
           <p className="text-sm font-semibold text-teal-600 mt-0.5">{data.title}</p>
         </div>
         <div className="text-right space-y-1">
@@ -23,16 +23,16 @@ export default function TemplateCompact({ data }: Props) {
       </div>
 
       {/* Summary */}
-      <div className="mb-5">
+      <div className="mb-4">
         <div className="flex items-center gap-2 mb-2">
           <span className="w-3 h-3 bg-teal-500 rounded-sm flex-shrink-0"></span>
           <h3 className="text-xs font-black uppercase tracking-widest text-gray-700">Summary</h3>
         </div>
-        <p className="text-xs text-gray-600 leading-relaxed">{data.summary}</p>
+        <p className="text-[11px] text-gray-600 leading-relaxed">{data.summary}</p>
       </div>
 
       {/* Skills inline */}
-      <div className="mb-5">
+      <div className="mb-4">
         <div className="flex items-center gap-2 mb-2">
           <span className="w-3 h-3 bg-teal-500 rounded-sm flex-shrink-0"></span>
           <h3 className="text-xs font-black uppercase tracking-widest text-gray-700">Technical Skills</h3>
@@ -47,21 +47,21 @@ export default function TemplateCompact({ data }: Props) {
       </div>
 
       {/* Experience - compact table-like */}
-      <div className="mb-5">
+      <div className="mb-4">
         <div className="flex items-center gap-2 mb-3">
           <span className="w-3 h-3 bg-teal-500 rounded-sm flex-shrink-0"></span>
           <h3 className="text-xs font-black uppercase tracking-widest text-gray-700">Work Experience</h3>
         </div>
-        <div className="space-y-4">
+        <div className="space-y-3">
           {data.experience.map((exp, i) => (
-            <div key={i} className="grid grid-cols-4 gap-3 text-xs">
+            <div key={i} className="grid grid-cols-4 gap-2.5 text-xs">
               <div className="col-span-1 pt-0.5">
                 <p className="font-bold text-teal-600 leading-snug">{exp.company}</p>
                 <p className="text-gray-400 mt-0.5">{exp.period}</p>
                 <p className="text-gray-400">{exp.location}</p>
               </div>
               <div className="col-span-3">
-                <p className="font-bold text-gray-900 mb-1.5">{exp.role}</p>
+                <p className="font-bold text-gray-900 mb-1">{exp.role}</p>
                 <ul className="space-y-1">
                   {exp.bullets.map((b, j) => (
                     <li key={j} className="text-gray-600 flex items-start gap-1.5">

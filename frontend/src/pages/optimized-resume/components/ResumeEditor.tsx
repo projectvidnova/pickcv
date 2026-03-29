@@ -154,7 +154,7 @@ export default function ResumeEditor({ data, onDataChange, templateId, children 
         logging: false,
       });
 
-      // Convert to PDF
+      // Convert to a single-page PDF by fitting inside one A4 page
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF({
         orientation: 'portrait',
@@ -165,38 +165,15 @@ export default function ResumeEditor({ data, onDataChange, templateId, children 
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
 
-      // Scale image to fit page width
-      const imgWidth = pageWidth;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      const widthRatio = pageWidth / canvas.width;
+      const heightRatio = pageHeight / canvas.height;
+      const renderRatio = Math.min(widthRatio, heightRatio);
+      const renderWidth = canvas.width * renderRatio;
+      const renderHeight = canvas.height * renderRatio;
+      const offsetX = (pageWidth - renderWidth) / 2;
+      const offsetY = 0;
 
-      // If it fits on one page, just add it
-      if (imgHeight <= pageHeight) {
-        pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
-      } else {
-        // Multi-page: slice the canvas into page-sized chunks
-        const scaledPageHeight = (pageHeight * canvas.width) / imgWidth;
-        let yOffset = 0;
-        let pageNum = 0;
-
-        while (yOffset < canvas.height) {
-          if (pageNum > 0) pdf.addPage();
-
-          const sliceHeight = Math.min(scaledPageHeight, canvas.height - yOffset);
-          const pageCanvas = document.createElement('canvas');
-          pageCanvas.width = canvas.width;
-          pageCanvas.height = sliceHeight;
-          const ctx = pageCanvas.getContext('2d');
-          if (ctx) {
-            ctx.drawImage(canvas, 0, yOffset, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight);
-            const pageImgData = pageCanvas.toDataURL('image/png');
-            const renderedHeight = (sliceHeight * imgWidth) / canvas.width;
-            pdf.addImage(pageImgData, 'PNG', 0, 0, imgWidth, renderedHeight);
-          }
-
-          yOffset += scaledPageHeight;
-          pageNum++;
-        }
-      }
+      pdf.addImage(imgData, 'PNG', offsetX, offsetY, renderWidth, renderHeight);
 
       pdf.save(`${data.name.replace(/\s+/g, '_')}_Resume.pdf`);
     } catch (error) {
