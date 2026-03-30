@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Navbar from '../../components/feature/Navbar';
 import Footer from '../../components/feature/Footer';
@@ -93,6 +93,70 @@ export default function ResumeComparisonPage() {
 
   // Full (original) data preserved for switching between views
   const [fullResumeData, setFullResumeData] = useState<ResumeData | null>(null);
+
+  // Actual rendered page count from InlineResumeEditor
+  const [actualPageCount, setActualPageCount] = useState(1);
+  const handlePageCountChange = useCallback((pages: number) => setActualPageCount(pages), []);
+
+  // Smart deprioritize options derived from actual resume data
+  const smartDeprioritizeOptions = useMemo(() => {
+    if (!resumeData) return [];
+    const opts: DeprioritizeOption[] = [];
+    const expCount = resumeData.experience?.length || 0;
+    if (expCount > 3) {
+      const olderRoles = resumeData.experience.slice(2).map(e => e.company).join(', ');
+      opts.push({
+        id: 'older_experience',
+        label: `Trim ${expCount - 2} older roles (${olderRoles})`,
+        description: 'Condense older positions to one-line summaries or remove them',
+      });
+    }
+    const maxBullets = Math.max(...(resumeData.experience?.map(e => e.bullets?.length || 0) || [0]));
+    const avgBullets = resumeData.experience?.length
+      ? Math.round(resumeData.experience.reduce((s, e) => s + (e.bullets?.length || 0), 0) / resumeData.experience.length)
+      : 0;
+    if (avgBullets > 3) {
+      opts.push({
+        id: 'reduce_bullets',
+        label: `Reduce bullets (avg ${avgBullets} → 3 per role)`,
+        description: `Keep only the highest-impact achievements for each position`,
+      });
+    } else if (maxBullets > 4) {
+      opts.push({
+        id: 'reduce_bullets',
+        label: `Trim roles with ${maxBullets}+ bullets down to 3`,
+        description: 'Keep only the highest-impact achievements',
+      });
+    }
+    const skillCount = resumeData.skills?.length || 0;
+    if (skillCount > 10) {
+      opts.push({
+        id: 'reduce_skills',
+        label: `Compact skills list (${skillCount} → top 10)`,
+        description: 'Keep only the most relevant skills for the target role',
+      });
+    }
+    if ((resumeData.summary?.length || 0) > 200) {
+      opts.push({
+        id: 'shorten_summary',
+        label: 'Shorten professional summary',
+        description: `Currently ${Math.ceil((resumeData.summary?.length || 0) / 45)} lines — condense to 2-3 impactful lines`,
+      });
+    }
+    if ((resumeData.education?.length || 0) > 1) {
+      opts.push({
+        id: 'education_details',
+        label: `Simplify education (${resumeData.education.length} entries)`,
+        description: 'Keep only degree + institution, drop extra details',
+      });
+    }
+    opts.push({
+      id: 'trim_certifications',
+      label: 'Remove certifications / projects',
+      description: 'Drop supplementary sections that aren\'t role-critical',
+    });
+    return opts;
+  }, [resumeData]);
 
   useEffect(() => {
     const stateData = location.state?.optimizedResume;
@@ -244,8 +308,7 @@ export default function ResumeComparisonPage() {
     );
   };
 
-  const currentPageEstimate = selectedVariant?.page_estimate || 
-    (resumeData ? Math.ceil((resumeData.experience?.length || 1) * 1.2) : 1);
+  const currentPageEstimate = actualPageCount || selectedVariant?.page_estimate || 1;
 
   if (!optimizationData) {
     return (
@@ -339,46 +402,153 @@ export default function ResumeComparisonPage() {
             )}
 
             {/* ── Page Optimization Controls ── */}
-            {currentPageEstimate > 1 && (
-              <div className="mt-5 max-w-3xl mx-auto bg-gradient-to-r from-violet-50 to-indigo-50 border border-violet-200 rounded-2xl p-4 shadow-sm">
-                <div className="flex items-center justify-between flex-wrap gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-violet-100 flex items-center justify-center">
-                      <i className="ri-pages-line text-violet-600 text-lg"></i>
+            {currentPageEstimate > 1 && !compressedData && (
+              <div className="mt-5 max-w-3xl mx-auto overflow-hidden rounded-2xl border border-violet-200 shadow-sm">
+                {/* Header bar */}
+                <div className="bg-gradient-to-r from-violet-50 to-indigo-50 px-5 py-4">
+                  <div className="flex items-center justify-between flex-wrap gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center">
+                        <i className="ri-file-copy-2-line text-violet-600 text-lg"></i>
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-gray-900">
+                          Your resume is {currentPageEstimate} pages
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          Recruiters spend ~6 seconds scanning. A concise resume gets more interviews.
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm font-semibold text-gray-900">
-                        Your resume is {currentPageEstimate} pages
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        Optimize it to fewer pages while keeping the most impactful content
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {currentPageEstimate > 2 && (
+                    {!showCompressModal ? (
                       <button
-                        onClick={() => { setTargetPages(2); setShowCompressModal(true); }}
-                        className="px-4 py-2 rounded-xl text-sm font-semibold bg-white text-violet-700 border border-violet-200 hover:bg-violet-50 transition-all shadow-sm"
+                        onClick={() => setShowCompressModal(true)}
+                        className="px-5 py-2.5 rounded-xl text-sm font-semibold bg-violet-600 text-white hover:bg-violet-700 transition-all shadow-md hover:shadow-lg"
                       >
-                        <i className="ri-compress-line mr-1.5"></i>Optimize to 2 pages
+                        <i className="ri-magic-line mr-1.5"></i>Smart Compress
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setShowCompressModal(false)}
+                        className="px-4 py-2 rounded-xl text-sm font-medium text-gray-500 bg-white border border-gray-200 hover:bg-gray-50 transition-all"
+                      >
+                        Cancel
                       </button>
                     )}
-                    <button
-                      onClick={() => { setTargetPages(1); setShowCompressModal(true); }}
-                      className="px-4 py-2 rounded-xl text-sm font-semibold bg-violet-600 text-white hover:bg-violet-700 transition-all shadow-sm"
-                    >
-                      <i className="ri-compress-line mr-1.5"></i>Optimize to 1 page
-                    </button>
                   </div>
                 </div>
+
+                {/* Expandable compress panel */}
+                {showCompressModal && (
+                  <div className="bg-white px-5 py-5 border-t border-violet-100 space-y-5 animate-in fade-in slide-in-from-top-2 duration-200">
+                    {/* Step 1: Target page count */}
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Step 1 — Target length</p>
+                      <div className="flex gap-2">
+                        {currentPageEstimate > 2 && (
+                          <button
+                            onClick={() => setTargetPages(2)}
+                            className={`flex-1 px-4 py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
+                              targetPages === 2
+                                ? 'border-violet-500 bg-violet-50 text-violet-700 shadow-sm'
+                                : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                            }`}
+                          >
+                            <i className="ri-file-copy-2-line mr-1.5"></i>
+                            Fit to 2 pages
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setTargetPages(1)}
+                          className={`flex-1 px-4 py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
+                            targetPages === 1
+                              ? 'border-violet-500 bg-violet-50 text-violet-700 shadow-sm'
+                              : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                          }`}
+                        >
+                          <i className="ri-file-line mr-1.5"></i>
+                          Fit to 1 page
+                          <span className="ml-1.5 text-[10px] font-bold uppercase bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-md">Recommended</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Step 2: Smart deprioritize options */}
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Step 2 — What can we trim?</p>
+                      <p className="text-xs text-gray-400 mb-3">We analyzed your resume. Select what matters less for this role:</p>
+                      <div className="space-y-2">
+                        {smartDeprioritizeOptions.map((option) => (
+                          <label
+                            key={option.id}
+                            className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                              selectedDeprioritize.includes(option.id)
+                                ? 'border-violet-300 bg-violet-50/70 shadow-sm'
+                                : 'border-gray-150 hover:border-gray-300 hover:bg-gray-50'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedDeprioritize.includes(option.id)}
+                              onChange={() => toggleDeprioritize(option.id)}
+                              className="mt-0.5 w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-900">{option.label}</p>
+                              <p className="text-xs text-gray-500 mt-0.5">{option.description}</p>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Step 3: Custom instructions */}
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Step 3 — Anything else? <span className="font-normal text-gray-400">(optional)</span></p>
+                      <textarea
+                        value={customDeprioritize}
+                        onChange={(e) => setCustomDeprioritize(e.target.value)}
+                        placeholder='e.g. "Remove my 2018 internship at XYZ Corp" or "Focus more on leadership and less on technical details"'
+                        rows={2}
+                        maxLength={500}
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-400 transition-all resize-none placeholder:text-gray-400"
+                      />
+                    </div>
+
+                    {/* Action */}
+                    <div className="flex items-center justify-between pt-1">
+                      <p className="text-xs text-gray-400">
+                        {selectedDeprioritize.length === 0 && !customDeprioritize.trim()
+                          ? 'Select at least one option or add custom instructions'
+                          : `${selectedDeprioritize.length} option${selectedDeprioritize.length !== 1 ? 's' : ''} selected`}
+                      </p>
+                      <button
+                        onClick={handleCompress}
+                        disabled={isCompressing || (selectedDeprioritize.length === 0 && !customDeprioritize.trim())}
+                        className="px-6 py-2.5 rounded-xl text-sm font-semibold text-white bg-violet-600 hover:bg-violet-700 transition-all shadow-md hover:shadow-lg disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
+                      >
+                        {isCompressing ? (
+                          <span className="flex items-center gap-2">
+                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                            Compressing to {targetPages} page{targetPages > 1 ? 's' : ''}...
+                          </span>
+                        ) : (
+                          <>
+                            <i className="ri-magic-line mr-1.5"></i>
+                            Compress to {targetPages} {targetPages === 1 ? 'Page' : 'Pages'}
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
             {/* ── Version Switcher (after compression) ── */}
             {compressedData && (
-              <div className="mt-4 max-w-3xl mx-auto">
-                <div className="flex items-center justify-center gap-2 p-1 bg-gray-100 rounded-xl">
+              <div className="mt-5 max-w-3xl mx-auto space-y-3">
+                <div className="flex items-center justify-center gap-1 p-1 bg-gray-100 rounded-xl">
                   <button
                     onClick={switchToFullVersion}
                     className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all ${
@@ -404,15 +574,26 @@ export default function ResumeComparisonPage() {
                 </div>
 
                 {viewMode === 'compressed' && compressionNotes.length > 0 && (
-                  <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
                     <p className="text-xs font-semibold text-amber-800 mb-1.5">
-                      <i className="ri-information-line mr-1"></i>Compression applied:
+                      <i className="ri-information-line mr-1"></i>What was trimmed:
                     </p>
                     <ul className="text-xs text-amber-700 space-y-0.5">
                       {compressionNotes.map((note, idx) => (
                         <li key={idx}>• {note}</li>
                       ))}
                     </ul>
+                  </div>
+                )}
+
+                {viewMode === 'compressed' && (
+                  <div className="flex justify-center">
+                    <button
+                      onClick={() => { setCompressedData(null); setCompressionNotes([]); switchToFullVersion(); setShowCompressModal(false); setSelectedDeprioritize([]); setCustomDeprioritize(''); }}
+                      className="text-xs text-gray-400 hover:text-violet-600 transition-colors underline underline-offset-2"
+                    >
+                      Try different compression settings
+                    </button>
                   </div>
                 )}
               </div>
@@ -445,7 +626,7 @@ export default function ResumeComparisonPage() {
 
           {/* Editor Tab */}
           {activeTab === 'editor' && resumeData && (
-            <InlineResumeEditor data={resumeData} onDataChange={setResumeData} initialTemplateId={recommendedTemplate} variantId={variantId} variantRationale={variantRationale} />
+            <InlineResumeEditor data={resumeData} onDataChange={setResumeData} initialTemplateId={recommendedTemplate} variantId={variantId} variantRationale={variantRationale} onPageCountChange={handlePageCountChange} />
           )}
 
           {activeTab === 'editor' && !resumeData && (
@@ -545,113 +726,6 @@ export default function ResumeComparisonPage() {
       </div>
 
       <Footer />
-
-      {/* ── Compression Modal ── */}
-      {showCompressModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
-            {/* Header */}
-            <div className="p-6 border-b border-gray-100">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center">
-                    <i className="ri-compress-line text-violet-600 text-xl"></i>
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-bold text-gray-900">Optimize to {targetPages} {targetPages === 1 ? 'Page' : 'Pages'}</h3>
-                    <p className="text-xs text-gray-500">Choose what to deprioritize for a more concise resume</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setShowCompressModal(false)}
-                  className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors"
-                >
-                  <i className="ri-close-line text-gray-500"></i>
-                </button>
-              </div>
-            </div>
-
-            {/* Deprioritization Options */}
-            <div className="p-6 space-y-4">
-              <div>
-                <p className="text-sm font-semibold text-gray-700 mb-3">What can be trimmed?</p>
-                <div className="space-y-2">
-                  {(optimizationData?.resume_os?.deprioritize_options || [
-                    { id: 'older_experience', label: 'Older work experience (3+ years ago)', description: 'Remove or trim roles older than 3 years' },
-                    { id: 'education_details', label: 'Education details', description: 'Keep only degree + school, drop coursework/GPA' },
-                    { id: 'reduce_skills', label: 'Trim skills list', description: 'Keep only the top 8-10 most relevant skills' },
-                    { id: 'shorten_summary', label: 'Shorten professional summary', description: 'Compress summary to 2-3 lines' },
-                    { id: 'reduce_bullets', label: 'Fewer bullets per role', description: 'Keep only the top 2-3 highest-impact bullets per role' },
-                    { id: 'trim_certifications', label: 'Remove certifications / projects', description: 'Drop certifications and projects sections' },
-                  ]).map((option) => (
-                    <label
-                      key={option.id}
-                      className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
-                        selectedDeprioritize.includes(option.id)
-                          ? 'border-violet-300 bg-violet-50'
-                          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedDeprioritize.includes(option.id)}
-                        onChange={() => toggleDeprioritize(option.id)}
-                        className="mt-0.5 w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
-                      />
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">{option.label}</p>
-                        <p className="text-xs text-gray-500 mt-0.5">{option.description}</p>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {/* Free text */}
-              <div>
-                <label className="text-sm font-semibold text-gray-700 mb-2 block">
-                  Anything specific to deprioritize?
-                </label>
-                <textarea
-                  value={customDeprioritize}
-                  onChange={(e) => setCustomDeprioritize(e.target.value)}
-                  placeholder='e.g. "Remove my internship from 2018" or "Less focus on education"'
-                  rows={3}
-                  maxLength={500}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-400 transition-all resize-none"
-                />
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="p-6 border-t border-gray-100 flex items-center justify-end gap-3">
-              <button
-                onClick={() => setShowCompressModal(false)}
-                className="px-5 py-2.5 rounded-xl text-sm font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 transition-all"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCompress}
-                disabled={isCompressing}
-                className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-violet-600 hover:bg-violet-700 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isCompressing ? (
-                  <span className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                    Compressing...
-                  </span>
-                ) : (
-                  <>
-                    <i className="ri-compress-line mr-1.5"></i>
-                    Compress to {targetPages} {targetPages === 1 ? 'Page' : 'Pages'}
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </main>
   );
 }
