@@ -846,7 +846,7 @@ class ResumeOSOrchestrator:
         budget = {
             "max_experiences": 3,
             "max_bullets_per_exp": min(cluster_max_bullets, 5),
-            "max_skills": 12,
+            "max_skills": 10,
             "max_education": 2,
             "summary_chars": summary_by_level.get(level, 380),
             "bullet_chars": 175,
@@ -854,17 +854,17 @@ class ResumeOSOrchestrator:
 
         # ── Cluster-specific overrides ──
         if cluster_id in ["C1", "C5"]:
-            # SWE / DevOps: dense technical bullets, more skills
-            budget.update({"max_experiences": 4, "max_skills": 14})
+            # SWE / DevOps: dense technical bullets, slightly more skills
+            budget.update({"max_experiences": 4, "max_skills": 12})
         elif cluster_id == "C6":
             # Sales: fewer but metric-heavy bullets
-            budget.update({"max_bullets_per_exp": min(cluster_max_bullets, 4), "max_skills": 10})
+            budget.update({"max_bullets_per_exp": min(cluster_max_bullets, 4), "max_skills": 8})
         elif cluster_id == "C10":
             # UX/UI: portfolio-first, fewer bullets
-            budget.update({"max_bullets_per_exp": min(cluster_max_bullets, 3), "max_skills": 10})
+            budget.update({"max_bullets_per_exp": min(cluster_max_bullets, 3), "max_skills": 8})
         elif cluster_id == "C3":
             # DS/ML: education prominent
-            budget.update({"max_education": 3, "max_skills": 14})
+            budget.update({"max_education": 3, "max_skills": 12})
         elif cluster_id == "C4":
             # Product: strategic summary, moderate bullets
             budget.update({"summary_chars": max(budget["summary_chars"], 400)})

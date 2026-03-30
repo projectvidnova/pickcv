@@ -446,7 +446,10 @@ ENGINE 1 — POSITIONING ENGINE (Summary):
 - NEVER use: "Results-driven", "motivated", "passionate", "dynamic", "seasoned", "team player", "proven track record".
 
 ENGINE 2 — KEYWORD ENGINE (ATS Coverage):
-- Extract required + preferred keywords from JD. Distribute: Summary (2-4 core), Experience (with evidence), Skills (full list).
+- Extract required + preferred keywords from JD.
+- KEYWORD DISTRIBUTION: Summary (2-4 core), Experience bullets (weave keywords into achievement context), Skills (ONLY genuine technical skills, tools, frameworks, methodologies, and certifications).
+- CRITICAL: The Skills section is NOT a keyword dump. It must contain ONLY real, demonstrable skills (e.g., "Python", "AWS", "Agile", "Power BI", "TensorFlow"). Do NOT put job-domain concepts, soft skills, or generic competencies in Skills.
+- Instead, weave JD keywords naturally into experience bullets and summary (e.g., JD says "cross-functional collaboration" → use it in a bullet: "Led cross-functional collaboration across 3 teams...").
 - Orphaned keyword rule: any skill in Skills with ZERO evidence in Experience = flagged.
 - If keyword coverage < 70%: flag as blocking gap.
 
@@ -516,7 +519,7 @@ Return VALID JSON:
             "bullets": ["<optimized bullet 1>", "<optimized bullet 2>"]
         }}
     ],
-    "skills": ["<skill1>", "<skill2>"],
+    "skills": ["<actual technical skill, tool, framework, or methodology>"],
     "education": [
         {{
             "degree": "<from original resume>",
@@ -576,7 +579,8 @@ Return VALID JSON:
 Requirements:
 - Single-column layout ONLY. One-page fit at normal font size.
 - Max 3 most relevant roles (4 only if necessary). 2-3 bullets per role, each <= 25 words.
-- Max 12 core skills. Max 2 education entries.
+- SKILLS RULE: Max 10 skills. Each must be a REAL skill, tool, framework, language, methodology, or certification (e.g., "Python", "AWS", "Kubernetes", "Agile", "SQL"). Do NOT include generic phrases like "Team Leadership", "Problem Solving", "Cross-functional Collaboration", "Strategic Planning" — weave those into experience bullets instead.
+- Max 2 education entries.
 - NEVER fabricate personal details.
 - For comparison.detailed_changes, include at most 5-7 key changes.
 """
