@@ -83,6 +83,19 @@ export interface FreeDownloadResult {
   free_downloads_remaining: number;
 }
 
+export interface CouponValidateResult {
+  valid: boolean;
+  code: string;
+  description: string;
+  remaining_uses: number;
+}
+
+export interface CouponApplyResult {
+  success: boolean;
+  message: string;
+  coupon_code: string;
+}
+
 // ─── Service ─────────────────────────────────────────────────
 
 class PaymentService {
@@ -181,6 +194,34 @@ class PaymentService {
   async getHistory(): Promise<PaymentHistoryItem[]> {
     const response = await authFetch(`${this.baseUrl}/history`);
     if (!response.ok) throw new Error('Failed to fetch payment history');
+    return response.json();
+  }
+
+  /** Validate a coupon code without redeeming */
+  async validateCoupon(couponCode: string): Promise<CouponValidateResult> {
+    const response = await authFetch(`${this.baseUrl}/coupon/validate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ coupon_code: couponCode }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Invalid coupon');
+    }
+    return response.json();
+  }
+
+  /** Apply (redeem) a coupon to unlock resume download */
+  async applyCoupon(couponCode: string, resumeId: number): Promise<CouponApplyResult> {
+    const response = await authFetch(`${this.baseUrl}/coupon/apply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ coupon_code: couponCode, resume_id: resumeId }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to apply coupon');
+    }
     return response.json();
   }
 
