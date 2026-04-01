@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Navbar from '../../../components/feature/Navbar';
+import InstitutionNavbar from '../../../components/feature/InstitutionNavbar';
 import { resolvePath } from '../../../utils/subdomain';
 import Footer from '../../../components/feature/Footer';
 import { apiService } from '../../../services/api';
@@ -115,7 +115,7 @@ export default function CollegeRegister() {
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-teal-50/30">
-      <Navbar />
+      <InstitutionNavbar />
 
       <div className="pt-32 pb-16 px-4 sm:px-6 lg:px-8">
         <div className="max-w-2xl mx-auto">

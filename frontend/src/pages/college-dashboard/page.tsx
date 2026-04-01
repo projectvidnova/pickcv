@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Navbar from '../../components/feature/Navbar';
+import InstitutionNavbar from '../../components/feature/InstitutionNavbar';
 import { resolvePath } from '../../utils/subdomain';
 import Footer from '../../components/feature/Footer';
 import ShareProfilesModal from './components/ShareProfilesModal';
@@ -321,7 +321,7 @@ export default function CollegeDashboard() {
   // ─── Render ─────────────────────────────────────────────────
   return (
     <main className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-teal-50/30">
-      <Navbar />
+      <InstitutionNavbar />
 
       <div className="pt-24 pb-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
         {/* ──── College Header ──── */}
