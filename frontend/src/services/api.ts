@@ -83,6 +83,22 @@ class ApiService {
   }
 
   /**
+   * Verify a college student invitation token (public, no auth)
+   */
+  async verifyInviteToken(token: string) {
+    try {
+      const response = await fetch(`${this.baseUrl}/college/invite/verify?token=${encodeURIComponent(token)}`);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Invalid invitation');
+      }
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Invalid invitation' };
+    }
+  }
+
+  /**
    * Verify email with token
    */
   async verifyEmail(token: string) {
@@ -910,7 +926,7 @@ class ApiService {
         formData.append('file', payload.file);
       }
       if (payload.text) {
-        formData.append('text', payload.text);
+        formData.append('emails', payload.text);
       }
       const response = await fetch(`${this.baseUrl}/college/students/upload`, {
         method: 'POST',

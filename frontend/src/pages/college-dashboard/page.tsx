@@ -9,6 +9,7 @@ import DepartmentsTab from './components/DepartmentsTab';
 import COEGroupsTab from './components/COEGroupsTab';
 import SkillAnalyticsTab from './components/SkillAnalyticsTab';
 import AlertsPanel from './components/AlertsPanel';
+import AddStudentsModal from './components/AddStudentsModal';
 import { apiService } from '../../services/api';
 
 // ─── Interfaces ───────────────────────────────────────────────
@@ -132,6 +133,7 @@ export default function CollegeDashboard() {
   const [selectedStudents, setSelectedStudents] = useState<number[]>([]);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showAddStudentsModal, setShowAddStudentsModal] = useState(false);
   const [isInviting, setIsInviting] = useState(false);
 
   // Auth check & load data
@@ -350,6 +352,10 @@ export default function CollegeDashboard() {
               </div>
             </div>
             <div className="flex gap-3 flex-wrap">
+              <button onClick={() => setShowAddStudentsModal(true)}
+                className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-blue-500 to-indigo-500 text-white text-sm font-semibold hover:from-blue-600 hover:to-indigo-600 transition-all whitespace-nowrap flex items-center gap-2 cursor-pointer">
+                <i className="ri-user-add-line"></i>Add Students
+              </button>
               {stats.invited > 0 && (
                 <button
                   onClick={handleInviteStudents} disabled={isInviting}
@@ -940,6 +946,11 @@ export default function CollegeDashboard() {
           onSave={handleProfileUpdate}
         />
       )}
+      <AddStudentsModal
+        isOpen={showAddStudentsModal}
+        onClose={() => setShowAddStudentsModal(false)}
+        onStudentsAdded={loadDashboardData}
+      />
 
       <Footer />
     </main>

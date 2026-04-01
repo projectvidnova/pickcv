@@ -235,6 +235,36 @@ async def upload_students(
     )
 
 
+# ─── Public invite verification (no auth required) ──────────
+@router.get("/invite/verify")
+async def verify_invite_token(
+    token: str = Query(..., min_length=1),
+    db: AsyncSession = Depends(get_db),
+):
+    """Public: validate an invitation token and return college + student info."""
+    result = await db.execute(
+        select(CollegeStudent).where(CollegeStudent.invitation_token == token)
+    )
+    student = result.scalar_one_or_none()
+    if not student:
+        raise HTTPException(status_code=404, detail="Invalid or expired invitation")
+
+    college_result = await db.execute(
+        select(College).where(College.id == student.college_id)
+    )
+    college = college_result.scalar_one_or_none()
+    if not college:
+        raise HTTPException(status_code=404, detail="College not found")
+
+    return {
+        "college_name": college.institution_name,
+        "college_logo": college.logo_url,
+        "student_email": student.email,
+        "student_name": student.name,
+        "status": student.status,
+    }
+
+
 @router.post("/students/invite")
 async def invite_students(
     request: Request,
