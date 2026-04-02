@@ -356,9 +356,9 @@ class EmailService:
         try:
             base = frontend_url or settings.frontend_url
             name_display = student_name if student_name else "Student"
-            register_link = f"{base}/auth?register=true"
+            register_link = f"{base}/invite"
             if invitation_token:
-                register_link += f"&invite={invitation_token}"
+                register_link += f"?token={invitation_token}"
 
             subject = f"{college_name} invites you to join PickCV"
             body = f"""\

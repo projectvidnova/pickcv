@@ -1,3 +1,5 @@
+import { getPortalUrl } from '../../utils/subdomain';
+
 const footerLinks = {
   product: [
     { label: 'ATS Optimizer', href: '#how-it-works' },
@@ -9,8 +11,8 @@ const footerLinks = {
     { label: 'About Us', href: '/about' },
     { label: 'Careers', href: '/careers' },
     { label: 'Contact Support', href: '/contact' },
-    { label: 'For Recruiters', href: '/for-recruiters' },
-    { label: 'For Colleges', href: '/for-colleges' },
+    { label: 'For Recruiters', href: getPortalUrl('recruiter') },
+    { label: 'For Colleges', href: getPortalUrl('institution') },
   ],
   legal: [
     { label: 'Privacy Policy', href: '/privacy' },

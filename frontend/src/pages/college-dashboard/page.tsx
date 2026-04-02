@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Navbar from '../../components/feature/Navbar';
+import InstitutionNavbar from '../../components/feature/InstitutionNavbar';
 import { resolvePath } from '../../utils/subdomain';
 import Footer from '../../components/feature/Footer';
 import ShareProfilesModal from './components/ShareProfilesModal';
@@ -9,6 +9,7 @@ import DepartmentsTab from './components/DepartmentsTab';
 import COEGroupsTab from './components/COEGroupsTab';
 import SkillAnalyticsTab from './components/SkillAnalyticsTab';
 import AlertsPanel from './components/AlertsPanel';
+import AddStudentsModal from './components/AddStudentsModal';
 import { apiService } from '../../services/api';
 
 // ─── Interfaces ───────────────────────────────────────────────
@@ -132,6 +133,7 @@ export default function CollegeDashboard() {
   const [selectedStudents, setSelectedStudents] = useState<number[]>([]);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showAddStudentsModal, setShowAddStudentsModal] = useState(false);
   const [isInviting, setIsInviting] = useState(false);
 
   // Auth check & load data
@@ -198,6 +200,24 @@ export default function CollegeDashboard() {
   };
 
   const refreshData = () => { loadDashboardData(); };
+
+  const handleDeleteStudent = async (studentId: number, studentName: string) => {
+    if (!window.confirm(`Remove "${studentName}" from your institution? This cannot be undone.`)) return;
+    const res = await apiService.deleteStudent(studentId);
+    if (res.success) {
+      setStudents(prev => prev.filter(s => s.id !== studentId));
+      setSelectedStudents(prev => prev.filter(id => id !== studentId));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!window.confirm(`Remove ${selectedStudents.length} selected student(s)? This cannot be undone.`)) return;
+    const res = await apiService.bulkDeleteStudents(selectedStudents);
+    if (res.success) {
+      setStudents(prev => prev.filter(s => !selectedStudents.includes(s.id)));
+      setSelectedStudents([]);
+    }
+  };
 
   // ─── Derived Data ───────────────────────────────────────────
   const branches = useMemo(() => {
@@ -319,7 +339,7 @@ export default function CollegeDashboard() {
   // ─── Render ─────────────────────────────────────────────────
   return (
     <main className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-teal-50/30">
-      <Navbar />
+      <InstitutionNavbar />
 
       <div className="pt-24 pb-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
         {/* ──── College Header ──── */}
@@ -350,6 +370,10 @@ export default function CollegeDashboard() {
               </div>
             </div>
             <div className="flex gap-3 flex-wrap">
+              <button onClick={() => setShowAddStudentsModal(true)}
+                className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-blue-500 to-indigo-500 text-white text-sm font-semibold hover:from-blue-600 hover:to-indigo-600 transition-all whitespace-nowrap flex items-center gap-2 cursor-pointer">
+                <i className="ri-user-add-line"></i>Add Students
+              </button>
               {stats.invited > 0 && (
                 <button
                   onClick={handleInviteStudents} disabled={isInviting}
@@ -699,10 +723,18 @@ export default function CollegeDashboard() {
                                 </span>
                               </td>
                               <td className="px-4 py-3">
-                                <button onClick={() => toggleExpandStudent(student.id)}
-                                  className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-teal-600 transition-colors cursor-pointer">
-                                  <i className={`ri-${expandedStudent === student.id ? 'arrow-up' : 'arrow-down'}-s-line`}></i>
-                                </button>
+                                <div className="flex items-center gap-1">
+                                  <button onClick={() => toggleExpandStudent(student.id)}
+                                    className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-teal-600 transition-colors cursor-pointer"
+                                    title="Expand details">
+                                    <i className={`ri-${expandedStudent === student.id ? 'arrow-up' : 'arrow-down'}-s-line`}></i>
+                                  </button>
+                                  <button onClick={() => handleDeleteStudent(student.id, student.name || student.email)}
+                                    className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors cursor-pointer"
+                                    title="Remove student">
+                                    <i className="ri-delete-bin-line text-sm"></i>
+                                  </button>
+                                </div>
                               </td>
                             </tr>
 
@@ -916,6 +948,10 @@ export default function CollegeDashboard() {
                 className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-medium transition-colors cursor-pointer flex items-center gap-2">
                 <i className="ri-close-line"></i>Clear
               </button>
+              <button onClick={handleBulkDelete}
+                className="px-4 py-2 rounded-lg bg-red-500/90 hover:bg-red-500 text-white text-sm font-medium transition-colors cursor-pointer flex items-center gap-2">
+                <i className="ri-delete-bin-line"></i>Remove
+              </button>
               <button onClick={() => setShowShareModal(true)}
                 className="px-5 py-2 rounded-lg bg-white text-teal-600 hover:bg-teal-50 text-sm font-semibold transition-colors cursor-pointer flex items-center gap-2 shadow-lg">
                 <i className="ri-share-forward-line"></i>Share with Recruiters
@@ -940,6 +976,11 @@ export default function CollegeDashboard() {
           onSave={handleProfileUpdate}
         />
       )}
+      <AddStudentsModal
+        isOpen={showAddStudentsModal}
+        onClose={() => setShowAddStudentsModal(false)}
+        onStudentsAdded={loadDashboardData}
+      />
 
       <Footer />
     </main>

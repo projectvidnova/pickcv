@@ -28,6 +28,7 @@ const AdminRecruiters = lazy(() => import('../pages/admin/recruiters/page'));
 const NotFound = lazy(() => import('../pages/NotFound'));
 const ForRecruitersPage = lazy(() => import('../pages/for-recruiters/page'));
 const ForCollegesPage = lazy(() => import('../pages/for-colleges/page'));
+const InvitePage = lazy(() => import('../pages/invite/page'));
 
 // ─── Recruiter portal pages ───
 const RecruiterLogin = lazy(() => import('../pages/recruiter/login/page'));
@@ -94,7 +95,7 @@ const adminRoutes: RouteObject[] = [
 const institutionRoutes: RouteObject[] = [
   {
     path: '/',
-    element: <CollegeLogin />,
+    element: <ForCollegesPage />,
   },
   {
     path: '/login',
@@ -305,6 +306,10 @@ const mainRoutes: RouteObject[] = [
   {
     path: '/for-colleges',
     element: <ForCollegesPage />,
+  },
+  {
+    path: '/invite',
+    element: <InvitePage />,
   },
   // College & admin routes still accessible from main site
   {
