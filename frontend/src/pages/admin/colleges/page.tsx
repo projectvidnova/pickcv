@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { apiService } from '../../../services/api';
 import { resolvePath } from '../../../utils/subdomain';
+import AdminNavbar from '../../../components/feature/AdminNavbar';
 
 interface CollegeRegistration {
   id: number;
@@ -111,103 +112,63 @@ export default function AdminColleges() {
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
-      {/* Top Bar */}
-      <header className="bg-gray-800/50 backdrop-blur-xl border-b border-gray-700/50 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link to="/" className="flex items-center gap-2">
-              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center">
-                <i className="ri-shield-keyhole-fill text-white text-lg"></i>
-              </div>
-              <span className="text-xl font-bold text-white">PickCV</span>
-            </Link>
-            <div className="hidden sm:block h-6 w-px bg-gray-600"></div>
-            <span className="hidden sm:block text-sm text-gray-400">Admin Dashboard</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <Link
-              to={resolvePath('/admin/colleges')}
-              className="px-4 py-2 rounded-lg bg-teal-500/20 text-teal-300 text-sm font-medium border border-teal-500/30 flex items-center gap-2">
-              <i className="ri-building-4-line"></i>
-              <span className="hidden sm:inline">Colleges</span>
-            </Link>
-            <Link
-              to={resolvePath('/admin/recruiters')}
-              className="px-4 py-2 rounded-lg text-gray-400 text-sm font-medium hover:text-white hover:bg-gray-700/50 transition-colors flex items-center gap-2">
-              <i className="ri-briefcase-line"></i>
-              <span className="hidden sm:inline">Recruiters</span>
-            </Link>
-            <Link
-              to={resolvePath('/admin/payments')}
-              className="px-4 py-2 rounded-lg text-gray-400 text-sm font-medium hover:text-white hover:bg-gray-700/50 transition-colors flex items-center gap-2">
-              <i className="ri-money-rupee-circle-line"></i>
-              <span className="hidden sm:inline">Payments</span>
-            </Link>
-            <button
-              onClick={handleLogout}
-              className="px-4 py-2 rounded-lg bg-gray-700/50 text-gray-300 text-sm font-medium hover:bg-gray-700 hover:text-white transition-colors flex items-center gap-2 cursor-pointer">
-              <i className="ri-logout-box-line"></i>
-              <span className="hidden sm:inline">Logout</span>
-            </button>
-          </div>
-        </div>
-      </header>
+    <main className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-indigo-50/30">
+      <AdminNavbar activePage="colleges" />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-28 pb-10">
         {/* Page Header */}
         <div className="mb-10">
-          <h1 className="text-3xl font-bold text-white mb-2">College Registrations</h1>
-          <p className="text-gray-400">Review and manage college registration requests</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">College Registrations</h1>
+          <p className="text-gray-500">Review and manage college registration requests</p>
         </div>
 
         {/* Stats Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <div className="bg-gray-800/50 backdrop-blur-xl rounded-xl border border-gray-700/50 p-5">
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
             <div className="flex items-center gap-3 mb-3">
-              <div className="w-9 h-9 rounded-lg bg-gray-700 flex items-center justify-center">
-                <i className="ri-building-4-line text-gray-300"></i>
+              <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center">
+                <i className="ri-building-4-line text-gray-500"></i>
               </div>
             </div>
-            <p className="text-2xl font-bold text-white">{stats.total}</p>
-            <p className="text-sm text-gray-400">Total</p>
+            <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+            <p className="text-sm text-gray-500">Total</p>
           </div>
 
-          <div className="bg-gray-800/50 backdrop-blur-xl rounded-xl border border-amber-500/20 p-5">
+          <div className="bg-white rounded-xl border border-amber-200 shadow-sm p-5">
             <div className="flex items-center gap-3 mb-3">
-              <div className="w-9 h-9 rounded-lg bg-amber-500/20 flex items-center justify-center">
-                <i className="ri-time-line text-amber-400"></i>
+              <div className="w-9 h-9 rounded-lg bg-amber-50 flex items-center justify-center">
+                <i className="ri-time-line text-amber-500"></i>
               </div>
             </div>
-            <p className="text-2xl font-bold text-amber-400">{stats.pending}</p>
-            <p className="text-sm text-gray-400">Pending</p>
+            <p className="text-2xl font-bold text-amber-600">{stats.pending}</p>
+            <p className="text-sm text-gray-500">Pending</p>
           </div>
 
-          <div className="bg-gray-800/50 backdrop-blur-xl rounded-xl border border-emerald-500/20 p-5">
+          <div className="bg-white rounded-xl border border-emerald-200 shadow-sm p-5">
             <div className="flex items-center gap-3 mb-3">
-              <div className="w-9 h-9 rounded-lg bg-emerald-500/20 flex items-center justify-center">
-                <i className="ri-checkbox-circle-line text-emerald-400"></i>
+              <div className="w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center">
+                <i className="ri-checkbox-circle-line text-emerald-500"></i>
               </div>
             </div>
-            <p className="text-2xl font-bold text-emerald-400">{stats.approved}</p>
-            <p className="text-sm text-gray-400">Approved</p>
+            <p className="text-2xl font-bold text-emerald-600">{stats.approved}</p>
+            <p className="text-sm text-gray-500">Approved</p>
           </div>
 
-          <div className="bg-gray-800/50 backdrop-blur-xl rounded-xl border border-red-500/20 p-5">
+          <div className="bg-white rounded-xl border border-red-200 shadow-sm p-5">
             <div className="flex items-center gap-3 mb-3">
-              <div className="w-9 h-9 rounded-lg bg-red-500/20 flex items-center justify-center">
-                <i className="ri-close-circle-line text-red-400"></i>
+              <div className="w-9 h-9 rounded-lg bg-red-50 flex items-center justify-center">
+                <i className="ri-close-circle-line text-red-500"></i>
               </div>
             </div>
-            <p className="text-2xl font-bold text-red-400">{stats.rejected}</p>
-            <p className="text-sm text-gray-400">Rejected</p>
+            <p className="text-2xl font-bold text-red-600">{stats.rejected}</p>
+            <p className="text-sm text-gray-500">Rejected</p>
           </div>
         </div>
 
         {/* Filters */}
-        <div className="bg-gray-800/50 backdrop-blur-xl rounded-2xl border border-gray-700/50 overflow-hidden">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
           {/* Tabs and Search */}
-          <div className="px-6 py-4 border-b border-gray-700/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="px-6 py-4 border-b border-gray-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-center gap-2">
               {(['all', 'pending', 'approved', 'rejected'] as const).map(tab => (
                 <button
@@ -215,8 +176,8 @@ export default function AdminColleges() {
                   onClick={() => setActiveTab(tab)}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer whitespace-nowrap ${
                     activeTab === tab
-                      ? 'bg-teal-500/20 text-teal-300 border border-teal-500/30'
-                      : 'text-gray-400 hover:text-gray-200 hover:bg-gray-700/50'
+                      ? 'bg-indigo-50 text-indigo-600 border border-indigo-200'
+                      : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
                   }`}>
                   {tab.charAt(0).toUpperCase() + tab.slice(1)}
                   {tab !== 'all' && (
@@ -229,13 +190,13 @@ export default function AdminColleges() {
             </div>
 
             <div className="relative w-full sm:w-72">
-              <i className="ri-search-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"></i>
+              <i className="ri-search-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
               <input
                 type="text"
                 placeholder="Search colleges..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500"
+                className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-900 placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-400"
               />
             </div>
           </div>
@@ -244,51 +205,51 @@ export default function AdminColleges() {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-gray-700/50">
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Institution</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Contact</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Location</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Registered</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Actions</th>
+                <tr className="border-b border-gray-100">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Institution</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Contact</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Location</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Registered</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-700/30">
+              <tbody className="divide-y divide-gray-100">
                 {filteredRegistrations.map(reg => (
-                  <tr key={reg.id} className="hover:bg-gray-700/20 transition-colors">
+                  <tr key={reg.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4">
                       <div>
-                        <p className="text-sm font-semibold text-white">{reg.institution_name}</p>
-                        <p className="text-xs text-gray-500 mt-0.5">{reg.official_email}</p>
+                        <p className="text-sm font-semibold text-gray-900">{reg.institution_name}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">{reg.official_email}</p>
                       </div>
                     </td>
                     <td className="px-6 py-4">
                       <div>
-                        <p className="text-sm text-gray-300">{reg.contact_person_name}</p>
-                        <p className="text-xs text-gray-500">{reg.designation}</p>
+                        <p className="text-sm text-gray-700">{reg.contact_person_name}</p>
+                        <p className="text-xs text-gray-400">{reg.designation}</p>
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <p className="text-sm text-gray-300">{reg.city}, {reg.state}</p>
+                      <p className="text-sm text-gray-600">{reg.city}, {reg.state}</p>
                     </td>
                     <td className="px-6 py-4">
-                      <p className="text-sm text-gray-400">{formatDate(reg.created_at)}</p>
+                      <p className="text-sm text-gray-500">{formatDate(reg.created_at)}</p>
                     </td>
                     <td className="px-6 py-4">
                       {reg.status === 'pending' && (
-                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-600 border border-amber-200">
                           <i className="ri-time-line mr-1.5"></i>
                           Pending
                         </span>
                       )}
                       {reg.status === 'approved' && (
-                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200">
                           <i className="ri-checkbox-circle-line mr-1.5"></i>
                           Approved
                         </span>
                       )}
                       {reg.status === 'rejected' && (
-                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-red-500/10 text-red-400 border border-red-500/20" title={reg.rejection_reason}>
+                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-600 border border-red-200" title={reg.rejection_reason}>
                           <i className="ri-close-circle-line mr-1.5"></i>
                           Rejected
                         </span>
@@ -300,20 +261,20 @@ export default function AdminColleges() {
                           <>
                             <button
                               onClick={() => handleApprove(reg.id)}
-                              className="px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 text-xs font-medium hover:bg-emerald-500/20 transition-colors cursor-pointer flex items-center gap-1.5">
+                              className="px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-600 text-xs font-medium hover:bg-emerald-100 transition-colors cursor-pointer flex items-center gap-1.5">
                               <i className="ri-check-line"></i>
                               Approve
                             </button>
                             <button
                               onClick={() => openRejectModal(reg.id)}
-                              className="px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 text-xs font-medium hover:bg-red-500/20 transition-colors cursor-pointer flex items-center gap-1.5">
+                              className="px-3 py-1.5 rounded-lg bg-red-50 text-red-600 text-xs font-medium hover:bg-red-100 transition-colors cursor-pointer flex items-center gap-1.5">
                               <i className="ri-close-line"></i>
                               Reject
                             </button>
                           </>
                         )}
                         {reg.status !== 'pending' && (
-                          <span className="text-xs text-gray-500 italic">No actions</span>
+                          <span className="text-xs text-gray-400 italic">No actions</span>
                         )}
                       </div>
                     </td>
@@ -326,10 +287,10 @@ export default function AdminColleges() {
           {/* Empty State */}
           {filteredRegistrations.length === 0 && (
             <div className="px-6 py-16 text-center">
-              <div className="w-16 h-16 rounded-full bg-gray-700/50 flex items-center justify-center mx-auto mb-4">
-                <i className="ri-building-4-line text-2xl text-gray-500"></i>
+              <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+                <i className="ri-building-4-line text-2xl text-gray-400"></i>
               </div>
-              <h3 className="text-lg font-semibold text-white mb-2">No registrations found</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">No registrations found</h3>
               <p className="text-sm text-gray-500">Try adjusting your filters or search query</p>
             </div>
           )}
@@ -339,24 +300,24 @@ export default function AdminColleges() {
       {/* Reject Modal */}
       {showRejectModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowRejectModal(false)}></div>
-          <div className="relative bg-gray-800 rounded-2xl border border-gray-700 p-8 w-full max-w-md shadow-2xl">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setShowRejectModal(false)}></div>
+          <div className="relative bg-white rounded-2xl border border-gray-200 p-8 w-full max-w-md shadow-2xl">
             <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center">
-                <i className="ri-error-warning-line text-red-400 text-xl"></i>
+              <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center">
+                <i className="ri-error-warning-line text-red-500 text-xl"></i>
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-white">Reject Registration</h3>
-                <p className="text-sm text-gray-400">Please provide a reason for rejection</p>
+                <h3 className="text-lg font-semibold text-gray-900">Reject Registration</h3>
+                <p className="text-sm text-gray-500">Please provide a reason for rejection</p>
               </div>
             </div>
 
             <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-300 mb-2">Rejection Reason *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Rejection Reason *</label>
               <textarea
                 value={rejectReason}
                 onChange={(e) => setRejectReason(e.target.value)}
-                className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-xl text-white placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500 resize-none"
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-400 resize-none"
                 rows={4}
                 placeholder="Enter the reason for rejecting this registration..."
               />
@@ -365,7 +326,7 @@ export default function AdminColleges() {
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => setShowRejectModal(false)}
-                className="px-5 py-2.5 rounded-xl bg-gray-700 text-gray-300 text-sm font-medium hover:bg-gray-600 transition-colors cursor-pointer">
+                className="px-5 py-2.5 rounded-xl bg-gray-100 text-gray-600 text-sm font-medium hover:bg-gray-200 transition-colors cursor-pointer">
                 Cancel
               </button>
               <button

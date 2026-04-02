@@ -70,6 +70,16 @@ class CollegeService:
 
             now = datetime.now(timezone.utc)
 
+            # Common extra fields from upload
+            extra_fields = {
+                "roll_number": student_data.get("roll_number"),
+                "degree_type": student_data.get("degree_type"),
+                "phone": student_data.get("phone"),
+                "cgpa": student_data.get("cgpa"),
+                "current_semester": student_data.get("current_semester"),
+                "admission_year": student_data.get("admission_year"),
+            }
+
             if user:
                 # Check if user has at least one resume
                 resume_result = await db.execute(
@@ -91,6 +101,7 @@ class CollegeService:
                         registered_at=user.created_at,
                         ready_at=now,
                         created_at=now,
+                        **extra_fields,
                     )
                 else:
                     status = "registered"
@@ -105,6 +116,7 @@ class CollegeService:
                         status="registered",
                         registered_at=user.created_at,
                         created_at=now,
+                        **extra_fields,
                     )
             else:
                 # User not in system — will need invitation
@@ -119,6 +131,7 @@ class CollegeService:
                     status="invited",
                     invitation_token=invitation_token,
                     created_at=now,
+                    **extra_fields,
                 )
 
             db.add(student)
@@ -220,21 +233,47 @@ class CollegeService:
         if students:
             await db.commit()
 
+    @staticmethod
+    def _get_field(row: dict, *keys: str) -> Optional[str]:
+        """Get a field value trying multiple key variants."""
+        for key in keys:
+            val = row.get(key, "")
+            if val and str(val).strip():
+                return str(val).strip()
+        return None
+
+    def _extract_student_dict(self, row: dict) -> Optional[dict]:
+        """Extract a student dict from a row using flexible column names."""
+        email = self._get_field(row, "email", "Email", "EMAIL", "email_id", "Email ID")
+        if not email:
+            return None
+        student: dict = {"email": email}
+        student["name"] = self._get_field(row, "name", "Name", "NAME", "student_name", "Student Name")
+        student["branch"] = self._get_field(row, "branch", "Branch", "BRANCH", "department", "Department")
+        student["graduation_year"] = self._parse_year(
+            self._get_field(row, "graduation_year", "Graduation Year", "graduation year", "GRADUATION_YEAR") or ""
+        )
+        student["roll_number"] = self._get_field(row, "roll_number", "Roll Number", "roll_no", "Roll No", "ROLL_NUMBER")
+        student["degree_type"] = self._get_field(row, "degree_type", "Degree Type", "degree", "Degree", "DEGREE_TYPE")
+        student["phone"] = self._get_field(row, "phone", "Phone", "PHONE", "mobile", "Mobile", "phone_number", "Phone Number")
+        # Numeric fields
+        cgpa_val = self._get_field(row, "cgpa", "CGPA", "Cgpa", "gpa", "GPA")
+        student["cgpa"] = float(cgpa_val) if cgpa_val else None
+        sem_val = self._get_field(row, "current_semester", "Current Semester", "semester", "Semester", "SEMESTER")
+        student["current_semester"] = int(sem_val) if sem_val and sem_val.isdigit() else None
+        student["admission_year"] = self._parse_year(
+            self._get_field(row, "admission_year", "Admission Year", "admission year", "ADMISSION_YEAR") or ""
+        )
+        return student
+
     def parse_csv_content(self, content: str) -> List[dict]:
         """Parse CSV content into list of student dicts."""
         students = []
         reader = csv.DictReader(io.StringIO(content))
         for row in reader:
-            email = (row.get("email") or row.get("Email") or "").strip()
-            if email:
-                students.append({
-                    "email": email,
-                    "name": (row.get("name") or row.get("Name") or "").strip() or None,
-                    "branch": (row.get("branch") or row.get("Branch") or "").strip() or None,
-                    "graduation_year": self._parse_year(
-                        row.get("graduation_year") or row.get("Graduation Year") or ""
-                    ),
-                })
+            student = self._extract_student_dict(row)
+            if student:
+                students.append(student)
         return students
 
     def parse_excel_content(self, file_data: bytes) -> List[dict]:
@@ -251,8 +290,7 @@ class CollegeService:
 
         for i, row in enumerate(ws.iter_rows(values_only=True)):
             if i == 0:
-                # First row is header
-                headers = [str(cell or "").strip().lower() for cell in row]
+                headers = [str(cell or "").strip() for cell in row]
                 continue
 
             row_dict = {}
@@ -260,16 +298,9 @@ class CollegeService:
                 if j < len(headers):
                     row_dict[headers[j]] = str(cell or "").strip() if cell else ""
 
-            email = row_dict.get("email", "").strip()
-            if email:
-                students.append({
-                    "email": email,
-                    "name": row_dict.get("name") or None,
-                    "branch": row_dict.get("branch") or None,
-                    "graduation_year": self._parse_year(
-                        row_dict.get("graduation_year") or row_dict.get("graduation year") or ""
-                    ),
-                })
+            student = self._extract_student_dict(row_dict)
+            if student:
+                students.append(student)
 
         wb.close()
         return students

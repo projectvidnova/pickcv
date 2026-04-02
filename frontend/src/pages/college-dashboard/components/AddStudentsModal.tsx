@@ -9,6 +9,32 @@ interface UploadResult {
   already_exists: number;
 }
 
+interface StudentFormEntry {
+  email: string;
+  name: string;
+  roll_number: string;
+  branch: string;
+  degree_type: string;
+  graduation_year: string;
+  admission_year: string;
+  current_semester: string;
+  cgpa: string;
+  phone: string;
+}
+
+const emptyStudent = (): StudentFormEntry => ({
+  email: '',
+  name: '',
+  roll_number: '',
+  branch: '',
+  degree_type: '',
+  graduation_year: '',
+  admission_year: '',
+  current_semester: '',
+  cgpa: '',
+  phone: '',
+});
+
 interface AddStudentsModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -18,7 +44,7 @@ interface AddStudentsModalProps {
 export default function AddStudentsModal({ isOpen, onClose, onStudentsAdded }: AddStudentsModalProps) {
   const [mode, setMode] = useState<'upload' | 'manual'>('upload');
   const [file, setFile] = useState<File | null>(null);
-  const [manualEmails, setManualEmails] = useState('');
+  const [students, setStudents] = useState<StudentFormEntry[]>([emptyStudent()]);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<UploadResult | null>(null);
@@ -39,6 +65,19 @@ export default function AddStudentsModal({ isOpen, onClose, onStudentsAdded }: A
     }
   };
 
+  const updateStudent = (index: number, field: keyof StudentFormEntry, value: string) => {
+    setStudents(prev => prev.map((s, i) => i === index ? { ...s, [field]: value } : s));
+  };
+
+  const addStudentRow = () => {
+    setStudents(prev => [...prev, emptyStudent()]);
+  };
+
+  const removeStudentRow = (index: number) => {
+    if (students.length <= 1) return;
+    setStudents(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleSubmit = async () => {
     setError('');
     setResult(null);
@@ -47,18 +86,36 @@ export default function AddStudentsModal({ isOpen, onClose, onStudentsAdded }: A
       setError('Please select a file to upload');
       return;
     }
-    if (mode === 'manual' && !manualEmails.trim()) {
-      setError('Please enter at least one email address');
-      return;
+    if (mode === 'manual') {
+      const validStudents = students.filter(s => s.email.trim());
+      if (validStudents.length === 0) {
+        setError('Please enter at least one student with an email address');
+        return;
+      }
     }
 
     setIsUploading(true);
     try {
-      const payload = mode === 'upload'
-        ? { file: file! }
-        : { text: manualEmails.trim() };
-
-      const res = await apiService.uploadStudents(payload);
+      let res;
+      if (mode === 'upload') {
+        res = await apiService.uploadStudents({ file: file! });
+      } else {
+        const payload = students
+          .filter(s => s.email.trim())
+          .map(s => ({
+            email: s.email.trim(),
+            name: s.name.trim() || null,
+            roll_number: s.roll_number.trim() || null,
+            branch: s.branch.trim() || null,
+            degree_type: s.degree_type.trim() || null,
+            graduation_year: s.graduation_year ? parseInt(s.graduation_year) || null : null,
+            admission_year: s.admission_year ? parseInt(s.admission_year) || null : null,
+            current_semester: s.current_semester ? parseInt(s.current_semester) || null : null,
+            cgpa: s.cgpa ? parseFloat(s.cgpa) || null : null,
+            phone: s.phone.trim() || null,
+          }));
+        res = await apiService.addStudentsManual(payload);
+      }
       if (res.success && res.data) {
         setResult(res.data);
       } else {
@@ -72,7 +129,7 @@ export default function AddStudentsModal({ isOpen, onClose, onStudentsAdded }: A
 
   const handleDone = () => {
     setFile(null);
-    setManualEmails('');
+    setStudents([emptyStudent()]);
     setResult(null);
     setError('');
     onStudentsAdded();
@@ -84,7 +141,7 @@ export default function AddStudentsModal({ isOpen, onClose, onStudentsAdded }: A
       handleDone();
     } else {
       setFile(null);
-      setManualEmails('');
+      setStudents([emptyStudent()]);
       setError('');
       onClose();
     }
@@ -93,13 +150,13 @@ export default function AddStudentsModal({ isOpen, onClose, onStudentsAdded }: A
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={isUploading ? undefined : handleClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl max-w-lg w-full mx-4 overflow-hidden">
+      <div className="relative bg-white rounded-2xl shadow-2xl max-w-2xl w-full mx-4 overflow-hidden max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="bg-gradient-to-r from-teal-600 to-emerald-500 px-6 py-4">
+        <div className="bg-gradient-to-r from-teal-600 to-emerald-500 px-6 py-4 shrink-0">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-lg font-bold text-white">Add Students</h3>
-              <p className="text-sm text-white/80">Upload a file or enter emails manually</p>
+              <p className="text-sm text-white/80">Upload a file or add students manually</p>
             </div>
             {!isUploading && (
               <button onClick={handleClose} className="text-white/80 hover:text-white transition-colors">
@@ -109,7 +166,7 @@ export default function AddStudentsModal({ isOpen, onClose, onStudentsAdded }: A
           </div>
         </div>
 
-        <div className="p-6">
+        <div className="p-6 overflow-y-auto">
           {/* Success Result */}
           {result ? (
             <div className="space-y-4">
@@ -170,13 +227,31 @@ export default function AddStudentsModal({ isOpen, onClose, onStudentsAdded }: A
                   onClick={() => { setMode('manual'); setError(''); }}
                   className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${mode === 'manual' ? 'bg-white shadow-sm text-teal-700' : 'text-gray-500 hover:text-gray-700'}`}
                 >
-                  <i className="ri-keyboard-line mr-1.5"></i>Enter Manually
+                  <i className="ri-user-add-line mr-1.5"></i>Add Manually
                 </button>
               </div>
 
               {/* Upload Mode */}
               {mode === 'upload' && (
-                <div>
+                <div className="space-y-3">
+                  {/* Template Download */}
+                  <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <i className="ri-file-download-line text-blue-600 text-lg"></i>
+                      <div>
+                        <p className="text-sm font-medium text-blue-800">Download Template</p>
+                        <p className="text-xs text-blue-600">Use this CSV template to fill student data</p>
+                      </div>
+                    </div>
+                    <a
+                      href={apiService.getStudentTemplateUrl()}
+                      download="student_upload_template.csv"
+                      className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      <i className="ri-download-2-line mr-1"></i>Download
+                    </a>
+                  </div>
+
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -198,27 +273,157 @@ export default function AddStudentsModal({ isOpen, onClose, onStudentsAdded }: A
                       <div>
                         <i className="ri-upload-cloud-2-line text-3xl text-gray-400 mb-2"></i>
                         <p className="text-sm font-medium text-gray-700">Click to upload Excel or CSV</p>
-                        <p className="text-xs text-gray-400 mt-1">Columns: email, name, branch, graduation_year</p>
+                        <p className="text-xs text-gray-400 mt-1">Fill in the template above and upload it here</p>
                       </div>
                     )}
                   </div>
                 </div>
               )}
 
-              {/* Manual Mode */}
+              {/* Manual Mode — Form */}
               {mode === 'manual' && (
-                <div>
-                  <textarea
-                    value={manualEmails}
-                    onChange={(e) => setManualEmails(e.target.value)}
-                    placeholder={"Enter student emails (one per line or comma-separated):\n\nstudent1@college.edu\nstudent2@college.edu\nstudent3@college.edu"}
-                    rows={6}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-teal-200 focus:border-teal-400 transition-all resize-none placeholder:text-gray-400"
-                  />
-                  <p className="text-xs text-gray-400 mt-1.5">
-                    <i className="ri-information-line mr-0.5"></i>
-                    Separate emails with commas, semicolons, or new lines
-                  </p>
+                <div className="space-y-4">
+                  {students.map((student, index) => (
+                    <div key={index} className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Student {index + 1}</span>
+                        {students.length > 1 && (
+                          <button onClick={() => removeStudentRow(index)} className="text-red-400 hover:text-red-600 transition-colors">
+                            <i className="ri-delete-bin-line text-sm"></i>
+                          </button>
+                        )}
+                      </div>
+                      {/* Row 1: Email, Name */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-xs font-medium text-gray-600 mb-1 block">Email *</label>
+                          <input
+                            type="email"
+                            value={student.email}
+                            onChange={(e) => updateStudent(index, 'email', e.target.value)}
+                            placeholder="student@college.edu"
+                            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-teal-200 focus:border-teal-400 transition-all"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-medium text-gray-600 mb-1 block">Full Name</label>
+                          <input
+                            type="text"
+                            value={student.name}
+                            onChange={(e) => updateStudent(index, 'name', e.target.value)}
+                            placeholder="John Doe"
+                            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-teal-200 focus:border-teal-400 transition-all"
+                          />
+                        </div>
+                      </div>
+                      {/* Row 2: Roll Number, Branch */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-xs font-medium text-gray-600 mb-1 block">Roll Number</label>
+                          <input
+                            type="text"
+                            value={student.roll_number}
+                            onChange={(e) => updateStudent(index, 'roll_number', e.target.value)}
+                            placeholder="CS2024001"
+                            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-teal-200 focus:border-teal-400 transition-all"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-medium text-gray-600 mb-1 block">Branch / Department</label>
+                          <input
+                            type="text"
+                            value={student.branch}
+                            onChange={(e) => updateStudent(index, 'branch', e.target.value)}
+                            placeholder="Computer Science"
+                            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-teal-200 focus:border-teal-400 transition-all"
+                          />
+                        </div>
+                      </div>
+                      {/* Row 3: Degree, Graduation Year */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-xs font-medium text-gray-600 mb-1 block">Degree Type</label>
+                          <select
+                            value={student.degree_type}
+                            onChange={(e) => updateStudent(index, 'degree_type', e.target.value)}
+                            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-teal-200 focus:border-teal-400 transition-all bg-white"
+                          >
+                            <option value="">Select degree</option>
+                            <option value="B.Tech">B.Tech</option>
+                            <option value="M.Tech">M.Tech</option>
+                            <option value="BCA">BCA</option>
+                            <option value="MCA">MCA</option>
+                            <option value="B.Sc">B.Sc</option>
+                            <option value="M.Sc">M.Sc</option>
+                            <option value="MBA">MBA</option>
+                            <option value="BBA">BBA</option>
+                            <option value="B.E">B.E</option>
+                            <option value="M.E">M.E</option>
+                            <option value="PhD">PhD</option>
+                            <option value="Other">Other</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-xs font-medium text-gray-600 mb-1 block">Graduation Year</label>
+                          <input
+                            type="number"
+                            value={student.graduation_year}
+                            onChange={(e) => updateStudent(index, 'graduation_year', e.target.value)}
+                            placeholder="2025"
+                            min="2000"
+                            max="2050"
+                            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-teal-200 focus:border-teal-400 transition-all"
+                          />
+                        </div>
+                      </div>
+                      {/* Row 4: Semester, CGPA, Phone */}
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <label className="text-xs font-medium text-gray-600 mb-1 block">Semester</label>
+                          <input
+                            type="number"
+                            value={student.current_semester}
+                            onChange={(e) => updateStudent(index, 'current_semester', e.target.value)}
+                            placeholder="8"
+                            min="1"
+                            max="12"
+                            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-teal-200 focus:border-teal-400 transition-all"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-medium text-gray-600 mb-1 block">CGPA</label>
+                          <input
+                            type="number"
+                            value={student.cgpa}
+                            onChange={(e) => updateStudent(index, 'cgpa', e.target.value)}
+                            placeholder="8.5"
+                            step="0.1"
+                            min="0"
+                            max="10"
+                            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-teal-200 focus:border-teal-400 transition-all"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-medium text-gray-600 mb-1 block">Phone</label>
+                          <input
+                            type="tel"
+                            value={student.phone}
+                            onChange={(e) => updateStudent(index, 'phone', e.target.value)}
+                            placeholder="9876543210"
+                            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-teal-200 focus:border-teal-400 transition-all"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Add Another Student */}
+                  <button
+                    onClick={addStudentRow}
+                    className="w-full py-2.5 border-2 border-dashed border-gray-300 rounded-xl text-sm text-gray-500 hover:border-teal-400 hover:text-teal-600 hover:bg-teal-50/50 transition-all flex items-center justify-center gap-1.5"
+                  >
+                    <i className="ri-add-circle-line"></i>Add Another Student
+                  </button>
                 </div>
               )}
 
@@ -232,7 +437,7 @@ export default function AddStudentsModal({ isOpen, onClose, onStudentsAdded }: A
               {/* Submit */}
               <button
                 onClick={handleSubmit}
-                disabled={isUploading || (mode === 'upload' && !file) || (mode === 'manual' && !manualEmails.trim())}
+                disabled={isUploading || (mode === 'upload' && !file) || (mode === 'manual' && !students.some(s => s.email.trim()))}
                 className="w-full py-3 bg-gradient-to-r from-teal-600 to-emerald-500 text-white rounded-xl font-semibold hover:from-teal-700 hover:to-emerald-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isUploading ? (
@@ -242,7 +447,7 @@ export default function AddStudentsModal({ isOpen, onClose, onStudentsAdded }: A
                 ) : (
                   <span className="flex items-center justify-center gap-2">
                     <i className={mode === 'upload' ? 'ri-upload-2-line' : 'ri-user-add-line'}></i>
-                    {mode === 'upload' ? 'Upload Students' : 'Add Students'}
+                    {mode === 'upload' ? 'Upload Students' : `Add ${students.filter(s => s.email.trim()).length} Student(s)`}
                   </span>
                 )}
               </button>

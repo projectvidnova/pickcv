@@ -1,38 +1,28 @@
-import { useState } from 'react';
-import Navbar from '../../components/feature/Navbar';
+import { useNavigate } from 'react-router-dom';
+import InstitutionNavbar from '../../components/feature/InstitutionNavbar';
 import Footer from '../../components/feature/Footer';
 import HeroSection from './sections/HeroSection';
 import PlatformSection from './sections/PlatformSection';
 import HowItWorksSection from './sections/HowItWorksSection';
 import TestimonialsSection from './sections/TestimonialsSection';
 import CtaSection from './sections/CtaSection';
-import ComingSoonModal from './sections/ComingSoonModal';
-
-type CollegeAction = 'register' | 'signin';
+import { resolvePath } from '../../utils/subdomain';
 
 export default function ForCollegesPage() {
-  const [isComingSoonOpen, setIsComingSoonOpen] = useState(false);
-  const [comingSoonAction, setComingSoonAction] = useState<CollegeAction>('register');
+  const navigate = useNavigate();
 
-  const handleOpenComingSoon = (action: CollegeAction) => {
-    setComingSoonAction(action);
-    setIsComingSoonOpen(true);
-  };
+  const handleRegister = () => navigate(resolvePath('/college/register'));
+  const handleSignIn = () => navigate(resolvePath('/college/login'));
 
   return (
     <div className="min-h-screen bg-white">
-      <Navbar />
-      <HeroSection onOpenComingSoon={handleOpenComingSoon} />
+      <InstitutionNavbar />
+      <HeroSection onRegister={handleRegister} onSignIn={handleSignIn} />
       <PlatformSection />
       <HowItWorksSection />
       <TestimonialsSection />
-      <CtaSection onOpenComingSoon={handleOpenComingSoon} />
+      <CtaSection onRegister={handleRegister} onSignIn={handleSignIn} />
       <Footer />
-      <ComingSoonModal
-        isOpen={isComingSoonOpen}
-        action={comingSoonAction}
-        onClose={() => setIsComingSoonOpen(false)}
-      />
     </div>
   );
 }

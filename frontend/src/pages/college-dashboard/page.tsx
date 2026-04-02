@@ -201,6 +201,24 @@ export default function CollegeDashboard() {
 
   const refreshData = () => { loadDashboardData(); };
 
+  const handleDeleteStudent = async (studentId: number, studentName: string) => {
+    if (!window.confirm(`Remove "${studentName}" from your institution? This cannot be undone.`)) return;
+    const res = await apiService.deleteStudent(studentId);
+    if (res.success) {
+      setStudents(prev => prev.filter(s => s.id !== studentId));
+      setSelectedStudents(prev => prev.filter(id => id !== studentId));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!window.confirm(`Remove ${selectedStudents.length} selected student(s)? This cannot be undone.`)) return;
+    const res = await apiService.bulkDeleteStudents(selectedStudents);
+    if (res.success) {
+      setStudents(prev => prev.filter(s => !selectedStudents.includes(s.id)));
+      setSelectedStudents([]);
+    }
+  };
+
   // ─── Derived Data ───────────────────────────────────────────
   const branches = useMemo(() => {
     const branchSet = new Set(students.map(s => s.branch || s.department_name).filter(Boolean));
@@ -705,10 +723,18 @@ export default function CollegeDashboard() {
                                 </span>
                               </td>
                               <td className="px-4 py-3">
-                                <button onClick={() => toggleExpandStudent(student.id)}
-                                  className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-teal-600 transition-colors cursor-pointer">
-                                  <i className={`ri-${expandedStudent === student.id ? 'arrow-up' : 'arrow-down'}-s-line`}></i>
-                                </button>
+                                <div className="flex items-center gap-1">
+                                  <button onClick={() => toggleExpandStudent(student.id)}
+                                    className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-teal-600 transition-colors cursor-pointer"
+                                    title="Expand details">
+                                    <i className={`ri-${expandedStudent === student.id ? 'arrow-up' : 'arrow-down'}-s-line`}></i>
+                                  </button>
+                                  <button onClick={() => handleDeleteStudent(student.id, student.name || student.email)}
+                                    className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors cursor-pointer"
+                                    title="Remove student">
+                                    <i className="ri-delete-bin-line text-sm"></i>
+                                  </button>
+                                </div>
                               </td>
                             </tr>
 
@@ -921,6 +947,10 @@ export default function CollegeDashboard() {
               <button onClick={() => setSelectedStudents([])}
                 className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-medium transition-colors cursor-pointer flex items-center gap-2">
                 <i className="ri-close-line"></i>Clear
+              </button>
+              <button onClick={handleBulkDelete}
+                className="px-4 py-2 rounded-lg bg-red-500/90 hover:bg-red-500 text-white text-sm font-medium transition-colors cursor-pointer flex items-center gap-2">
+                <i className="ri-delete-bin-line"></i>Remove
               </button>
               <button onClick={() => setShowShareModal(true)}
                 className="px-5 py-2 rounded-lg bg-white text-teal-600 hover:bg-teal-50 text-sm font-semibold transition-colors cursor-pointer flex items-center gap-2 shadow-lg">

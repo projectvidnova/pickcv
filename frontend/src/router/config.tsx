@@ -95,7 +95,7 @@ const adminRoutes: RouteObject[] = [
 const institutionRoutes: RouteObject[] = [
   {
     path: '/',
-    element: <CollegeLogin />,
+    element: <ForCollegesPage />,
   },
   {
     path: '/login',

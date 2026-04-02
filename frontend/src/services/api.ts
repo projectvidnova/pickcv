@@ -944,6 +944,36 @@ class ApiService {
   }
 
   /**
+   * Add students via JSON (manual form entry)
+   */
+  async addStudentsManual(students: Record<string, unknown>[]) {
+    try {
+      const response = await fetch(`${this.baseUrl}/college/students/add`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.collegeToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(students),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to add students');
+      }
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to add students' };
+    }
+  }
+
+  /**
+   * Download student upload template CSV
+   */
+  getStudentTemplateUrl() {
+    return `${this.baseUrl}/college/students/template`;
+  }
+
+  /**
    * Send invitation emails to invited students
    */
   async inviteStudents() {
@@ -959,6 +989,48 @@ class ApiService {
       return { success: true, data: await response.json() };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Invitation failed' };
+    }
+  }
+
+  /**
+   * Delete a single student
+   */
+  async deleteStudent(studentId: number) {
+    try {
+      const response = await fetch(`${this.baseUrl}/college/students/${studentId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${this.collegeToken}` },
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to delete student');
+      }
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to delete student' };
+    }
+  }
+
+  /**
+   * Bulk delete students
+   */
+  async bulkDeleteStudents(studentIds: number[]) {
+    try {
+      const response = await fetch(`${this.baseUrl}/college/students/bulk`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${this.collegeToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(studentIds),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to delete students');
+      }
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to delete students' };
     }
   }
 
