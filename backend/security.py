@@ -199,10 +199,10 @@ def decode_token(token: str) -> TokenData:
             detail="Invalid token",
             headers={"WWW-Authenticate": "Bearer"}
         )
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(e),
+            detail="Invalid token",
             headers={"WWW-Authenticate": "Bearer"}
         )
 

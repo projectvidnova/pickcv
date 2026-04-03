@@ -1,4 +1,6 @@
 """Web scraping service for job descriptions — production-grade."""
+import ipaddress
+import socket
 import requests
 from bs4 import BeautifulSoup
 from typing import Optional
@@ -6,8 +8,29 @@ from urllib.parse import urlparse, quote_plus
 import logging
 import re
 import random
+import base64
 
 logger = logging.getLogger(__name__)
+
+
+def _is_safe_url(url: str) -> bool:
+    """Validate that a URL does not point to an internal/private network (SSRF protection)."""
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        if not hostname:
+            return False
+        # Block common internal hostnames
+        if hostname in ("localhost", "127.0.0.1", "0.0.0.0", "::1", "metadata.google.internal"):
+            return False
+        # Resolve the hostname and check if any resolved IP is private/reserved
+        for info in socket.getaddrinfo(hostname, None):
+            ip = ipaddress.ip_address(info[4][0])
+            if ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_link_local:
+                return False
+        return True
+    except Exception:
+        return False
 
 
 class ScraperService:
@@ -58,6 +81,11 @@ class ScraperService:
         if not url.startswith(("http://", "https://")):
             url = "https://" + url
 
+        # SSRF protection: block requests to private/internal networks
+        if not _is_safe_url(url):
+            logger.warning(f"Blocked SSRF attempt to internal URL: {url}")
+            return None
+
         domain = urlparse(url).netloc.lower().replace("www.", "")
         logger.info(f"Scraping job from {domain}: {url}")
 
@@ -98,6 +126,109 @@ class ScraperService:
 
         logger.error(f"All scraping strategies failed for {url}")
         return None
+
+    def extract_github_profile_url(self, text: str) -> Optional[str]:
+        """Extract GitHub profile URL from free-form text.
+
+        Accepts common forms like:
+        - https://github.com/username
+        - github.com/username
+        - https://www.github.com/username/
+        """
+        if not text:
+            return None
+
+        pattern = re.compile(
+            r"(?:(?:https?://)?(?:www\.)?github\.com/)([A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?)(?:/)?(?:\s|$)",
+            re.IGNORECASE,
+        )
+        match = pattern.search(text)
+        if not match:
+            return None
+
+        username = match.group(1)
+        return f"https://github.com/{username}"
+
+    def build_github_resume_context(self, github_url: str) -> Optional[str]:
+        """Build resume-safe enrichment context from a public GitHub profile.
+
+        Returns a compact text block containing verified profile and repository
+        evidence that can be fed into resume optimization prompts.
+        """
+        try:
+            username = self._extract_github_username(github_url)
+            if not username:
+                return None
+
+            headers = {
+                "Accept": "application/vnd.github+json",
+                "User-Agent": random.choice(self.USER_AGENTS),
+            }
+
+            profile_resp = self.session.get(
+                f"https://api.github.com/users/{username}",
+                headers=headers,
+                timeout=self.timeout,
+            )
+            if profile_resp.status_code != 200:
+                logger.warning(f"GitHub profile fetch failed for {username}: {profile_resp.status_code}")
+                return None
+            profile = profile_resp.json()
+
+            repos_resp = self.session.get(
+                f"https://api.github.com/users/{username}/repos",
+                headers=headers,
+                params={"sort": "pushed", "per_page": 10, "type": "owner"},
+                timeout=self.timeout,
+            )
+            repos = repos_resp.json() if repos_resp.status_code == 200 else []
+            if not isinstance(repos, list):
+                repos = []
+
+            non_fork_repos = [r for r in repos if isinstance(r, dict) and not r.get("fork")]
+            top_repos = non_fork_repos[:6]
+
+            lines = []
+            lines.append("GITHUB PROFILE EVIDENCE (VERIFIED FROM PUBLIC DATA)")
+            lines.append(f"Profile URL: https://github.com/{username}")
+            lines.append(f"GitHub Name: {profile.get('name') or ''}")
+            lines.append(f"Bio: {profile.get('bio') or ''}")
+            lines.append(
+                "Stats: "
+                f"Public Repos={profile.get('public_repos', 0)}, "
+                f"Followers={profile.get('followers', 0)}, "
+                f"Following={profile.get('following', 0)}"
+            )
+
+            if top_repos:
+                lines.append("Top Recent Repositories:")
+                for repo in top_repos:
+                    name = repo.get("name", "")
+                    description = repo.get("description") or ""
+                    language = repo.get("language") or ""
+                    stars = repo.get("stargazers_count", 0)
+                    updated = repo.get("pushed_at", "")
+                    html_url = repo.get("html_url", "")
+                    topics = repo.get("topics") or []
+                    topics_str = ", ".join(topics[:6]) if isinstance(topics, list) else ""
+
+                    lines.append(
+                        f"- {name} ({html_url}) | lang={language} | stars={stars} | updated={updated}"
+                    )
+                    if description:
+                        lines.append(f"  Description: {description}")
+                    if topics_str:
+                        lines.append(f"  Topics: {topics_str}")
+
+                    readme_excerpt = self._fetch_repo_readme_excerpt(username, name, headers)
+                    if readme_excerpt:
+                        lines.append(f"  README excerpt: {readme_excerpt}")
+
+            context = "\n".join(line for line in lines if line is not None)
+            return context[:9000]
+        except Exception as e:
+            logger.error(f"GitHub enrichment failed for {github_url}: {e}")
+            return None
 
     # ────────────────────────────────────────────────────────
     #  Site-specific extractors
@@ -280,6 +411,51 @@ class ScraperService:
             except Exception:
                 continue
         return None
+
+    def _extract_github_username(self, github_url: str) -> Optional[str]:
+        """Extract username from GitHub profile URL."""
+        if not github_url:
+            return None
+
+        candidate = github_url.strip()
+        if not candidate.startswith(("http://", "https://")):
+            candidate = "https://" + candidate
+
+        parsed = urlparse(candidate)
+        if "github.com" not in parsed.netloc.lower():
+            return None
+
+        path = (parsed.path or "").strip("/")
+        if not path:
+            return None
+
+        username = path.split("/")[0]
+        if not re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?", username):
+            return None
+        return username
+
+    def _fetch_repo_readme_excerpt(self, owner: str, repo: str, headers: dict) -> Optional[str]:
+        """Fetch a short README excerpt for additional project evidence."""
+        try:
+            response = self.session.get(
+                f"https://api.github.com/repos/{owner}/{repo}/readme",
+                headers=headers,
+                timeout=self.timeout,
+            )
+            if response.status_code != 200:
+                return None
+
+            payload = response.json()
+            content = payload.get("content")
+            encoding = payload.get("encoding")
+            if not content or encoding != "base64":
+                return None
+
+            decoded = base64.b64decode(content).decode("utf-8", errors="ignore")
+            cleaned = self._clean_text(decoded)
+            return cleaned[:350] if cleaned else None
+        except Exception:
+            return None
 
     def _extract_body_text(self, soup: BeautifulSoup) -> Optional[str]:
         """Extract text from body after removing boilerplate elements."""

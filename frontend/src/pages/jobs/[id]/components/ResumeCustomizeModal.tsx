@@ -576,7 +576,7 @@ export default function ResumeCustomizeModal({
                 <div className="space-y-2">
                   {[
                     { icon: 'ri-check-double-line', text: '11 bullet points rewritten with metrics', color: 'text-emerald-600', bg: 'bg-emerald-50' },
-                    { icon: 'ri-key-2-line', text: '7 job-specific keywords injected', color: 'text-teal-600', bg: 'bg-teal-50' },
+                    { icon: 'ri-bar-chart-grouped-line', text: '7 job-specific talent signals mapped', color: 'text-teal-600', bg: 'bg-teal-50' },
                     { icon: 'ri-shield-check-line', text: 'ATS formatting verified & cleaned', color: 'text-amber-600', bg: 'bg-amber-50' },
                   ].map((item, i) => (
                     <div key={i} className={`flex items-center gap-2.5 px-3 py-2 rounded-lg ${item.bg}`}>

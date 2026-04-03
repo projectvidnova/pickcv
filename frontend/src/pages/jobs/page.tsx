@@ -537,18 +537,17 @@ const JobsPage = () => {
                   </button>
                 </div>
               ) : paginatedJobs.length === 0 ? (
-                <div className="text-center py-16">
-                  <div className="w-20 h-20 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
-                    <i className="ri-search-line text-3xl text-gray-400"></i>
+                <div className="text-center py-20">
+                  <div className="w-24 h-24 mx-auto mb-6 bg-gradient-to-br from-teal-100 to-emerald-100 rounded-full flex items-center justify-center">
+                    <i className="ri-rocket-2-line text-4xl text-teal-600"></i>
                   </div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">No jobs found</h3>
-                  <p className="text-gray-600 mb-6">Try adjusting your filters to see more results</p>
-                  <button
-                    onClick={clearAllFilters}
-                    className="px-6 py-2.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors font-medium whitespace-nowrap cursor-pointer"
-                  >
-                    Clear All Filters
-                  </button>
+                  <h3 className="text-2xl font-bold text-gray-900 mb-3">Something big is brewing! 🚀</h3>
+                  <p className="text-gray-600 mb-2 max-w-md mx-auto">We're connecting top companies with incredible talent. Our job board is getting its final touches.</p>
+                  <p className="text-teal-600 font-semibold mb-8">Exciting opportunities are landing here very soon!</p>
+                  <div className="inline-flex items-center gap-2 glass-badge text-teal-700 px-5 py-2.5 rounded-full text-sm font-medium">
+                    <i className="ri-time-line"></i>
+                    Stay tuned — launching shortly
+                  </div>
                 </div>
               ) : (
                 <>

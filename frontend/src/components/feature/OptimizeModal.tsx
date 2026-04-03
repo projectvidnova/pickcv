@@ -1,6 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authFetch } from '../../services/authFetch';
+import AuthModal from './AuthModal';
+import PaymentModal from '../PaymentModal';
+import paymentService, { PlanInfo } from '../../services/paymentService';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
 interface OptimizeModalProps {
   isOpen: boolean;
@@ -52,28 +57,38 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
   const [processingStep, setProcessingStep] = useState(0);
   const [smoothProgress, setSmoothProgress] = useState(0);
   const [aiMessageIndex, setAiMessageIndex] = useState(0);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showPaywall, setShowPaywall] = useState(false);
+  const [paywallResumeId, setPaywallResumeId] = useState<number | null>(null);
+  const [paywallPlans, setPaywallPlans] = useState<PlanInfo[]>([]);
+  const [pendingOptimization, setPendingOptimization] = useState<{
+    resumeId: number;
+    jobTitle: string;
+    jobDescription?: string;
+    jobLink?: string;
+  } | null>(null);
   const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const messageTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const processingSteps = [
-    { icon: 'ri-upload-cloud-2-line', label: 'Uploading resume', detail: 'Sending your file securely' },
-    { icon: 'ri-file-search-line', label: 'Analyzing content', detail: 'Parsing resume structure & job requirements' },
-    { icon: 'ri-brain-line', label: 'Matching keywords', detail: 'Identifying skills gaps & keyword opportunities' },
-    { icon: 'ri-sparkling-2-fill', label: 'AI optimization', detail: 'Rewriting bullets for maximum impact' },
-    { icon: 'ri-bar-chart-box-line', label: 'Scoring ATS compatibility', detail: 'Evaluating format & keyword density' },
-    { icon: 'ri-shield-check-line', label: 'Finalizing results', detail: 'Preparing your optimized resume' },
+    { icon: 'ri-upload-cloud-2-line', label: 'Uploading resume', detail: 'Securely processing your document' },
+    { icon: 'ri-file-search-line', label: 'Parsing structure', detail: 'Extracting sections, roles & skills from your resume' },
+    { icon: 'ri-focus-3-line', label: 'Analyzing job fit', detail: 'Comparing your profile against job requirements' },
+    { icon: 'ri-sparkling-2-fill', label: 'Optimizing content', detail: 'Using the best models to rewrite for maximum impact' },
+    { icon: 'ri-bar-chart-box-line', label: 'Scoring & ranking', detail: 'Evaluating ATS compatibility & keyword density' },
+    { icon: 'ri-shield-check-line', label: 'Finalizing resume', detail: 'Generating optimized variants & final checks' },
   ];
 
   const aiInsightMessages = [
-    { icon: 'ri-lightbulb-flash-line', text: 'Identifying action verbs that recruiters love...' },
-    { icon: 'ri-search-eye-line', text: 'Scanning for ATS-friendly formatting...' },
-    { icon: 'ri-focus-3-line', text: 'Matching your skills to job requirements...' },
-    { icon: 'ri-bar-chart-grouped-line', text: 'Adding quantifiable achievements...' },
-    { icon: 'ri-trophy-line', text: 'Highlighting your strongest experiences...' },
-    { icon: 'ri-file-text-line', text: 'Optimizing section headings for ATS...' },
-    { icon: 'ri-magic-line', text: 'Rewriting bullet points with impact metrics...' },
-    { icon: 'ri-shield-star-line', text: 'Ensuring keyword density is optimal...' },
+    { icon: 'ri-lightbulb-flash-line', text: 'Extracting key qualifications from the job posting...' },
+    { icon: 'ri-search-eye-line', text: 'Mapping your experience to required competencies...' },
+    { icon: 'ri-focus-3-line', text: 'Identifying missing keywords and skills gaps...' },
+    { icon: 'ri-bar-chart-grouped-line', text: 'Quantifying achievements with impact metrics...' },
+    { icon: 'ri-trophy-line', text: 'Selecting the strongest bullet points for this role...' },
+    { icon: 'ri-file-text-line', text: 'Restructuring sections for maximum recruiter impact...' },
+    { icon: 'ri-magic-line', text: 'Applying domain-specific optimization rules...' },
+    { icon: 'ri-shield-star-line', text: 'Running final ATS compatibility checks...' },
   ];
 
   // Smooth progress animation during AI processing
@@ -124,10 +139,17 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
     if (file && file.size <= 5 * 1024 * 1024) setUploadedFile(file);
   };
 
-  const handleNext = () => {
-    if (currentStep === 1 && uploadedFile) setCurrentStep(2);
+  const handleNext = async () => {
+    if (currentStep === 1 && uploadedFile) {
+      // Check auth before proceeding to step 2
+      const token = localStorage.getItem('access_token');
+      if (!token) {
+        setShowAuthModal(true);
+        return;
+      }
+      setCurrentStep(2);
+    }
     else if (currentStep === 2 && isJDValid()) {
-      setCurrentStep(3);
       startProcessing();
     }
   };
@@ -143,64 +165,14 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
     return false;
   };
 
-  const startProcessing = async () => {
-    // Check if user is authenticated
-    const token = localStorage.getItem('access_token');
-    if (!token) {
-      alert('Please sign in first to optimize your resume.');
-      setCurrentStep(1);
-      onClose();
-      return;
-    }
-
+  const runOptimization = async (
+    resumeId: number,
+    jobTitle: string,
+    jobDescription?: string,
+    jobLink?: string,
+  ) => {
     try {
-      // ── Step 1: Uploading resume (0% → 15%) ──
-      setProcessingStep(1);
-      setSmoothProgress(0);
-      startSmoothProgress(0, 15, 1500);
-
-      const formData = new FormData();
-      if (uploadedFile) {
-        formData.append('file', uploadedFile);
-        formData.append('title', uploadedFile.name.replace(/\.[^/.]+$/, ""));
-      }
-
-      console.log('Uploading resume with token:', token.substring(0, 20) + '...');
-      const uploadResponse = await authFetch(`${import.meta.env.VITE_API_URL}/resume/upload`, {
-        method: 'POST',
-        body: formData
-      });
-
-      if (!uploadResponse.ok) {
-        const errorText = await uploadResponse.text();
-        console.error('Upload failed:', uploadResponse.status, errorText);
-        throw new Error(`Failed to upload resume (${uploadResponse.status}): ${errorText}`);
-      }
-
-      const uploadedResume = await uploadResponse.json();
-      const resumeId = uploadedResume.id;
-
-      // ── Step 2: Analyzing content (15% → 30%) ──
-      setProcessingStep(2);
-      startSmoothProgress(15, 30, 800);
-
-      let jobTitle = 'Target Role';
-      let jobDescription: string | undefined;
-      let jobLink: string | undefined;
-
-      if (jdMode === 'title') {
-        jobTitle = jdTitle;
-      } else if (jdMode === 'paste') {
-        jobDescription = jdPaste;
-        const firstLine = jdPaste.trim().split('\n').find(l => l.trim().length > 3);
-        if (firstLine && firstLine.trim().length < 100) {
-          jobTitle = firstLine.trim();
-        }
-      } else if (jdMode === 'link') {
-        jobLink = jdLink;
-      }
-
-      await new Promise(resolve => setTimeout(resolve, 600));
+      setCurrentStep(3);
 
       // ── Step 3: Matching keywords (30% → 40%) ──
       setProcessingStep(3);
@@ -245,17 +217,92 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
 
       // Store optimization data for the comparison page
       sessionStorage.setItem('optimizationData', JSON.stringify({
+        ...optimizationData,
         resumeId,
-        ...optimizationData
       }));
 
       // Brief completion moment
       await new Promise(resolve => setTimeout(resolve, 600));
 
       navigate('/resume-comparison', {
-        state: { optimizedResume: { resumeId, ...optimizationData } }
+        state: { optimizedResume: { ...optimizationData, resumeId } }
       });
       handleClose();
+    } catch (error) {
+      console.error('Optimization error:', error);
+      if (progressTimerRef.current) clearInterval(progressTimerRef.current);
+      alert('Failed to optimize resume. Please try again.');
+      setProcessingStep(0);
+      setSmoothProgress(0);
+      setCurrentStep(2);
+    }
+  };
+
+  const startProcessing = async () => {
+    // Check if user is authenticated
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+      setShowAuthModal(true);
+      return;
+    }
+
+    try {
+      // Ask for payment BEFORE optimization:
+      // 1) Upload resume
+      // 2) Check access/paywall
+      // 3) Only then run optimize-for-job
+
+      // ── Uploading resume (background prep before optimization screen) ──
+      setSmoothProgress(15);
+
+      const formData = new FormData();
+      if (uploadedFile) {
+        formData.append('file', uploadedFile);
+        formData.append('title', uploadedFile.name.replace(/\.[^/.]+$/, ""));
+      }
+
+      console.log('Uploading resume...');
+      const uploadResponse = await authFetch(`${import.meta.env.VITE_API_URL}/resume/upload`, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!uploadResponse.ok) {
+        const errorText = await uploadResponse.text();
+        console.error('Upload failed:', uploadResponse.status, errorText);
+        throw new Error(`Failed to upload resume (${uploadResponse.status}): ${errorText}`);
+      }
+
+      const uploadedResume = await uploadResponse.json();
+      const resumeId = uploadedResume.id;
+
+      let jobTitle = 'Target Role';
+      let jobDescription: string | undefined;
+      let jobLink: string | undefined;
+
+      if (jdMode === 'title') {
+        jobTitle = jdTitle;
+      } else if (jdMode === 'paste') {
+        jobDescription = jdPaste;
+        const firstLine = jdPaste.trim().split('\n').find(l => l.trim().length > 3);
+        if (firstLine && firstLine.trim().length < 100) {
+          jobTitle = firstLine.trim();
+        }
+      } else if (jdMode === 'link') {
+        jobLink = jdLink;
+      }
+
+      // Check payment access before optimization starts
+      const access = await paymentService.checkAccess(resumeId);
+      if (!access.has_access) {
+        setPaywallResumeId(resumeId);
+        setPaywallPlans(access.plans || []);
+        setPendingOptimization({ resumeId, jobTitle, jobDescription, jobLink });
+        setShowPaywall(true);
+        return;
+      }
+
+      await runOptimization(resumeId, jobTitle, jobDescription, jobLink);
     } catch (error) {
       console.error('Optimization error:', error);
       if (progressTimerRef.current) clearInterval(progressTimerRef.current);
@@ -277,6 +324,10 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
     setProcessingStep(0);
     setSmoothProgress(0);
     setAiMessageIndex(0);
+    setShowPaywall(false);
+    setPaywallResumeId(null);
+    setPaywallPlans([]);
+    setPendingOptimization(null);
     onClose();
   };
 
@@ -771,8 +822,8 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
                     {smoothProgress >= 100
                       ? 'Your tailored resume is ready'
                       : smoothProgress < 30
-                        ? 'Preparing your resume for AI analysis...'
-                        : 'Our AI is tailoring your resume to the job...'}
+                        ? 'Preparing your resume for optimization...'
+                        : 'Using the best possible models to tailor your resume...'}
                   </p>
                 </div>
 
@@ -849,7 +900,7 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
                         <i className={`${aiInsightMessages[aiMessageIndex]?.icon || 'ri-lightbulb-flash-line'} text-teal-600 text-sm`}></i>
                       </div>
                       <div>
-                        <p className="text-xs font-bold text-teal-700 uppercase tracking-wider mb-0.5">AI Working</p>
+                        <p className="text-xs font-bold text-teal-700 uppercase tracking-wider mb-0.5">Processing</p>
                         <p className="text-sm text-gray-600 leading-snug">{aiInsightMessages[aiMessageIndex]?.text || 'Processing...'}</p>
                       </div>
                     </div>
@@ -880,6 +931,42 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
           )}
         </div>
       </div>
+
+      {/* Auth Modal – shown when user tries to optimize without being logged in */}
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        onSuccess={() => {
+          setShowAuthModal(false);
+          // After successful login, continue where the user left off
+          if (currentStep === 1 && uploadedFile) {
+            setCurrentStep(2);
+          } else if (currentStep === 2 && isJDValid()) {
+            startProcessing();
+          }
+        }}
+      />
+
+      {/* Paywall – reuse the site's PaymentModal with pricing plans */}
+      {paywallResumeId && (
+        <PaymentModal
+          isOpen={showPaywall}
+          resumeId={paywallResumeId}
+          plans={paywallPlans}
+          onClose={() => setShowPaywall(false)}
+          onPaymentSuccess={async () => {
+            setShowPaywall(false);
+            if (pendingOptimization) {
+              await runOptimization(
+                pendingOptimization.resumeId,
+                pendingOptimization.jobTitle,
+                pendingOptimization.jobDescription,
+                pendingOptimization.jobLink,
+              );
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -7,14 +7,14 @@ interface Props {
 
 export default function TemplateCreative({ data }: Props) {
   return (
-    <div className="bg-white font-sans text-gray-900 min-h-[1000px]">
+    <div className="w-full bg-white font-sans text-gray-900 leading-[1.32]">
       {/* Split header */}
-      <div className="grid grid-cols-5 min-h-[140px]">
-        <div className="col-span-3 bg-gradient-to-br from-teal-600 to-emerald-700 p-8 flex flex-col justify-center">
-          <h2 className="text-3xl font-black text-white tracking-tight mb-1">{data.name}</h2>
+      <div className="grid grid-cols-5 min-h-[120px]">
+        <div className="col-span-3 bg-gradient-to-br from-teal-600 to-emerald-700 p-6 flex flex-col justify-center">
+          <h2 className="text-2xl font-black text-white tracking-tight mb-1">{data.name}</h2>
           <p className="text-teal-200 font-medium text-sm tracking-widest uppercase">{data.title}</p>
         </div>
-        <div className="col-span-2 bg-gray-50 p-6 flex flex-col justify-center gap-2">
+        <div className="col-span-2 bg-gray-50 p-5 flex flex-col justify-center gap-1.5">
           <div className="flex items-center gap-2 text-xs text-gray-500">
             <div className="w-5 h-5 flex items-center justify-center rounded-full bg-teal-100 text-teal-600 flex-shrink-0">
               <i className="ri-mail-line text-[10px]"></i>
@@ -44,7 +44,7 @@ export default function TemplateCreative({ data }: Props) {
 
       <div className="grid grid-cols-5">
         {/* Main */}
-        <div className="col-span-3 p-8 space-y-6">
+        <div className="col-span-3 p-6 space-y-5">
           {/* Summary */}
           <div>
             <div className="flex items-center gap-2 mb-3">
@@ -53,7 +53,7 @@ export default function TemplateCreative({ data }: Props) {
               </div>
               <h3 className="text-sm font-black uppercase tracking-widest text-gray-800">Profile</h3>
             </div>
-            <p className="text-xs text-gray-600 leading-relaxed">{data.summary}</p>
+            <p className="text-[11px] text-gray-600 leading-relaxed">{data.summary}</p>
           </div>
 
           {/* Experience */}
@@ -64,7 +64,7 @@ export default function TemplateCreative({ data }: Props) {
               </div>
               <h3 className="text-sm font-black uppercase tracking-widest text-gray-800">Experience</h3>
             </div>
-            <div className="space-y-5">
+            <div className="space-y-4">
               {data.experience.map((exp, i) => (
                 <div key={i} className="relative">
                   <div className="flex items-start justify-between mb-1">
@@ -74,7 +74,7 @@ export default function TemplateCreative({ data }: Props) {
                     </div>
                     <span className="text-[10px] font-bold text-white bg-teal-600 px-2 py-0.5 rounded-full whitespace-nowrap">{exp.period}</span>
                   </div>
-                  <ul className="mt-2 space-y-1">
+                  <ul className="mt-1.5 space-y-1">
                     {exp.bullets.map((b, j) => (
                       <li key={j} className="text-xs text-gray-600 flex items-start gap-2">
                         <span className="text-teal-500 font-bold mt-0.5 flex-shrink-0">—</span>
@@ -89,7 +89,7 @@ export default function TemplateCreative({ data }: Props) {
         </div>
 
         {/* Sidebar */}
-        <div className="col-span-2 bg-gray-50 p-6 space-y-6">
+        <div className="col-span-2 bg-gray-50 p-5 space-y-5">
           {/* Skills */}
           <div>
             <div className="flex items-center gap-2 mb-3">

@@ -51,9 +51,10 @@ export function getPortalUrl(portal: 'recruiter' | 'institution' | 'admin', path
   const port = window.location.port;
   
   const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+  const isFirebaseStaging = hostname.includes('pickcv-staging.web.app') || hostname.includes('pickcv-staging-');
   
-  if (isLocal) {
-    // Local dev: same origin + ?portal= query param
+  if (isLocal || isFirebaseStaging) {
+    // Local dev & Firebase staging: same origin + ?portal= query param
     const base = `${protocol}//${hostname}${port ? ':' + port : ''}`;
     const cleanPath = path === '/' ? '' : path;
     return `${base}${cleanPath}?portal=${portal}`;
@@ -73,6 +74,7 @@ export function getPortalUrl(portal: 'recruiter' | 'institution' | 'admin', path
   
   // If it's a custom domain like pickcv.com, admin.pickcv.com, etc.
   const baseDomain = hostname
+    .replace(/^www\./, '')
     .replace(/^admin\./, '')
     .replace(/^institution\./, '')
     .replace(/^recruiters\./, '');
@@ -122,14 +124,21 @@ const recruiterPathMap: Record<string, string> = {
  */
 export function resolvePath(path: string): string {
   const sub = getSubdomain();
-  if (sub === 'admin') return adminPathMap[path] ?? path;
-  if (sub === 'institution') return institutionPathMap[path] ?? path;
-  if (sub === 'recruiter') {
-    // Check exact match first
-    if (recruiterPathMap[path]) return recruiterPathMap[path];
-    // Handle dynamic paths like /recruiter/jobs/123 → /jobs/123
-    if (path.startsWith('/recruiter/')) return path.replace('/recruiter', '');
-    return path;
+  let resolved = path;
+
+  if (sub === 'admin') resolved = adminPathMap[path] ?? path;
+  else if (sub === 'institution') resolved = institutionPathMap[path] ?? path;
+  else if (sub === 'recruiter') {
+    if (recruiterPathMap[path]) resolved = recruiterPathMap[path];
+    else if (path.startsWith('/recruiter/')) resolved = path.replace('/recruiter', '');
+    else resolved = path;
   }
-  return path;
+
+  // In local dev, preserve ?portal= param so subdomain context is retained
+  const portalParam = new URLSearchParams(window.location.search).get('portal');
+  if (portalParam && sub !== 'main') {
+    resolved += (resolved.includes('?') ? '&' : '?') + `portal=${portalParam}`;
+  }
+
+  return resolved;
 }

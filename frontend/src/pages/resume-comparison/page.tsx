@@ -1,9 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Navbar from '../../components/feature/Navbar';
 import Footer from '../../components/feature/Footer';
 import InlineResumeEditor from '../optimized-resume/components/InlineResumeEditor';
 import { ResumeData } from '../optimized-resume/types';
+import { getVariantTemplates } from '../optimized-resume/components/themes';
+import { authFetch } from '../../services/authFetch';
+
+interface DeprioritizeOption {
+  id: string;
+  label: string;
+  description: string;
+}
 
 interface OptimizationData {
   resumeId: number;
@@ -28,6 +36,35 @@ interface OptimizationData {
   experience?: any[];
   skills?: any;
   education?: any[];
+  resume_variants?: Array<{
+    rank?: number;
+    id: string;
+    name: string;
+    score: number;
+    rationale?: string;
+    section_order?: string[];
+    recommended_file_format?: string;
+    optimized_resume_text?: string;
+    resume_data?: any;
+    page_estimate?: number;
+  }>;
+  resume_os?: {
+    role_dna?: {
+      function?: string;
+      level?: string;
+      environment?: string;
+      cluster_name?: string;
+      cluster?: string;
+      confidence?: number;
+    };
+    recommended_variant?: {
+      id?: string;
+      name?: string;
+      score?: number;
+      rationale?: string;
+    };
+    deprioritize_options?: DeprioritizeOption[];
+  };
 }
 
 export default function ResumeComparisonPage() {
@@ -37,24 +74,136 @@ export default function ResumeComparisonPage() {
   const [resumeData, setResumeData] = useState<ResumeData | null>(null);
   const [activeTab, setActiveTab] = useState<'editor' | 'changes'>('editor');
 
+  // Page optimization state
+  const [selectedVariant, setSelectedVariant] = useState<any>(null);
+  const [showCompressModal, setShowCompressModal] = useState(false);
+  const [targetPages, setTargetPages] = useState<1 | 2>(1);
+  const [selectedDeprioritize, setSelectedDeprioritize] = useState<string[]>([]);
+  const [customDeprioritize, setCustomDeprioritize] = useState('');
+  const [isCompressing, setIsCompressing] = useState(false);
+  const [compressedData, setCompressedData] = useState<ResumeData | null>(null);
+  const [compressionNotes, setCompressionNotes] = useState<string[]>([]);
+  const [viewMode, setViewMode] = useState<'full' | 'compressed'>('full');
+  const [compressedPageEstimate, setCompressedPageEstimate] = useState<number | null>(null);
+
+  // Recommended visual template based on backend variant
+  const [recommendedTemplate, setRecommendedTemplate] = useState<string>('v1-stack-first');
+  const [variantId, setVariantId] = useState<string | undefined>();
+  const [variantRationale, setVariantRationale] = useState<string | undefined>();
+
+  // Full (original) data preserved for switching between views
+  const [fullResumeData, setFullResumeData] = useState<ResumeData | null>(null);
+
+  // Actual rendered page count from InlineResumeEditor
+  const [actualPageCount, setActualPageCount] = useState(1);
+  const handlePageCountChange = useCallback((pages: number) => setActualPageCount(pages), []);
+
+  // Smart deprioritize options derived from actual resume data
+  const smartDeprioritizeOptions = useMemo(() => {
+    if (!resumeData) return [];
+    const opts: DeprioritizeOption[] = [];
+    const expCount = resumeData.experience?.length || 0;
+    if (expCount > 3) {
+      const olderRoles = resumeData.experience.slice(2).map(e => e.company).join(', ');
+      opts.push({
+        id: 'older_experience',
+        label: `Trim ${expCount - 2} older roles (${olderRoles})`,
+        description: 'Condense older positions to one-line summaries or remove them',
+      });
+    }
+    const maxBullets = Math.max(...(resumeData.experience?.map(e => e.bullets?.length || 0) || [0]));
+    const avgBullets = resumeData.experience?.length
+      ? Math.round(resumeData.experience.reduce((s, e) => s + (e.bullets?.length || 0), 0) / resumeData.experience.length)
+      : 0;
+    if (avgBullets > 3) {
+      opts.push({
+        id: 'reduce_bullets',
+        label: `Reduce bullets (avg ${avgBullets} → 3 per role)`,
+        description: `Keep only the highest-impact achievements for each position`,
+      });
+    } else if (maxBullets > 4) {
+      opts.push({
+        id: 'reduce_bullets',
+        label: `Trim roles with ${maxBullets}+ bullets down to 3`,
+        description: 'Keep only the highest-impact achievements',
+      });
+    }
+    const skillCount = resumeData.skills?.length || 0;
+    if (skillCount > 10) {
+      opts.push({
+        id: 'reduce_skills',
+        label: `Compact skills list (${skillCount} → top 10)`,
+        description: 'Keep only the most relevant skills for the target role',
+      });
+    }
+    if ((resumeData.summary?.length || 0) > 200) {
+      opts.push({
+        id: 'shorten_summary',
+        label: 'Shorten professional summary',
+        description: `Currently ${Math.ceil((resumeData.summary?.length || 0) / 45)} lines — condense to 2-3 impactful lines`,
+      });
+    }
+    if ((resumeData.education?.length || 0) > 1) {
+      opts.push({
+        id: 'education_details',
+        label: `Simplify education (${resumeData.education.length} entries)`,
+        description: 'Keep only degree + institution, drop extra details',
+      });
+    }
+    opts.push({
+      id: 'trim_certifications',
+      label: 'Remove certifications / projects',
+      description: 'Drop supplementary sections that aren\'t role-critical',
+    });
+    return opts;
+  }, [resumeData]);
+
   useEffect(() => {
     const stateData = location.state?.optimizedResume;
     const sessionData = sessionStorage.getItem('optimizationData');
 
     if (stateData) {
-      setOptimizationData(stateData);
-      transformToResumeData(stateData);
+      hydrateOptimizationData(stateData);
     } else if (sessionData) {
       const parsed = JSON.parse(sessionData);
-      setOptimizationData(parsed);
-      transformToResumeData(parsed);
+      hydrateOptimizationData(parsed);
     } else {
       navigate('/');
     }
   }, [navigate, location.state]);
 
-  const transformToResumeData = (apiData: any) => {
-    if (!apiData) return;
+  const hydrateOptimizationData = (data: OptimizationData) => {
+    setOptimizationData(data);
+
+    // Derive recommended visual template from the backend variant
+    const vid = data.resume_os?.recommended_variant?.id;
+    if (vid) {
+      setVariantId(vid);
+      setVariantRationale(data.resume_os?.recommended_variant?.rationale || undefined);
+      const varTemplates = getVariantTemplates(vid as any);
+      if (varTemplates.length > 0) {
+        setRecommendedTemplate(varTemplates[0].id);
+      }
+    }
+
+    const variants = Array.isArray(data.resume_variants) ? data.resume_variants : [];
+    if (variants.length > 0 && variants[0]?.resume_data) {
+      const recommendedId = data.resume_os?.recommended_variant?.id;
+      const recommended = recommendedId
+        ? variants.find((v) => v.id === recommendedId)
+        : variants[0];
+      const selected = recommended?.resume_data ? recommended : variants[0];
+      setSelectedVariant(selected);
+      const rd = transformToResumeData(selected.resume_data);
+      if (rd) setFullResumeData(rd);
+      return;
+    }
+    const rd = transformToResumeData(data);
+    if (rd) setFullResumeData(rd);
+  };
+
+  const transformToResumeData = (apiData: any): ResumeData | null => {
+    if (!apiData) return null;
     const transformed: ResumeData = {
       name: apiData.name || 'Your Name',
       title: apiData.title || 'Professional',
@@ -94,7 +243,72 @@ export default function ResumeComparisonPage() {
         : [],
     };
     setResumeData(transformed);
+    return transformed;
   };
+
+  /* ─── Compression API call ─── */
+  const handleCompress = async () => {
+    if (!selectedVariant?.resume_data || !optimizationData) return;
+    setIsCompressing(true);
+
+    try {
+      const res = await authFetch(`${import.meta.env.VITE_API_URL}/resume/compress-variant`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          variant_id: selectedVariant.id || 'V1',
+          variant_data: selectedVariant.resume_data,
+          target_pages: targetPages,
+          role_dna: optimizationData.resume_os?.role_dna || {},
+          deprioritize: {
+            categories: selectedDeprioritize,
+            custom_text: customDeprioritize,
+          },
+        }),
+      });
+
+      if (!res.ok) throw new Error('Compression failed');
+
+      const result = await res.json();
+      const cd = transformToResumeData(result.resume_data);
+      if (cd) {
+        setCompressedData(cd);
+        // Switch to compressed view but keep full data available
+        setResumeData(cd);
+        setViewMode('compressed');
+      }
+      setCompressionNotes(result.compression_notes || []);
+      setCompressedPageEstimate(result.page_estimate || targetPages);
+      setShowCompressModal(false);
+    } catch (err) {
+      console.error('Compression failed:', err);
+      alert('Failed to compress resume. Please try again.');
+    } finally {
+      setIsCompressing(false);
+    }
+  };
+
+  const switchToFullVersion = () => {
+    if (fullResumeData) {
+      setResumeData(fullResumeData);
+      setViewMode('full');
+    }
+  };
+
+  const switchToCompressedVersion = () => {
+    if (compressedData) {
+      setResumeData(compressedData);
+      setViewMode('compressed');
+    }
+  };
+
+  const toggleDeprioritize = (id: string) => {
+    setSelectedDeprioritize((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const currentPageEstimate = actualPageCount || selectedVariant?.page_estimate || 1;
 
   if (!optimizationData) {
     return (
@@ -129,7 +343,7 @@ export default function ResumeComparisonPage() {
             </p>
 
             {/* Stats */}
-            <div className="flex items-center justify-center gap-6 mt-6">
+            <div className="flex items-center justify-center gap-6 mt-6 flex-wrap">
               <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/80 shadow-sm border border-gray-100">
                 <div className="text-2xl font-bold text-teal-600">{optimizationData.match_score}%</div>
                 <span className="text-xs text-gray-500">Match</span>
@@ -140,6 +354,18 @@ export default function ResumeComparisonPage() {
                 </div>
                 <span className="text-xs text-gray-500">Keywords</span>
               </div>
+              {!!optimizationData.resume_variants?.length && (
+                <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/80 shadow-sm border border-gray-100">
+                  <div className="text-2xl font-bold text-indigo-600">{optimizationData.resume_variants.length}</div>
+                  <span className="text-xs text-gray-500">Variants</span>
+                </div>
+              )}
+              {currentPageEstimate > 0 && (
+                <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/80 shadow-sm border border-gray-100">
+                  <div className="text-2xl font-bold text-violet-600">{viewMode === 'compressed' && compressedPageEstimate ? compressedPageEstimate : currentPageEstimate}</div>
+                  <span className="text-xs text-gray-500">{(viewMode === 'compressed' && compressedPageEstimate ? compressedPageEstimate : currentPageEstimate) === 1 ? 'Page' : 'Pages'}</span>
+                </div>
+              )}
               {optimizationData.ats_optimized && (
                 <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-50 shadow-sm border border-emerald-100">
                   <i className="ri-shield-check-fill text-lg text-emerald-500"></i>
@@ -147,6 +373,231 @@ export default function ResumeComparisonPage() {
                 </div>
               )}
             </div>
+
+            {optimizationData.resume_os?.recommended_variant && (
+              <div className="mt-5 max-w-3xl mx-auto bg-white/90 border border-teal-100 rounded-2xl p-4 text-left shadow-sm">
+                <div className="flex flex-wrap items-center gap-2 mb-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wide text-teal-700 bg-teal-50 px-2 py-1 rounded-md">
+                    Agentic Resume OS
+                  </span>
+                  <span className="text-xs text-gray-500">Recommended Variant</span>
+                  <span className="text-xs font-semibold text-gray-800">
+                    {optimizationData.resume_os.recommended_variant.id} · {optimizationData.resume_os.recommended_variant.name}
+                  </span>
+                  <span className="text-xs text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
+                    Score {optimizationData.resume_os.recommended_variant.score}%
+                  </span>
+                </div>
+
+                {optimizationData.resume_os?.role_dna && (
+                  <p className="text-xs text-gray-600 mb-1.5">
+                    Role DNA: {optimizationData.resume_os.role_dna.function || 'Unknown'} · {optimizationData.resume_os.role_dna.level || 'L3'} · {optimizationData.resume_os.role_dna.environment || 'Unknown'} · {optimizationData.resume_os.role_dna.cluster_name || 'General'}
+                  </p>
+                )}
+
+                <p className="text-xs text-gray-600 leading-relaxed">
+                  {optimizationData.resume_os.recommended_variant.rationale}
+                </p>
+              </div>
+            )}
+
+            {/* ── Page Optimization Controls ── */}
+            {currentPageEstimate > 1 && !compressedData && (
+              <div className="mt-5 max-w-3xl mx-auto overflow-hidden rounded-2xl border border-violet-200 shadow-sm">
+                {/* Header bar */}
+                <div className="bg-gradient-to-r from-violet-50 to-indigo-50 px-5 py-4">
+                  <div className="flex items-center justify-between flex-wrap gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center">
+                        <i className="ri-file-copy-2-line text-violet-600 text-lg"></i>
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-gray-900">
+                          Your resume is {currentPageEstimate} pages
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          Recruiters spend ~6 seconds scanning. A concise resume gets more interviews.
+                        </p>
+                      </div>
+                    </div>
+                    {!showCompressModal ? (
+                      <button
+                        onClick={() => setShowCompressModal(true)}
+                        className="px-5 py-2.5 rounded-xl text-sm font-semibold bg-violet-600 text-white hover:bg-violet-700 transition-all shadow-md hover:shadow-lg"
+                      >
+                        <i className="ri-magic-line mr-1.5"></i>Smart Compress
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setShowCompressModal(false)}
+                        className="px-4 py-2 rounded-xl text-sm font-medium text-gray-500 bg-white border border-gray-200 hover:bg-gray-50 transition-all"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Expandable compress panel */}
+                {showCompressModal && (
+                  <div className="bg-white px-5 py-5 border-t border-violet-100 space-y-5 animate-in fade-in slide-in-from-top-2 duration-200">
+                    {/* Step 1: Target page count */}
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Step 1 — Target length</p>
+                      <div className="flex gap-2">
+                        {currentPageEstimate > 2 && (
+                          <button
+                            onClick={() => setTargetPages(2)}
+                            className={`flex-1 px-4 py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
+                              targetPages === 2
+                                ? 'border-violet-500 bg-violet-50 text-violet-700 shadow-sm'
+                                : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                            }`}
+                          >
+                            <i className="ri-file-copy-2-line mr-1.5"></i>
+                            Fit to 2 pages
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setTargetPages(1)}
+                          className={`flex-1 px-4 py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
+                            targetPages === 1
+                              ? 'border-violet-500 bg-violet-50 text-violet-700 shadow-sm'
+                              : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                          }`}
+                        >
+                          <i className="ri-file-line mr-1.5"></i>
+                          Fit to 1 page
+                          <span className="ml-1.5 text-[10px] font-bold uppercase bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-md">Recommended</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Step 2: Smart deprioritize options */}
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Step 2 — What can we trim?</p>
+                      <p className="text-xs text-gray-400 mb-3">We analyzed your resume. Select what matters less for this role:</p>
+                      <div className="space-y-2">
+                        {smartDeprioritizeOptions.map((option) => (
+                          <label
+                            key={option.id}
+                            className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                              selectedDeprioritize.includes(option.id)
+                                ? 'border-violet-300 bg-violet-50/70 shadow-sm'
+                                : 'border-gray-150 hover:border-gray-300 hover:bg-gray-50'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedDeprioritize.includes(option.id)}
+                              onChange={() => toggleDeprioritize(option.id)}
+                              className="mt-0.5 w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-900">{option.label}</p>
+                              <p className="text-xs text-gray-500 mt-0.5">{option.description}</p>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Step 3: Custom instructions */}
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Step 3 — Anything else? <span className="font-normal text-gray-400">(optional)</span></p>
+                      <textarea
+                        value={customDeprioritize}
+                        onChange={(e) => setCustomDeprioritize(e.target.value)}
+                        placeholder='e.g. "Remove my 2018 internship at XYZ Corp" or "Focus more on leadership and less on technical details"'
+                        rows={2}
+                        maxLength={500}
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-400 transition-all resize-none placeholder:text-gray-400"
+                      />
+                    </div>
+
+                    {/* Action */}
+                    <div className="flex items-center justify-between pt-1">
+                      <p className="text-xs text-gray-400">
+                        {selectedDeprioritize.length === 0 && !customDeprioritize.trim()
+                          ? 'Select at least one option or add custom instructions'
+                          : `${selectedDeprioritize.length} option${selectedDeprioritize.length !== 1 ? 's' : ''} selected`}
+                      </p>
+                      <button
+                        onClick={handleCompress}
+                        disabled={isCompressing || (selectedDeprioritize.length === 0 && !customDeprioritize.trim())}
+                        className="px-6 py-2.5 rounded-xl text-sm font-semibold text-white bg-violet-600 hover:bg-violet-700 transition-all shadow-md hover:shadow-lg disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
+                      >
+                        {isCompressing ? (
+                          <span className="flex items-center gap-2">
+                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                            Compressing to {targetPages} page{targetPages > 1 ? 's' : ''}...
+                          </span>
+                        ) : (
+                          <>
+                            <i className="ri-magic-line mr-1.5"></i>
+                            Compress to {targetPages} {targetPages === 1 ? 'Page' : 'Pages'}
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Version Switcher (after compression) ── */}
+            {compressedData && (
+              <div className="mt-5 max-w-3xl mx-auto space-y-3">
+                <div className="flex items-center justify-center gap-1 p-1 bg-gray-100 rounded-xl">
+                  <button
+                    onClick={switchToFullVersion}
+                    className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                      viewMode === 'full'
+                        ? 'bg-white text-gray-900 shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    <i className="ri-file-list-3-line mr-1.5"></i>
+                    Full Version ({currentPageEstimate} {currentPageEstimate === 1 ? 'page' : 'pages'})
+                  </button>
+                  <button
+                    onClick={switchToCompressedVersion}
+                    className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                      viewMode === 'compressed'
+                        ? 'bg-white text-gray-900 shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    <i className="ri-compress-line mr-1.5"></i>
+                    Compressed ({compressedPageEstimate || targetPages} {(compressedPageEstimate || targetPages) === 1 ? 'page' : 'pages'})
+                  </button>
+                </div>
+
+                {viewMode === 'compressed' && compressionNotes.length > 0 && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                    <p className="text-xs font-semibold text-amber-800 mb-1.5">
+                      <i className="ri-information-line mr-1"></i>What was trimmed:
+                    </p>
+                    <ul className="text-xs text-amber-700 space-y-0.5">
+                      {compressionNotes.map((note, idx) => (
+                        <li key={idx}>• {note}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {viewMode === 'compressed' && (
+                  <div className="flex justify-center">
+                    <button
+                      onClick={() => { setCompressedData(null); setCompressionNotes([]); switchToFullVersion(); setShowCompressModal(false); setSelectedDeprioritize([]); setCustomDeprioritize(''); }}
+                      className="text-xs text-gray-400 hover:text-violet-600 transition-colors underline underline-offset-2"
+                    >
+                      Try different compression settings
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Tabs */}
@@ -175,7 +626,7 @@ export default function ResumeComparisonPage() {
 
           {/* Editor Tab */}
           {activeTab === 'editor' && resumeData && (
-            <InlineResumeEditor data={resumeData} onDataChange={setResumeData} />
+            <InlineResumeEditor data={resumeData} onDataChange={setResumeData} initialTemplateId={recommendedTemplate} variantId={variantId} variantRationale={variantRationale} onPageCountChange={handlePageCountChange} />
           )}
 
           {activeTab === 'editor' && !resumeData && (

@@ -8,11 +8,13 @@ import TemplateMinimal from './components/TemplateMinimal';
 import TemplateExecutive from './components/TemplateExecutive';
 import TemplateCreative from './components/TemplateCreative';
 import TemplateCompact from './components/TemplateCompact';
+import TemplateAtsPro from './components/TemplateAtsPro';
+import TemplateHybrid from './components/TemplateHybrid';
 import ResumeEditor from './components/ResumeEditor';
 import { ResumeData } from './types';
 import { apiService } from '../../services/api';
 
-type TemplateId = 'classic' | 'modern' | 'minimal' | 'executive' | 'creative' | 'compact';
+type TemplateId = 'classic' | 'modern' | 'minimal' | 'executive' | 'creative' | 'compact' | 'atspro' | 'hybrid';
 
 // Sample data used only for template thumbnail previews
 const samplePreviewData: ResumeData = {
@@ -82,10 +84,28 @@ interface TemplateOption {
 
 const templates: TemplateOption[] = [
   {
+    id: 'atspro',
+    name: 'ATS Pro',
+    tag: 'Best ATS',
+    description: 'Strict ATS-first one-page layout with clean single-column hierarchy and dense readability.',
+    accent: 'bg-slate-700',
+    tagColor: 'bg-slate-100 text-slate-700',
+    preview: ['single-column', 'ats-first', 'dense'],
+  },
+  {
+    id: 'hybrid',
+    name: 'Hybrid',
+    tag: 'Best Balance',
+    description: 'One-page hybrid layout that balances detailed experience with a focused skills sidebar.',
+    accent: 'bg-cyan-600',
+    tagColor: 'bg-cyan-50 text-cyan-700',
+    preview: ['hybrid', 'skills-sidebar', 'balanced'],
+  },
+  {
     id: 'classic',
     name: 'Classic',
-    tag: 'Traditional',
-    description: 'Centered header, serif typography, clean section dividers',
+    tag: 'ATS Single-Column',
+    description: 'Best for conservative roles: clean hierarchy, compact spacing, one-page focus.',
     accent: 'bg-gray-800',
     tagColor: 'bg-gray-100 text-gray-600',
     preview: ['centered-header', 'serif', 'dividers'],
@@ -93,8 +113,8 @@ const templates: TemplateOption[] = [
   {
     id: 'modern',
     name: 'Modern',
-    tag: 'Two-Column',
-    description: 'Dark sidebar with skills & contact, timeline experience on the right',
+    tag: 'Compact Two-Column',
+    description: 'Great for tech and business resumes that need strong skills visibility on one page.',
     accent: 'bg-teal-700',
     tagColor: 'bg-teal-50 text-teal-700',
     preview: ['sidebar', 'timeline', 'color-accent'],
@@ -102,8 +122,8 @@ const templates: TemplateOption[] = [
   {
     id: 'minimal',
     name: 'Minimal',
-    tag: 'Clean',
-    description: 'Ultra-light typography, generous whitespace, side skills column',
+    tag: 'Minimal One-Page',
+    description: 'Clean and readable with reduced clutter for early-career and ATS-safe applications.',
     accent: 'bg-gray-300',
     tagColor: 'bg-gray-50 text-gray-500',
     preview: ['light', 'whitespace', 'side-column'],
@@ -111,8 +131,8 @@ const templates: TemplateOption[] = [
   {
     id: 'executive',
     name: 'Executive',
-    tag: 'Bold Header',
-    description: 'Dark header bar, numbered bullets, timeline layout with dates on left',
+    tag: 'Leadership',
+    description: 'Best for experienced candidates who need a strong header and concise achievements.',
     accent: 'bg-gray-900',
     tagColor: 'bg-gray-100 text-gray-700',
     preview: ['dark-header', 'numbered', 'timeline'],
@@ -120,8 +140,8 @@ const templates: TemplateOption[] = [
   {
     id: 'creative',
     name: 'Creative',
-    tag: 'Split Layout',
-    description: 'Gradient split header, icon-led sections, teal sidebar',
+    tag: 'Design-Led',
+    description: 'Balanced visual style for creative roles while still staying compact and scannable.',
     accent: 'bg-gradient-to-r from-teal-600 to-emerald-600',
     tagColor: 'bg-teal-50 text-teal-700',
     preview: ['gradient', 'icons', 'split'],
@@ -129,28 +149,20 @@ const templates: TemplateOption[] = [
   {
     id: 'compact',
     name: 'Compact',
-    tag: 'Dense Grid',
-    description: 'Grid-based layout, inline skills row, maximum info density',
+    tag: 'Best One-Page',
+    description: 'Highest information density for fitting strong experience and skills onto a single page.',
     accent: 'bg-teal-500',
     tagColor: 'bg-teal-50 text-teal-600',
     preview: ['grid', 'dense', 'inline'],
   },
 ];
 
-const keywords = [
-  'Product Management',
-  'Agile/Scrum',
-  'Roadmap Planning',
-  'Stakeholder Management',
-  'Data Analysis',
-  'User Research',
-  'Cross-functional Leadership',
-  'A/B Testing',
-];
+const onePageTemplateIds: TemplateId[] = ['atspro', 'hybrid', 'compact', 'classic'];
+const onePageTemplates = templates.filter((t) => onePageTemplateIds.includes(t.id));
 
 const improvements = [
   { icon: 'ri-check-double-line', text: 'Rewritten 12 bullet points with action verbs and metrics', color: 'text-emerald-600' },
-  { icon: 'ri-key-2-line', text: 'Injected 8 high-impact keywords from job description', color: 'text-teal-600' },
+  { icon: 'ri-tools-line', text: 'Refocused the resume around role-relevant skills instead of generic keyword stuffing', color: 'text-teal-600' },
   { icon: 'ri-layout-line', text: 'Optimized formatting for ATS parsing (single-column, clean headers)', color: 'text-amber-600' },
   { icon: 'ri-text-spacing', text: 'Improved readability with consistent spacing and hierarchy', color: 'text-emerald-600' },
   { icon: 'ri-file-reduce-line', text: 'Reduced resume to 1 page while maintaining impact', color: 'text-teal-600' },
@@ -203,6 +215,61 @@ function TemplateThumbnail({ template, isSelected, onClick }: { template: Templa
 }
 
 function TemplateMiniPreview({ id }: { id: TemplateId }) {
+  if (id === 'atspro') {
+    return (
+      <div className="p-2.5 scale-[0.28] origin-top-left w-[357%] h-[357%]">
+        <div className="border-b border-gray-300 pb-2 mb-2">
+          <div className="h-3.5 w-24 bg-gray-800 rounded mb-1"></div>
+          <div className="h-1.5 w-16 bg-gray-500 rounded mb-1.5"></div>
+          <div className="flex gap-1.5">
+            <div className="h-1 w-14 bg-gray-300 rounded"></div>
+            <div className="h-1 w-14 bg-gray-300 rounded"></div>
+          </div>
+        </div>
+        <div className="space-y-2.5">
+          <div>
+            <div className="h-1.5 w-20 bg-gray-700 rounded mb-1.5"></div>
+            <div className="h-1 w-full bg-gray-200 rounded"></div>
+            <div className="h-1 w-5/6 bg-gray-200 rounded mt-1"></div>
+          </div>
+          <div>
+            <div className="h-1.5 w-20 bg-gray-700 rounded mb-1.5"></div>
+            <div className="h-1 w-full bg-gray-200 rounded"></div>
+            <div className="h-1 w-full bg-gray-200 rounded mt-1"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (id === 'hybrid') {
+    return (
+      <div className="scale-[0.28] origin-top-left w-[357%] h-[357%] grid grid-cols-12">
+        <div className="col-span-8 p-2 border-r border-gray-100">
+          <div className="h-3 w-20 bg-gray-800 rounded mb-1"></div>
+          <div className="h-1.5 w-16 bg-cyan-600 rounded mb-2"></div>
+          <div className="space-y-1 mb-2">
+            <div className="h-1 w-full bg-gray-200 rounded"></div>
+            <div className="h-1 w-5/6 bg-gray-200 rounded"></div>
+          </div>
+          <div className="space-y-1">
+            <div className="h-1.5 w-16 bg-cyan-600 rounded"></div>
+            <div className="h-1 w-full bg-gray-200 rounded"></div>
+            <div className="h-1 w-4/5 bg-gray-200 rounded"></div>
+          </div>
+        </div>
+        <div className="col-span-4 p-2 bg-gray-50">
+          <div className="h-1.5 w-12 bg-cyan-600 rounded mb-1.5"></div>
+          <div className="flex flex-wrap gap-0.5 mb-2">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-2 w-8 bg-white border border-cyan-100 rounded"></div>
+            ))}
+          </div>
+          <div className="h-1.5 w-14 bg-cyan-600 rounded mb-1"></div>
+          <div className="h-5 w-full bg-white border border-gray-100 rounded"></div>
+        </div>
+      </div>
+    );
+  }
   if (id === 'classic') {
     return (
       <div className="p-2 scale-[0.28] origin-top-left w-[357%] h-[357%]">
@@ -384,6 +451,8 @@ function TemplateMiniPreview({ id }: { id: TemplateId }) {
 
 function ResumeRenderer({ templateId, data }: { templateId: TemplateId; data: ResumeData }) {
   switch (templateId) {
+    case 'atspro': return <TemplateAtsPro data={data} />;
+    case 'hybrid': return <TemplateHybrid data={data} />;
     case 'classic': return <TemplateClassic data={data} />;
     case 'modern': return <TemplateModern data={data} />;
     case 'minimal': return <TemplateMinimal data={data} />;
@@ -398,7 +467,7 @@ export default function OptimizedResumePage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
-  const [selectedTemplate, setSelectedTemplate] = useState<TemplateId>('modern');
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateId>('atspro');
   const [resumeData, setResumeData] = useState<ResumeData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -453,7 +522,7 @@ export default function OptimizedResumePage() {
             const sections = r.sections || {};
 
             // Set template if saved
-            if (r.template_name && ['classic','modern','minimal','executive','creative','compact'].includes(r.template_name)) {
+            if (r.template_name && ['atspro','hybrid','classic','modern','minimal','executive','creative','compact'].includes(r.template_name)) {
               setSelectedTemplate(r.template_name as TemplateId);
             }
 
@@ -560,7 +629,7 @@ export default function OptimizedResumePage() {
               Your Optimized Resume
             </h1>
             <p className="text-base text-gray-500 max-w-xl mx-auto">
-              Choose a layout that fits your style. Every template is ATS-safe and fully optimized.
+              Choose a layout that fits your style. Every template is tuned for ATS-safe, single-page resume output.
             </p>
           </div>
 
@@ -577,7 +646,7 @@ export default function OptimizedResumePage() {
                   <p className="text-sm font-bold text-gray-800">Choose Template</p>
                 </div>
                 <div className="grid grid-cols-1 gap-3">
-                  {templates.map((t) => (
+                  {onePageTemplates.map((t) => (
                     <TemplateThumbnail
                       key={t.id}
                       template={t}
@@ -652,7 +721,7 @@ export default function OptimizedResumePage() {
                 </div>
                 <div className="space-y-2">
                   {[
-                    { label: 'Keyword Match', value: atsScoreValue },
+                    { label: 'Skills Match', value: atsScoreValue },
                     { label: 'Format Score', value: Math.min(100, atsScoreValue + 4) },
                     { label: 'Readability', value: Math.min(100, atsScoreValue - 3) },
                   ].map((item) => (
@@ -672,16 +741,16 @@ export default function OptimizedResumePage() {
                 </div>
               </div>
 
-              {/* Keywords */}
+              {/* Skills */}
               <div className="glass-card rounded-2xl p-5">
                 <h3 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
-                  <i className="ri-key-2-line text-teal-500"></i>
-                  Keywords Matched
+                  <i className="ri-tools-line text-teal-500"></i>
+                  Core Skills
                 </h3>
                 <div className="flex flex-wrap gap-1.5">
-                  {keywords.map((kw, i) => (
+                  {resumeData.skills.slice(0, 10).map((skill, i) => (
                     <span key={i} className="px-2 py-1 bg-teal-50 text-teal-700 text-[10px] font-semibold rounded-lg border border-teal-100">
-                      {kw}
+                      {skill}
                     </span>
                   ))}
                 </div>

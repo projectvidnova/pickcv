@@ -89,7 +89,7 @@ export default function AboutPage() {
             PickCV was born from a simple frustration: why is creating a good resume still so hard in 2026? We watched talented friends and family struggle with formatting, keyword optimization, and ATS rejections — losing out on jobs they were perfectly qualified for.
           </p>
           <p className="text-gray-600 leading-relaxed mb-4">
-            So we built something better. Powered by Google's Gemini AI and designed with real recruiters' insights, PickCV transforms the way people create resumes. Upload your existing resume, paste a job description, and watch AI tailor your experience to match — all while keeping your authentic voice.
+            So we built something better. Powered by Thinking LLM's and designed with real recruiters' insights, PickCV transforms the way people create resumes. Upload your existing resume, paste a job description, and watch AI tailor your experience to match — all while keeping your authentic voice.
           </p>
           <p className="text-gray-600 leading-relaxed">
             We're a small, passionate team at <span className="font-semibold text-gray-700">Bhoomer Digital Solutions Private Limited</span>, headquartered in Andhra Pradesh, India — building for the world.

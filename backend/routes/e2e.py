@@ -54,6 +54,21 @@ async def cleanup_test_data(db: AsyncSession = Depends(get_db)):
     """
     deleted = {}
 
+    # Whitelist of valid table names — only these can be cleaned up.
+    ALLOWED_USER_TABLES = frozenset({
+        "payments", "subscriptions", "resumes",
+        "user_profiles", "user_skills",
+        "work_experiences", "education",
+        "job_applications", "saved_jobs",
+    })
+    ALLOWED_COLLEGE_TABLES = frozenset({
+        "college_audit_log", "college_alerts",
+        "shared_profiles", "college_students",
+        "coe_memberships", "coe_groups",
+        "course_skill_mapping", "curriculum_courses",
+        "departments",
+    })
+
     try:
         # ── Get test user IDs ────────────────────────────
         user_rows = await db.execute(
@@ -63,19 +78,11 @@ async def cleanup_test_data(db: AsyncSession = Depends(get_db)):
         user_ids = [r[0] for r in user_rows.fetchall()]
 
         if user_ids:
-            id_list = ",".join(str(uid) for uid in user_ids)
-
-            # Delete child tables first (order matters for FK)
-            for table in [
-                "payments", "subscriptions",
-                "resumes",
-                "user_profiles", "user_skills",
-                "work_experiences", "education",
-                "job_applications", "saved_jobs",
-            ]:
+            for table in ALLOWED_USER_TABLES:
                 try:
                     result = await db.execute(
-                        text(f"DELETE FROM {table} WHERE user_id IN ({id_list})")
+                        text(f"DELETE FROM {table} WHERE user_id = ANY(:ids)"),
+                        {"ids": user_ids},
                     )
                     deleted[table] = result.rowcount
                 except Exception as e:
@@ -85,7 +92,8 @@ async def cleanup_test_data(db: AsyncSession = Depends(get_db)):
 
             # Delete users
             result = await db.execute(
-                text(f"DELETE FROM users WHERE id IN ({id_list})")
+                text("DELETE FROM users WHERE id = ANY(:ids)"),
+                {"ids": user_ids},
             )
             deleted["users"] = result.rowcount
 
@@ -97,18 +105,11 @@ async def cleanup_test_data(db: AsyncSession = Depends(get_db)):
         college_ids = [r[0] for r in college_rows.fetchall()]
 
         if college_ids:
-            cid_list = ",".join(str(cid) for cid in college_ids)
-
-            for table in [
-                "college_audit_log", "college_alerts",
-                "shared_profiles", "college_students",
-                "coe_memberships", "coe_groups",
-                "course_skill_mapping", "curriculum_courses",
-                "departments",
-            ]:
+            for table in ALLOWED_COLLEGE_TABLES:
                 try:
                     result = await db.execute(
-                        text(f"DELETE FROM {table} WHERE college_id IN ({cid_list})")
+                        text(f"DELETE FROM {table} WHERE college_id = ANY(:ids)"),
+                        {"ids": college_ids},
                     )
                     deleted[table] = result.rowcount
                 except Exception as e:
@@ -116,7 +117,8 @@ async def cleanup_test_data(db: AsyncSession = Depends(get_db)):
                     deleted[table] = 0
 
             result = await db.execute(
-                text(f"DELETE FROM colleges WHERE id IN ({cid_list})")
+                text("DELETE FROM colleges WHERE id = ANY(:ids)"),
+                {"ids": college_ids},
             )
             deleted["colleges"] = result.rowcount
 
@@ -129,7 +131,7 @@ async def cleanup_test_data(db: AsyncSession = Depends(get_db)):
     except Exception as e:
         await db.rollback()
         logger.error(f"E2E cleanup failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="E2E cleanup failed")
 
 
 @router.get("/health", dependencies=[Depends(_verify_e2e_secret)])

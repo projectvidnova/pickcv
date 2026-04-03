@@ -15,7 +15,7 @@ from routes import payments as payments_routes
 from routes import e2e as e2e_routes
 from routes import recruiter as recruiter_routes
 from services.job_scheduler_service import scheduler
-from security import get_security_headers
+from security import get_security_headers, rate_limiter
 
 # Configure logging
 logging.basicConfig(level=settings.log_level, format=settings.log_format)
@@ -74,6 +74,28 @@ async def add_security_headers(request: Request, call_next):
         del response.headers["X-Powered-By"]
     
     return response
+
+
+# ============= RATE LIMITING MIDDLEWARE =============
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    """Enforce per-IP rate limiting."""
+    # Skip rate limiting for health checks
+    if request.url.path in ("/", "/health", "/api/health"):
+        return await call_next(request)
+
+    client_ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown")
+    # Use the first IP if X-Forwarded-For contains a chain
+    if "," in client_ip:
+        client_ip = client_ip.split(",")[0].strip()
+
+    if not rate_limiter.is_allowed(client_ip):
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "Too many requests. Please try again later."},
+        )
+
+    return await call_next(request)
 
 
 # ============= ERROR HANDLERS =============
@@ -179,7 +201,7 @@ async def startup_event():
     
     # Auto-create database tables
     from database import engine, Base
-    from models import User, Admin, College, CollegeStudent, SharedProfile, Payment  # noqa: F401 - Import to register models
+    from models import User, Admin, College, CollegeStudent, SharedProfile, Payment, Coupon, CouponRedemption  # noqa: F401 - Import to register models
     from models import (  # noqa: F401 - Phase 1 models
         SkillTaxonomy, Department, CurriculumCourse, CourseSkillMapping,
         StudentSkill, COEGroup, COEMembership, CollegeAlert, CollegeAuditLog
@@ -219,6 +241,24 @@ async def startup_event():
                     logger.info("Default admin already exists")
             except Exception as e:
                 logger.warning(f"Admin seeding skipped: {e}")
+
+            # Seed default coupons if table is empty
+            try:
+                result = await conn.execute(text("SELECT COUNT(*) FROM coupons"))
+                count = result.scalar()
+                if count == 0:
+                    await conn.execute(text("""
+                        INSERT INTO coupons (code, max_uses, times_used, expires_at, is_active, description) VALUES
+                        ('PICKCV100', 100, 0, '2026-12-31 23:59:59+00', TRUE, 'Launch promo – 100 free downloads'),
+                        ('EARLYBETA', 50, 0, '2026-06-30 23:59:59+00', TRUE, 'Early beta testers – 50 uses'),
+                        ('FRIEND10', 10, 0, '2026-12-31 23:59:59+00', TRUE, 'Friends & family – 10 uses'),
+                        ('DEMOFREE', 5, 0, '2026-12-31 23:59:59+00', TRUE, 'Demo coupon – 5 uses')
+                    """))
+                    logger.info("Default coupons seeded: PICKCV100, EARLYBETA, FRIEND10, DEMOFREE")
+                else:
+                    logger.info(f"Coupons table already has {count} entries")
+            except Exception as e:
+                logger.warning(f"Coupon seeding skipped: {e}")
     except Exception as e:
         logger.error(f"Database initialization failed: {e}")
 

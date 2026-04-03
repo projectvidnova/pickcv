@@ -197,7 +197,7 @@ For issues and questions, please open an issue on GitHub.
 
 ## 🙏 Acknowledgments
 
-- Powered by Google Gemini 1.5 Flash
+- Powered by thinking LLM's
 - Built with Next.js, FastAPI, and PostgreSQL
 - Icons by Lucide React
 

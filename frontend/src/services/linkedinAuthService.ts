@@ -5,9 +5,11 @@
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 const LINKEDIN_CLIENT_ID = import.meta.env.VITE_LINKEDIN_CLIENT_ID || '';
-const LINKEDIN_REDIRECT_URI =
-  import.meta.env.VITE_LINKEDIN_REDIRECT_URI ||
-  `${typeof window !== 'undefined' ? window.location.origin : ''}/auth/callback`;
+
+/** Always use the current origin so the user stays on pickcv.com (or whatever domain they're on) */
+function getRedirectUri(): string {
+  return `${typeof window !== 'undefined' ? window.location.origin : ''}/auth/callback`;
+}
 
 interface LinkedInAuthResponse {
   access_token: string;
@@ -34,7 +36,7 @@ export const linkedinAuthService = {
     const params = new URLSearchParams({
       response_type: 'code',
       client_id: LINKEDIN_CLIENT_ID,
-      redirect_uri: LINKEDIN_REDIRECT_URI,
+      redirect_uri: getRedirectUri(),
       state: state,
       scope: 'openid profile email w_member_social',
     });
@@ -47,29 +49,25 @@ export const linkedinAuthService = {
    */
   async exchangeCodeForToken(code: string): Promise<LinkedInAuthResponse> {
     try {
-      const url = `${API_URL}/auth/linkedin/token?code=${encodeURIComponent(code)}&redirect_uri=${encodeURIComponent(LINKEDIN_REDIRECT_URI)}`;
-      console.log('Calling backend LinkedIn token exchange:', url);
-
-      const response = await fetch(url, {
+      const response = await fetch(`${API_URL}/auth/linkedin/token`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
+        body: JSON.stringify({
+          code,
+          redirect_uri: getRedirectUri(),
+        }),
       });
 
       if (!response.ok) {
-        const errorBody = await response.text();
-        console.error('LinkedIn backend error response:', errorBody);
         throw new Error(
           `LinkedIn token exchange failed: ${response.status} ${response.statusText}`
         );
       }
 
-      const data = await response.json();
-      console.log('LinkedIn token exchange successful:', data);
-      return data;
+      return await response.json();
     } catch (error) {
-      console.error('LinkedIn token exchange error:', error);
       throw new Error(
         `Failed to exchange LinkedIn code for token: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
@@ -84,10 +82,12 @@ export const linkedinAuthService = {
     const code = params.get('code');
     const state = params.get('state');
 
-    // Verify state for CSRF protection
+    // Verify state for CSRF protection — MUST match to prevent login-CSRF
     const savedState = sessionStorage.getItem('oauth_state');
-    if (state && savedState && state !== savedState) {
-      console.warn('LinkedIn state mismatch - CSRF check warning (non-blocking)');
+    if (!state || !savedState || state !== savedState) {
+      sessionStorage.removeItem('oauth_state');
+      sessionStorage.removeItem('oauth_provider');
+      throw new Error('LinkedIn OAuth state mismatch — possible CSRF attack. Please try again.');
     }
 
     if (!code) {
@@ -95,7 +95,6 @@ export const linkedinAuthService = {
     }
 
     try {
-      console.log('Exchanging LinkedIn code for token...');
       const response = await this.exchangeCodeForToken(code);
       sessionStorage.removeItem('oauth_state');
       sessionStorage.removeItem('oauth_provider');
@@ -103,19 +102,17 @@ export const linkedinAuthService = {
     } catch (error) {
       sessionStorage.removeItem('oauth_state');
       sessionStorage.removeItem('oauth_provider');
-      console.error('LinkedIn token exchange error:', error);
       throw error;
     }
   },
 
   /**
-   * Generate random state for CSRF protection
+   * Generate cryptographically secure random state for CSRF protection
    */
   generateState(): string {
-    return (
-      Math.random().toString(36).substring(2, 15) +
-      Math.random().toString(36).substring(2, 15)
-    );
+    const array = new Uint8Array(24);
+    crypto.getRandomValues(array);
+    return Array.from(array, (b) => b.toString(16).padStart(2, '0')).join('');
   },
 
   /**
