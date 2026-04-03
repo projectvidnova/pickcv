@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { ResumeData, SectionId, ResumeSection, ColorTheme, TemplateId } from '../types';
 import { RESUME_TEMPLATES, getDefaultTheme, getVariantTemplates } from './themes';
 import TemplatePicker from './TemplatePicker';
@@ -315,6 +315,22 @@ export default function InlineResumeEditor({
   }, [templateId, theme]);
 
   const totalPages = pageBreakPositions.length + 1;
+
+  // Calculate page ranges for multi-page display
+  const PAGE_GAP = 48;
+  const pageRanges = useMemo(() => {
+    const ranges: { startY: number; height: number }[] = [];
+    let lastY = 0;
+    for (const y of pageBreakPositions) {
+      ranges.push({ startY: lastY, height: y - lastY });
+      lastY = y;
+    }
+    ranges.push({
+      startY: lastY,
+      height: Math.max(A4_PAGE_HEIGHT, resumeContentHeight) - lastY,
+    });
+    return ranges;
+  }, [pageBreakPositions, resumeContentHeight]);
 
   // Notify parent of actual page count
   useEffect(() => {
@@ -1329,32 +1345,94 @@ export default function InlineResumeEditor({
 
       {/* ─── Resume Preview ─── */}
       <div className="relative pl-12">
-        <div className="relative w-[612px]" style={{ minHeight: A4_PAGE_HEIGHT }}>
-          {renderTemplate()}
+        {/* Multi-page container: gray surface behind page cards */}
+        <div
+          className={`relative ${
+            totalPages > 1
+              ? 'bg-slate-200/70 rounded-xl p-5'
+              : ''
+          }`}
+          style={{ width: totalPages > 1 ? 652 : 612 }}
+        >
+          {/* Content layer: actual editable resumeRef (for editing + html2canvas capture) */}
+          <div
+            className="relative w-[612px]"
+            style={{
+              minHeight: A4_PAGE_HEIGHT,
+              marginLeft: totalPages > 1 ? 0 : 0,
+            }}
+          >
+            {renderTemplate()}
 
-          {/* Visual page-break indicators */}
-          {pageBreakPositions.map((y, idx) => (
-            <div
-              key={idx}
-              className="absolute left-[-16px] right-[-16px] z-20 pointer-events-none"
-              style={{ top: y - 12 }}
-            >
+            {/* Per-page number watermarks (overlaid on content) */}
+            {totalPages > 1 && pageRanges.map((range, idx) => (
               <div
-                className="relative h-[24px] flex items-center justify-center"
-                style={{ background: 'linear-gradient(to bottom, rgba(255,255,255,0.95), rgba(226,232,240,0.5), rgba(255,255,255,0.95))' }}
+                key={`pn-${idx}`}
+                className="absolute right-4 z-10 pointer-events-none select-none"
+                style={{ top: range.startY + range.height - 24 }}
               >
-                <div className="w-full border-t-2 border-dashed border-blue-300/70" />
-                <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-white px-3 py-0.5 text-[9px] font-semibold text-blue-600 border border-blue-200 rounded-full shadow-sm whitespace-nowrap">
-                  <i className="ri-scissors-cut-line text-[10px]" />
-                  Page {idx + 1} | Page {idx + 2}
-                </div>
+                <span className="text-[9px] font-medium text-gray-300">
+                  {idx + 1} / {totalPages}
+                </span>
               </div>
+            ))}
+
+            {/* Page-break gap overlays: solid strips that visually separate pages */}
+            {pageBreakPositions.map((y, idx) => (
+              <div
+                key={`gap-${idx}`}
+                className="absolute z-20 pointer-events-none"
+                style={{
+                  left: totalPages > 1 ? -20 : -16,
+                  right: totalPages > 1 ? -20 : -16,
+                  top: y - PAGE_GAP / 2,
+                  height: PAGE_GAP,
+                }}
+              >
+                {/* Top shadow: bottom edge of current page */}
+                <div
+                  className="absolute top-0 left-0 right-0 h-2"
+                  style={{
+                    background: 'linear-gradient(to bottom, rgba(255,255,255,0.9), transparent)',
+                    boxShadow: '0 4px 12px -2px rgba(0,0,0,0.12)',
+                  }}
+                />
+                {/* Gap area */}
+                <div
+                  className="w-full h-full flex items-center justify-center"
+                  style={{ backgroundColor: totalPages > 1 ? '#cbd5e1' : '#e2e8f0' }}
+                >
+                  <div className="flex items-center gap-1.5 px-3 py-1 bg-white/90 rounded-full shadow-sm border border-slate-300/60">
+                    <i className="ri-file-line text-[10px] text-slate-400" />
+                    <span className="text-[10px] font-semibold text-slate-500">
+                      Page {idx + 2}
+                    </span>
+                  </div>
+                </div>
+                {/* Bottom shadow: top edge of next page */}
+                <div
+                  className="absolute bottom-0 left-0 right-0 h-2"
+                  style={{
+                    background: 'linear-gradient(to top, rgba(255,255,255,0.9), transparent)',
+                    boxShadow: '0 -4px 12px -2px rgba(0,0,0,0.12)',
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+
+          {/* "Page 1" label at top-right when multi-page */}
+          {totalPages > 1 && (
+            <div className="absolute top-7 right-7 pointer-events-none select-none">
+              <span className="text-[10px] font-medium text-slate-400 bg-white/80 px-2 py-0.5 rounded-full border border-slate-200/60 shadow-sm">
+                Page 1
+              </span>
             </div>
-          ))}
+          )}
         </div>
 
         {/* Page count indicator */}
-        <div className={`mt-3 text-center text-xs font-medium ${
+        <div className={`mt-4 text-center text-xs font-medium ${
           totalPages > 1 ? 'text-amber-600' : 'text-emerald-600'
         }`}>
           {totalPages === 1
