@@ -36,7 +36,7 @@ app = FastAPI(
 if settings.environment in {"production", "staging"}:
     allowed_hosts = ["*"]
 else:
-    allowed_hosts = settings.origins_list + ["localhost", "127.0.0.1"]
+    allowed_hosts = ["*"]  # In development, allow all hosts
 app.add_middleware(
     TrustedHostMiddleware,
     allowed_hosts=allowed_hosts
@@ -80,8 +80,8 @@ async def add_security_headers(request: Request, call_next):
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
     """Enforce per-IP rate limiting."""
-    # Skip rate limiting for health checks
-    if request.url.path in ("/", "/health", "/api/health"):
+    # Skip rate limiting for health checks and CORS preflight requests
+    if request.url.path in ("/", "/health", "/api/health") or request.method == "OPTIONS":
         return await call_next(request)
 
     client_ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown")
@@ -214,14 +214,15 @@ async def startup_event():
     from sqlalchemy import text
     
     try:
-        async with engine.begin() as conn:
-            # Enable pgvector extension if available
-            try:
-                await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        # Try pgvector in its own transaction so failure doesn't poison later queries
+        try:
+            async with engine.begin() as pgv_conn:
+                await pgv_conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
                 logger.info("pgvector extension enabled")
-            except Exception as e:
-                logger.warning(f"pgvector extension not available: {e}")
-            
+        except Exception as e:
+            logger.warning(f"pgvector extension not available: {e}")
+
+        async with engine.begin() as conn:
             # Create all tables
             await conn.run_sync(Base.metadata.create_all)
             logger.info("Database tables created/verified successfully")

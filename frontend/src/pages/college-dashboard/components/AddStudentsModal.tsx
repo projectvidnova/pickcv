@@ -118,6 +118,10 @@ export default function AddStudentsModal({ isOpen, onClose, onStudentsAdded }: A
       }
       if (res.success && res.data) {
         setResult(res.data);
+        // Auto-send invitation emails to newly added students
+        if (res.data.invited > 0) {
+          await apiService.inviteStudents();
+        }
       } else {
         setError(res.error || 'Upload failed');
       }

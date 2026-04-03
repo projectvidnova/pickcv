@@ -16,6 +16,7 @@ from schemas import (
 )
 from schemas.recruiter import AdminRecruiterResponse, AdminRecruiterRejectRequest
 from services.auth_service import auth_service
+from services.email_service import email_service
 from services.recruiter_service import recruiter_service
 
 logger = logging.getLogger(__name__)
@@ -128,6 +129,7 @@ async def list_colleges(
 @router.put("/colleges/{college_id}/approve")
 async def approve_college(
     college_id: int,
+    background_tasks: BackgroundTasks,
     admin: Admin = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -147,6 +149,15 @@ async def approve_college(
     await db.commit()
 
     logger.info(f"College approved: {college.institution_name} by admin {admin.email}")
+
+    # Send approval email to the institution
+    background_tasks.add_task(
+        email_service.send_college_approval_email,
+        recipient_email=college.official_email,
+        institution_name=college.institution_name,
+        contact_person_name=college.contact_person_name or "",
+    )
+
     return {"message": f"College '{college.institution_name}' approved successfully"}
 
 

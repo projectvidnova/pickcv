@@ -1,6 +1,6 @@
 """College module routes — registration, login, student management, sharing."""
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, Request, status, UploadFile, File, Form, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, status, UploadFile, File, Form, Query, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, distinct
 from datetime import datetime, timezone, timedelta
@@ -23,6 +23,7 @@ from schemas import (
 )
 from services.auth_service import auth_service
 from services.college_service import college_service
+from services.email_service import email_service
 from services.skill_analytics_service import sync_student_skills_from_user, get_skill_heatmap
 from config import settings, get_frontend_origin
 
@@ -73,6 +74,7 @@ async def get_current_college_auth(
 @router.post("/register", response_model=CollegeResponse, status_code=201)
 async def register_college(
     data: CollegeRegisterRequest,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
     """Register a new college/institution."""
@@ -100,6 +102,27 @@ async def register_college(
     await db.commit()
     await db.refresh(college)
     logger.info(f"College registered: {college.institution_name} ({college.official_email})")
+
+    # Send confirmation email to the registering officer
+    background_tasks.add_task(
+        email_service.send_college_registration_confirmation,
+        recipient_email=college.official_email,
+        institution_name=college.institution_name,
+        contact_person_name=college.contact_person_name or "",
+    )
+
+    # Notify admin about the new registration
+    background_tasks.add_task(
+        email_service.send_admin_new_registration_alert,
+        admin_email=settings.admin_notification_email,
+        institution_name=college.institution_name,
+        official_email=college.official_email,
+        contact_person_name=college.contact_person_name or "",
+        designation=college.designation or "",
+        city=college.city or "",
+        state=college.state or "",
+    )
+
     return college
 
 

@@ -2,7 +2,7 @@
 import asyncio
 import logging
 from datetime import datetime, time
-from typing import Optional
+from typing import Dict, Optional
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy.ext.asyncio import AsyncSession

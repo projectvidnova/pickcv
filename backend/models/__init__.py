@@ -1,7 +1,7 @@
 """Database models for PickCV application - Production Ready."""
 from sqlalchemy import Column, Integer, String, DateTime, Text, Float, ForeignKey, Boolean, Date, ARRAY, UniqueConstraint, Index, CheckConstraint
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, deferred
 from sqlalchemy.sql import func
 from pgvector.sqlalchemy import Vector
 from database import Base
@@ -91,8 +91,8 @@ class Resume(Base):
     ats_score = Column(Float)
     keyword_density = Column(Float)
     
-    # Vector embeddings for semantic search
-    embedding = Column(Vector(768))  # Gemini embedding dimension
+    # Vector embeddings for semantic search (deferred to avoid loading when pgvector column is missing)
+    embedding = deferred(Column(Vector(768)))  # Gemini embedding dimension
     
     # File storage
     file_path = Column(String(500))
@@ -208,7 +208,7 @@ class Job(Base):
     
     # AI
     keywords = Column(ARRAY(String(255)))
-    embedding = Column(Vector(768))  # For semantic search
+    embedding = deferred(Column(Vector(768)))  # For semantic search
     
     # Status
     posted_date = Column(DateTime(timezone=True), index=True)
@@ -335,7 +335,7 @@ class ScrapedJob(Base):
     
     # Keywords and embeddings
     keywords = Column(ARRAY(String(255)))
-    embedding = Column(Vector(768))  # For semantic search
+    embedding = deferred(Column(Vector(768)))  # For semantic search
     
     # Metadata
     posted_date = Column(DateTime(timezone=True), index=True)

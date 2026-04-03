@@ -23,6 +23,7 @@ export default function CollegeRegister() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -102,11 +103,18 @@ export default function CollegeRegister() {
         return;
       }
 
+      // Store registration data for the pending-approval page
+      localStorage.setItem('collegeRegistration', JSON.stringify({
+        institutionName: formData.institutionName,
+        officialEmail: formData.officialEmail,
+        contactPersonName: formData.contactPersonName,
+        city: formData.city,
+        state: formData.state,
+      }));
+
       setSubmitted(true);
-      setTimeout(() => {
-        setIsSubmitting(false);
-        navigate(resolvePath('/college/pending-approval'));
-      }, 1000);
+      setIsSubmitting(false);
+      setShowSuccessModal(true);
     } catch {
       setIsSubmitting(false);
       setSubmitError('Something went wrong. Please try again.');
@@ -116,6 +124,53 @@ export default function CollegeRegister() {
   return (
     <main className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-teal-50/30">
       <InstitutionNavbar />
+
+      {/* Success Modal */}
+      {showSuccessModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-8 animate-in fade-in zoom-in">
+            {/* Success Icon */}
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-teal-400 to-emerald-500 flex items-center justify-center mx-auto mb-4">
+                <i className="ri-check-line text-white text-3xl"></i>
+              </div>
+              <h2 className="text-xl font-bold text-gray-900 mb-2">Thank You for Registering!</h2>
+              <p className="text-sm text-gray-600">
+                Your registration for <strong>{formData.institutionName}</strong> has been successfully submitted.
+              </p>
+            </div>
+
+            {/* Info Box */}
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6">
+              <div className="flex items-start gap-3">
+                <i className="ri-time-line text-amber-500 text-xl mt-0.5 flex-shrink-0"></i>
+                <div>
+                  <p className="text-sm font-semibold text-amber-800 mb-1">Under Review</p>
+                  <p className="text-xs text-amber-700 leading-relaxed">
+                    Our admin team will review and approve your request within <strong>48 hours</strong>. 
+                    You will receive an email at <strong>{formData.officialEmail}</strong> once your account has been approved.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Email confirmation note */}
+            <div className="flex items-center gap-2 bg-teal-50 rounded-lg px-4 py-3 mb-6">
+              <i className="ri-mail-check-line text-teal-600 text-lg"></i>
+              <p className="text-xs text-teal-700">A confirmation email has been sent to <strong>{formData.officialEmail}</strong></p>
+            </div>
+
+            {/* Action Button */}
+            <button
+              onClick={() => navigate(resolvePath('/college/pending-approval'))}
+              className="w-full py-3 rounded-lg bg-gradient-to-r from-teal-500 to-emerald-500 text-white text-sm font-semibold hover:from-teal-600 hover:to-emerald-600 transition-all duration-200 cursor-pointer flex items-center justify-center gap-2"
+            >
+              Continue
+              <i className="ri-arrow-right-line"></i>
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="pt-32 pb-16 px-4 sm:px-6 lg:px-8">
         <div className="max-w-2xl mx-auto">
