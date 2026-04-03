@@ -51,9 +51,10 @@ export function getPortalUrl(portal: 'recruiter' | 'institution' | 'admin', path
   const port = window.location.port;
   
   const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+  const isFirebaseStaging = hostname.includes('pickcv-staging.web.app') || hostname.includes('pickcv-staging-');
   
-  if (isLocal) {
-    // Local dev: same origin + ?portal= query param
+  if (isLocal || isFirebaseStaging) {
+    // Local dev & Firebase staging: same origin + ?portal= query param
     const base = `${protocol}//${hostname}${port ? ':' + port : ''}`;
     const cleanPath = path === '/' ? '' : path;
     return `${base}${cleanPath}?portal=${portal}`;
