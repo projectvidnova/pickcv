@@ -133,6 +133,12 @@ export default function CollegeDashboard() {
   const [showShareModal, setShowShareModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [isInviting, setIsInviting] = useState(false);
+  const [showAddStudentsModal, setShowAddStudentsModal] = useState(false);
+  const [addStudentsEmails, setAddStudentsEmails] = useState('');
+  const [addStudentsFile, setAddStudentsFile] = useState<File | null>(null);
+  const [addStudentsLoading, setAddStudentsLoading] = useState(false);
+  const [addStudentsError, setAddStudentsError] = useState('');
+  const [addStudentsResult, setAddStudentsResult] = useState<{ total: number; invited: number; already_exists: number } | null>(null);
 
   // Auth check & load data
   useEffect(() => {
@@ -195,6 +201,34 @@ export default function CollegeDashboard() {
       console.error('Failed to invite students:', err);
     }
     setIsInviting(false);
+  };
+
+  const handleAddStudentsSubmit = async () => {
+      setAddStudentsError('');
+      setAddStudentsResult(null);
+      const trimmedEmails = addStudentsEmails.trim();
+      if (!addStudentsFile && !trimmedEmails) {
+        setAddStudentsError('Please enter emails or upload a file.');
+        return;
+      }
+      setAddStudentsLoading(true);
+      try {
+        const payload = addStudentsFile
+          ? { file: addStudentsFile }
+          : { text: trimmedEmails };
+        const result = await apiService.uploadStudents(payload);
+        if (!result.success) {
+          setAddStudentsError(result.error || 'Upload failed');
+        } else {
+          setAddStudentsResult({ total: result.data.total, invited: result.data.invited, already_exists: result.data.already_exists });
+          // Auto-send invitations for newly added students
+          await apiService.inviteStudents();
+          await loadDashboardData();
+        }
+      } catch (err: any) {
+        setAddStudentsError(err.message || 'Upload failed');
+      }
+      setAddStudentsLoading(false);
   };
 
   const refreshData = () => { loadDashboardData(); };
@@ -357,6 +391,10 @@ export default function CollegeDashboard() {
                   {isInviting ? (<><i className="ri-loader-4-line animate-spin"></i>Sending...</>) : (<><i className="ri-mail-send-line"></i>Invite ({stats.invited})</>)}
                 </button>
               )}
+              <button onClick={() => { setShowAddStudentsModal(true); setAddStudentsEmails(''); setAddStudentsFile(null); setAddStudentsError(''); setAddStudentsResult(null); }}
+                className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-500 text-white text-sm font-semibold hover:from-indigo-600 hover:to-blue-600 transition-all whitespace-nowrap flex items-center gap-2 cursor-pointer">
+                <i className="ri-user-add-line"></i>Add Students
+              </button>
               <button onClick={() => setShowSettingsModal(true)}
                 className="px-5 py-2.5 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors whitespace-nowrap flex items-center gap-2 cursor-pointer">
                 <i className="ri-settings-3-line"></i>Settings
@@ -939,6 +977,87 @@ export default function CollegeDashboard() {
           onClose={() => setShowSettingsModal(false)}
           onSave={handleProfileUpdate}
         />
+      )}
+
+      {/* ──── Add Students Modal ──── */}
+      {showAddStudentsModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Add Students</h2>
+                <p className="text-sm text-gray-500 mt-0.5">Upload a file or paste email addresses</p>
+              </div>
+              <button onClick={() => setShowAddStudentsModal(false)} className="w-9 h-9 rounded-lg hover:bg-gray-100 flex items-center justify-center cursor-pointer transition-colors">
+                <i className="ri-close-line text-gray-500 text-lg"></i>
+              </button>
+            </div>
+            <div className="p-6 space-y-5">
+              {addStudentsResult ? (
+                <div className="text-center py-4">
+                  <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4">
+                    <i className="ri-checkbox-circle-line text-emerald-600 text-3xl"></i>
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-900 mb-1">Students Added!</h3>
+                  <p className="text-sm text-gray-600">{addStudentsResult.total} processed · {addStudentsResult.invited} newly invited · {addStudentsResult.already_exists} already existed</p>
+                  <button onClick={() => setShowAddStudentsModal(false)}
+                    className="mt-5 px-6 py-2.5 rounded-lg bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 transition-colors cursor-pointer">
+                    Done
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {/* File upload */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Upload CSV / Excel file</label>
+                    <label className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-teal-400 hover:bg-teal-50/30 transition-colors">
+                      <i className={`text-2xl mb-1 ${addStudentsFile ? 'ri-file-check-line text-teal-600' : 'ri-upload-cloud-line text-gray-400'}`}></i>
+                      <span className="text-sm text-gray-600 font-medium">{addStudentsFile ? addStudentsFile.name : 'Click to upload'}</span>
+                      <span className="text-xs text-gray-400">.csv or .xlsx</span>
+                      <input type="file" accept=".csv,.xlsx" className="hidden" onChange={e => { setAddStudentsFile(e.target.files?.[0] || null); setAddStudentsEmails(''); }} />
+                    </label>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 h-px bg-gray-200"></div>
+                    <span className="text-xs text-gray-400 font-medium">OR</span>
+                    <div className="flex-1 h-px bg-gray-200"></div>
+                  </div>
+
+                  {/* Manual email entry */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Paste email addresses (one per line)</label>
+                    <textarea
+                      rows={6}
+                      value={addStudentsEmails}
+                      onChange={e => { setAddStudentsEmails(e.target.value); if (e.target.value) setAddStudentsFile(null); }}
+                      placeholder={"student1@example.com\nstudent2@example.com\nstudent3@example.com"}
+                      className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-none font-mono"
+                    />
+                  </div>
+
+                  {addStudentsError && (
+                    <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center gap-2">
+                      <i className="ri-error-warning-line text-red-500"></i>
+                      <p className="text-sm text-red-600">{addStudentsError}</p>
+                    </div>
+                  )}
+
+                  <div className="flex gap-3 pt-1">
+                    <button onClick={() => setShowAddStudentsModal(false)}
+                      className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer">
+                      Cancel
+                    </button>
+                    <button onClick={handleAddStudentsSubmit} disabled={addStudentsLoading}
+                      className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-blue-500 text-white text-sm font-semibold hover:from-indigo-600 hover:to-blue-600 transition-all cursor-pointer disabled:opacity-60 flex items-center justify-center gap-2">
+                      {addStudentsLoading ? <><i className="ri-loader-4-line animate-spin"></i>Adding...</> : <><i className="ri-user-add-line"></i>Add Students</>}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       <Footer />
