@@ -73,6 +73,7 @@ export function getPortalUrl(portal: 'recruiter' | 'institution' | 'admin', path
   
   // If it's a custom domain like pickcv.com, admin.pickcv.com, etc.
   const baseDomain = hostname
+    .replace(/^www\./, '')
     .replace(/^admin\./, '')
     .replace(/^institution\./, '')
     .replace(/^recruiters\./, '');

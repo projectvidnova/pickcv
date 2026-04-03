@@ -69,13 +69,13 @@ export default function Navbar() {
   const handleCollegesClick = () => {
     setIsToolsOpen(false);
     setIsMobileMenuOpen(false);
-    window.location.href = getPortalUrl('institution');
+    window.open(getPortalUrl('institution'), '_blank');
   };
 
   const handleRecruitersClick = () => {
     setIsToolsOpen(false);
     setIsMobileMenuOpen(false);
-    window.location.href = getPortalUrl('recruiter');
+    window.open(getPortalUrl('recruiter'), '_blank');
   };
 
   return (
