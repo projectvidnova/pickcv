@@ -266,6 +266,83 @@ CLUSTER_EXPERTISE: Dict[str, Dict] = {
 }
 
 
+# ── Variant-Level Verb Registry (Spec: Authenticity Engine Integration) ──
+# Maps each variant to preferred "voice" verbs and suppressed verbs.
+# Used to detect dissonance between template visual level and language level.
+VARIANT_VERB_REGISTRY: Dict[str, Dict] = {
+    "V1": {
+        "name": "Signal Stack",
+        "voice_level": "technical",
+        "preferred_verbs": ["architected", "deployed", "instrumented", "built", "shipped", "optimized", "refactored", "migrated", "integrated", "automated"],
+        "suppressed_verbs": ["strategic", "collaborative", "mentored", "oversaw", "managed stakeholders", "aligned teams"],
+        "max_verb_repeats": 2,
+    },
+    "V2": {
+        "name": "Outcome Ledger",
+        "voice_level": "business",
+        "preferred_verbs": ["drove", "generated", "exceeded", "grew", "delivered", "closed", "expanded", "negotiated", "launched", "increased"],
+        "suppressed_verbs": ["helped", "worked on", "collaborated", "participated"],
+        "max_verb_repeats": 2,
+    },
+    "V3": {
+        "name": "Authority Frame",
+        "voice_level": "executive_institutional",
+        "preferred_verbs": ["led", "managed", "directed", "established", "governed", "implemented", "consolidated", "standardized", "oversaw", "championed"],
+        "suppressed_verbs": ["coded", "built", "hacked", "prototyped", "debugged"],
+        "max_verb_repeats": 2,
+    },
+    "V4": {
+        "name": "Leadership Thesis",
+        "voice_level": "executive_visionary",
+        "preferred_verbs": ["orchestrated", "galvanized", "transformed", "pioneered", "envisioned", "spearheaded", "shaped", "influenced", "repositioned", "accelerated"],
+        "suppressed_verbs": ["built", "coded", "designed", "fixed", "debugged", "tested", "wrote"],
+        "max_verb_repeats": 1,
+    },
+    "V5": {
+        "name": "Proof Sheet",
+        "voice_level": "research",
+        "preferred_verbs": ["researched", "published", "validated", "evaluated", "hypothesized", "developed", "analyzed", "demonstrated", "quantified", "modeled"],
+        "suppressed_verbs": ["managed", "led team", "closed deal", "sold"],
+        "max_verb_repeats": 2,
+    },
+    "V6": {
+        "name": "Problem-Solver",
+        "voice_level": "operational",
+        "preferred_verbs": ["optimized", "streamlined", "reduced", "implemented", "redesigned", "eliminated", "automated", "standardized", "resolved", "mitigated"],
+        "suppressed_verbs": ["envisioned", "pioneered", "galvanized"],
+        "max_verb_repeats": 2,
+    },
+    "V7": {
+        "name": "Portfolio Lead",
+        "voice_level": "creative",
+        "preferred_verbs": ["designed", "prototyped", "crafted", "created", "iterated", "researched", "validated", "shipped", "conceptualized", "tested"],
+        "suppressed_verbs": ["managed stakeholders", "governed", "consolidated"],
+        "max_verb_repeats": 2,
+    },
+    "V8": {
+        "name": "Versatility Map",
+        "voice_level": "generalist",
+        "preferred_verbs": ["owned", "led", "built", "managed", "launched", "drove", "scaled", "operated", "delivered", "established"],
+        "suppressed_verbs": [],
+        "max_verb_repeats": 2,
+    },
+    "V9": {
+        "name": "Domain Expert",
+        "voice_level": "specialist",
+        "preferred_verbs": ["specialized", "developed", "architected", "implemented", "designed", "scaled", "optimized", "mentored", "standardized", "led"],
+        "suppressed_verbs": ["helped", "assisted", "participated"],
+        "max_verb_repeats": 2,
+    },
+    "V10": {
+        "name": "Transition Narrative",
+        "voice_level": "adaptive",
+        "preferred_verbs": ["transitioned", "adapted", "applied", "leveraged", "translated", "pivoted", "transferred", "reframed", "demonstrated", "developed"],
+        "suppressed_verbs": [],
+        "max_verb_repeats": 2,
+    },
+}
+
+
 class ResumeOSOrchestrator:
     """Coordinates multi-agent resume optimization flow."""
 
@@ -510,12 +587,12 @@ class ResumeOSOrchestrator:
 
         # ── Step 8: Authenticity Engine (score each variant, cluster-aware) ──
         for variant in resume_variants:
-            auth_result = self._authenticity_engine(variant.get("optimized_resume_text", ""), role_dna=role_dna)
+            auth_result = self._authenticity_engine(variant.get("optimized_resume_text", ""), role_dna=role_dna, variant_id=variant.get("id", "V1"))
             variant["authenticity"] = auth_result
 
         # ── Step 11: Simulation Layer (score each variant) ──
         for variant in resume_variants:
-            sim_result = self._simulation_layer(variant.get("optimized_resume_text", ""), role_dna)
+            sim_result = self._simulation_layer(variant.get("optimized_resume_text", ""), role_dna, variant_id=variant.get("id", "V1"))
             variant["simulation"] = sim_result
 
         # ── Compute per-variant composite scores ──
@@ -1623,10 +1700,17 @@ class ResumeOSOrchestrator:
         recruiter_score: int,
         authenticity_score: int,
     ) -> Dict:
-        """Apply deterministic trade-off rules per Resume OS spec."""
+        """Apply deterministic trade-off rules per Resume OS spec.
+
+        Enhanced with readability scoring and template selection feedback
+        per the Signal Diversity specification (Flavor Engine).
+        """
         rules_fired: List[str] = []
         adjustments: List[str] = []
+        template_hints: List[str] = []
         level = str(role_dna.get("level", "L3")).upper()
+        env = str(role_dna.get("environment", "")).lower()
+        cluster_id = str(role_dna.get("cluster_id", "C0")).upper()
 
         # RULE: ATS_PRIORITY_GATE
         if ats_score < 70:
@@ -1642,25 +1726,54 @@ class ResumeOSOrchestrator:
         if level in ["L4", "L5", "L5+"]:
             rules_fired.append("SENIOR_ROLE_ADJUSTMENT")
             adjustments.append("Trust+Cognitive signals prioritized over Hard Signal density; metric density relaxed to 1 per 3 bullets")
+            template_hints.append("PREFER_V3_V4: Senior role → prefer Authority Frame or Leadership Thesis variants")
 
         # RULE: FRESHER_ADJUSTMENT
         if level in ["L1", "L2"] and not re.search(r"experience|work history", (role_dna.get("function") or "").lower()):
             rules_fired.append("FRESHER_ADJUSTMENT")
             adjustments.append("Trust+Structural signals prioritized; proxy metrics accepted at same weight")
 
-        # RULE: METRIC_STUFFING_BLOCK
-        # (would need full bullet analysis — simplified check)
+        # RULE: AUTHENTICITY_FLOOR
+        if authenticity_score < 55:
+            rules_fired.append("AUTHENTICITY_FLOOR")
+            adjustments.append("Authenticity below 55 — reduce bullet uniformity, vary sentence structure")
+            template_hints.append("AVOID_DENSE_TEMPLATES: Low authenticity → avoid high-density templates that amplify AI texture")
+
+        # RULE: ENVIRONMENT_TEMPLATE_ALIGNMENT (Spec: Trade-Off → Template Selection)
+        if env == "startup" and cluster_id in ("C1", "C5"):
+            rules_fired.append("STARTUP_TECH_TEMPLATE")
+            template_hints.append("PREFER_V1_MONOSPACED: Startup + Tech cluster → default to Signal Stack with tech-mono font")
+        elif env == "mnc" and level in ("L4", "L5", "L5+"):
+            rules_fired.append("MNC_EXECUTIVE_TEMPLATE")
+            template_hints.append("PREFER_V3_SERIF: MNC + Executive level → default to Authority Frame with serif-prestigious")
+        elif cluster_id == "C6":
+            rules_fired.append("SALES_OUTCOME_TEMPLATE")
+            template_hints.append("PREFER_V2_KPI: Sales cluster → default to Outcome Ledger with KPI ribbon")
+
+        # RULE: READABILITY_DENSITY_BALANCE
+        # Estimate readability from recruiter_score vs ats_score gap
+        readability_gap = recruiter_score - ats_score
+        if readability_gap < -20:
+            rules_fired.append("OVER_OPTIMIZED_FOR_ATS")
+            adjustments.append("ATS optimization creating dense text blocks — increase whitespace, reduce keyword density")
+            template_hints.append("USE_GENEROUS_RHYTHM: Over-optimized → switch to generous/very-generous vertical rhythm")
+        elif readability_gap > 20:
+            rules_fired.append("UNDER_OPTIMIZED_FOR_ATS")
+            adjustments.append("High readability but low ATS score — weave more keywords into experience context")
 
         return {
             "rules_fired": rules_fired,
             "adjustments": adjustments,
+            "template_hints": template_hints,
             "ats_priority_mode": ats_score < 70,
             "human_priority_mode": ats_score >= 80,
+            "authenticity_risk": authenticity_score < 55,
+            "readability_gap": readability_gap,
         }
 
     # ── Step 8: Authenticity Engine ──────────────────────────────────
 
-    def _authenticity_engine(self, resume_text: str, role_dna: Optional[Dict] = None) -> Dict:
+    def _authenticity_engine(self, resume_text: str, role_dna: Optional[Dict] = None, variant_id: str = "V1") -> Dict:
         """Score authenticity of optimized resume text per Resume OS spec.
 
         Cluster-aware scoring:
@@ -1677,6 +1790,7 @@ class ResumeOSOrchestrator:
         expertise = CLUSTER_EXPERTISE.get(cluster_id, CLUSTER_EXPERTISE["C0"])
 
         text = (resume_text or "").strip()
+        text_lower = text.lower()
         lines = [l.strip() for l in text.split("\n") if l.strip()]
         bullets = [l for l in lines if l.startswith(("•", "-", "–"))]
 
@@ -1688,6 +1802,25 @@ class ResumeOSOrchestrator:
             verb_counts[vl] = verb_counts.get(vl, 0) + 1
 
         verb_penalty = sum(5 for count in verb_counts.values() if count > 2)
+
+        # ── Variant-level verb registry checks (Spec: Engine 3.9) ──
+        variant_verbs = VARIANT_VERB_REGISTRY.get(variant_id.upper(), {})
+        max_repeats = variant_verbs.get("max_verb_repeats", 2)
+        verb_cap_penalty = sum(3 for count in verb_counts.values() if count > max_repeats)
+        verb_penalty += verb_cap_penalty
+
+        # Check for suppressed verbs (dissonance detection)
+        suppressed = [v.lower() for v in variant_verbs.get("suppressed_verbs", [])]
+        dissonance_hits = []
+        for sv in suppressed:
+            if sv in text_lower:
+                dissonance_hits.append(sv)
+        dissonance_penalty = len(dissonance_hits) * 4
+
+        # Check preferred verb usage (reward)
+        preferred = [v.lower() for v in variant_verbs.get("preferred_verbs", [])]
+        preferred_used = sum(1 for pv in preferred if pv in text_lower)
+        preferred_bonus = min(5, preferred_used)  # up to 5 bonus points
 
         # Syntactic repetition penalty
         syntactic_penalty = 0
@@ -1706,7 +1839,7 @@ class ResumeOSOrchestrator:
         else:
             length_score = 15
 
-        language_variation = max(0, 30 - verb_penalty - syntactic_penalty)
+        language_variation = max(0, min(30, 30 - verb_penalty - syntactic_penalty - dissonance_penalty + preferred_bonus))
 
         # ── Voice Consistency (30 pts) — Cluster-aware ──
         has_first_person = bool(re.search(r"\bI\b", text))
@@ -1716,7 +1849,6 @@ class ResumeOSOrchestrator:
 
         # Cluster voice anti-pattern detection
         anti_patterns = expertise.get("voice_anti_patterns", [])
-        text_lower = text.lower()
         anti_hits = sum(1 for p in anti_patterns if p in text_lower)
         if anti_hits > 0:
             voice_consistency = max(0, voice_consistency - (anti_hits * 5))
@@ -1782,11 +1914,16 @@ class ResumeOSOrchestrator:
             "cluster_voice_profile": expertise.get("voice_profile", "neutral"),
             "cluster_density_notes": cluster_density_notes,
             "anti_pattern_hits": anti_hits,
+            "variant_voice_level": variant_verbs.get("voice_level", "neutral"),
+            "dissonance_verbs": dissonance_hits,
+            "dissonance_penalty": dissonance_penalty,
+            "preferred_verbs_used": preferred_used,
+            "verb_cap_violations": sum(1 for count in verb_counts.values() if count > max_repeats),
         }
 
     # ── Step 11: Simulation Layer ────────────────────────────────────
 
-    def _simulation_layer(self, resume_text: str, role_dna: Dict) -> Dict:
+    def _simulation_layer(self, resume_text: str, role_dna: Dict, variant_id: str = "V1") -> Dict:
         """Simulate recruiter scan per Resume OS spec.
 
         Five dimensions:
@@ -1908,6 +2045,18 @@ class ResumeOSOrchestrator:
         else:
             sim_interpretation = "Low probability of Commitment; review Pedigree Score + Anchor"
 
+        # ── Design Pivot Recommendations (Spec: Table 3) ──
+        design_pivots: List[str] = []
+        if triage_pass < 70:
+            design_pivots.append("COMPRESSED_HEADER: Triage anchors not in top 40%. Switch to compressed header template.")
+        if pedigree_score < 40 and variant_id.upper() in ("V3", "V4"):
+            design_pivots.append("INSTITUTIONALIST: Pedigree signals weak for Authority/Leadership variant. Bold company names more aggressively.")
+        bold_count = len(re.findall(r"\*\*[^*]+\*\*|<b>[^<]+</b>|<strong>[^<]+</strong>", text))
+        if bold_count > len(bullets) * 3:
+            design_pivots.append("MINIMALIST: Bold density too high (>3 per bullet). Switch to minimalist template; reduce secondary bolding.")
+        if anchor_type == "NEUTRAL" and variant_id.upper() in ("V2", "V6"):
+            design_pivots.append("HARD_SIGNAL_LEAD: First element is not a metric. Re-order to lead with Hard Signal bullet for Outcome/Ops variant.")
+
         return {
             "simulation_score": simulation_score,
             "interpretation": sim_interpretation,
@@ -1922,6 +2071,7 @@ class ResumeOSOrchestrator:
                 "soft_risks": soft_risks,
             },
             "triage_anchors": anchors,
+            "design_pivots": design_pivots,
         }
 
     # ── Step 10: Variant Distance Control ────────────────────────────

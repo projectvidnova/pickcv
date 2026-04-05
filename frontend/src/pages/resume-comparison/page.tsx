@@ -205,26 +205,26 @@ export default function ResumeComparisonPage() {
   const transformToResumeData = (apiData: any): ResumeData | null => {
     if (!apiData) return null;
     const transformed: ResumeData = {
-      name: apiData.name || 'Your Name',
-      title: apiData.title || 'Professional',
-      email: apiData.email || 'your.email@example.com',
-      phone: apiData.phone || '(555) 123-4567',
-      linkedin: apiData.linkedin || 'linkedin.com/in/yourname',
-      location: apiData.location || 'City, State',
-      summary: apiData.professional_summary || apiData.summary || 'Professional summary',
+      name: apiData.name || '',
+      title: apiData.title || '',
+      email: apiData.email || '',
+      phone: apiData.phone || '',
+      linkedin: apiData.linkedin || '',
+      location: apiData.location || '',
+      summary: apiData.professional_summary || apiData.summary || '',
       experience: Array.isArray(apiData.experience)
         ? apiData.experience.map((exp: any) => ({
-            role: exp.role || exp.title || 'Position',
-            company: exp.company || 'Company',
-            location: exp.location || 'Location',
-            period: exp.period || exp.dates || '2020 - Present',
+            role: exp.role || exp.title || '',
+            company: exp.company || '',
+            location: exp.location || '',
+            period: exp.period || exp.dates || '',
             bullets: Array.isArray(exp.bullets)
               ? exp.bullets
               : Array.isArray(exp.achievements)
               ? exp.achievements
               : Array.isArray(exp.responsibilities)
               ? exp.responsibilities
-              : ['Responsibility description'],
+              : [],
           }))
         : [],
       skills: Array.isArray(apiData.skills)
@@ -233,12 +233,12 @@ export default function ResumeComparisonPage() {
         ? apiData.skills.technical
         : typeof apiData.skills === 'string'
         ? apiData.skills.split(',').map((s: string) => s.trim())
-        : ['Skill 1', 'Skill 2', 'Skill 3'],
+        : [],
       education: Array.isArray(apiData.education)
         ? apiData.education.map((edu: any) => ({
-            degree: edu.degree || 'Degree',
-            school: edu.school || edu.institution || 'University',
-            period: edu.period || edu.year || '2020',
+            degree: edu.degree || '',
+            school: edu.school || edu.institution || '',
+            period: edu.period || edu.year || '',
           }))
         : [],
     };

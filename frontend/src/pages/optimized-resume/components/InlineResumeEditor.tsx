@@ -189,6 +189,138 @@ function buildSections(order: SectionId[]): ResumeSection[] {
 /* ══════════════════════════════════════════════
    Main Component
    ══════════════════════════════════════════════ */
+
+/* ════════════════════════════════════════════
+   Layout Configuration System
+   Each template maps to a layout config to avoid
+   50 separate component definitions.
+   ════════════════════════════════════════════ */
+
+type LayoutType = 'header-single' | 'sidebar-left' | 'sidebar-right' | 'centered' | 'minimal' | 'bold-bars' | 'timeline' | 'two-col';
+type HeadingStyle = 'underline' | 'pill' | 'side' | 'caps';
+type SkillLayout = 'tags' | 'list';
+
+type FontFamily = 'sans-modern' | 'sans-clean' | 'serif-prestigious' | 'serif-executive' | 'tech-mono' | 'sans-display';
+type VerticalRhythm = 'tight' | 'standard' | 'generous' | 'very-generous';
+type BoldTarget = 'stack' | 'metrics' | 'company' | 'scale' | 'skills' | 'none';
+
+interface LayoutConfig {
+  layout: LayoutType;
+  headingStyle: HeadingStyle;
+  skillLayout: SkillLayout;
+  font: 'sans' | 'serif';
+  fontFamily?: FontFamily;
+  verticalRhythm?: VerticalRhythm;
+  boldTarget?: BoldTarget;
+  sidebarSections?: SectionId[];
+  specialRendering?: SpecialComponent[];
+}
+
+type SpecialComponent = 'kpi-ribbon' | 'tech-stack-matrix' | 'leadership-thesis' | 'portfolio-hero' | 'github-ribbon';
+
+/* -- Font Registry (Spec Table 2: Typographic Personas) -- */
+const FONT_REGISTRY: Record<FontFamily, string> = {
+  'sans-modern':       "'Inter', 'Segoe UI', system-ui, sans-serif",
+  'sans-clean':        "'Lato', 'Segoe UI', system-ui, sans-serif",
+  'serif-prestigious': "'Merriweather', 'Georgia', 'Times New Roman', serif",
+  'serif-executive':   "'Playfair Display', 'Georgia', serif",
+  'tech-mono':         "'Source Code Pro', 'Consolas', 'Monaco', monospace",
+  'sans-display':      "'Montserrat', 'Inter', system-ui, sans-serif",
+};
+const FONT_SANS = FONT_REGISTRY['sans-modern'];
+const FONT_SERIF = FONT_REGISTRY['serif-prestigious'];
+
+/* -- Vertical Rhythm Tokens (section gap) -- */
+const RHYTHM: Record<VerticalRhythm, { sectionGap: string; bulletGap: string; headerPad: string }> = {
+  'tight':         { sectionGap: '12px', bulletGap: '2px', headerPad: '16px' },
+  'standard':      { sectionGap: '16px', bulletGap: '4px', headerPad: '20px' },
+  'generous':      { sectionGap: '22px', bulletGap: '6px', headerPad: '24px' },
+  'very-generous': { sectionGap: '28px', bulletGap: '8px', headerPad: '28px' },
+};
+
+const TEMPLATE_LAYOUTS: Record<string, LayoutConfig> = {
+  // ═══ V1: Signal Stack (Tech) — "Technical Blueprint" aesthetic ═══
+  // Tight rhythm, monospaced for skills, bold tech stack names
+  'v1-stack-first':  { layout: 'header-single', headingStyle: 'underline', skillLayout: 'tags', font: 'sans', fontFamily: 'sans-modern', verticalRhythm: 'tight', boldTarget: 'stack', specialRendering: ['github-ribbon'] },
+  'v1-dev-card':     { layout: 'minimal', headingStyle: 'side', skillLayout: 'tags', font: 'sans', fontFamily: 'tech-mono', verticalRhythm: 'tight', boldTarget: 'stack', specialRendering: ['tech-stack-matrix'] },
+  'v1-tech-grid':    { layout: 'two-col', headingStyle: 'underline', skillLayout: 'tags', font: 'sans', fontFamily: 'sans-modern', verticalRhythm: 'tight', boldTarget: 'stack', specialRendering: ['tech-stack-matrix'] },
+  'v1-system-arch':  { layout: 'sidebar-left', headingStyle: 'side', skillLayout: 'list', font: 'sans', fontFamily: 'sans-modern', verticalRhythm: 'tight', boldTarget: 'stack', sidebarSections: ['skills', 'education'] },
+  'v1-terminal':     { layout: 'minimal', headingStyle: 'caps', skillLayout: 'tags', font: 'sans', fontFamily: 'tech-mono', verticalRhythm: 'tight', boldTarget: 'none' },
+
+  // ═══ V2: Outcome Ledger (Business) — "Financial Audit" aesthetic ═══
+  // Standard rhythm, bold metrics/percentages, high-contrast sans
+  'v2-metric-hero':  { layout: 'header-single', headingStyle: 'pill', skillLayout: 'tags', font: 'sans', fontFamily: 'sans-modern', verticalRhythm: 'standard', boldTarget: 'metrics', specialRendering: ['kpi-ribbon'] },
+  'v2-impact-first': { layout: 'centered', headingStyle: 'underline', skillLayout: 'tags', font: 'sans', fontFamily: 'sans-modern', verticalRhythm: 'standard', boldTarget: 'metrics', specialRendering: ['kpi-ribbon'] },
+  'v2-results-dash': { layout: 'two-col', headingStyle: 'underline', skillLayout: 'tags', font: 'sans', fontFamily: 'sans-modern', verticalRhythm: 'standard', boldTarget: 'metrics' },
+  'v2-board-ready':  { layout: 'sidebar-right', headingStyle: 'caps', skillLayout: 'list', font: 'serif', fontFamily: 'serif-prestigious', verticalRhythm: 'standard', boldTarget: 'metrics', sidebarSections: ['skills', 'education'] },
+  'v2-numbers-lead': { layout: 'sidebar-right', headingStyle: 'side', skillLayout: 'list', font: 'sans', fontFamily: 'sans-modern', verticalRhythm: 'standard', boldTarget: 'metrics', sidebarSections: ['skills', 'education'] },
+
+  // ═══ V3: Authority Frame (Enterprise) — "White Paper" aesthetic ═══
+  // Generous rhythm, prestigious serif, bold company names (Pedigree Heuristic)
+  'v3-corporate':    { layout: 'header-single', headingStyle: 'underline', skillLayout: 'tags', font: 'serif', fontFamily: 'serif-prestigious', verticalRhythm: 'generous', boldTarget: 'company' },
+  'v3-governance':   { layout: 'bold-bars', headingStyle: 'pill', skillLayout: 'tags', font: 'serif', fontFamily: 'serif-prestigious', verticalRhythm: 'generous', boldTarget: 'company' },
+  'v3-enterprise':   { layout: 'header-single', headingStyle: 'caps', skillLayout: 'tags', font: 'serif', fontFamily: 'serif-prestigious', verticalRhythm: 'generous', boldTarget: 'company' },
+  'v3-process':      { layout: 'sidebar-right', headingStyle: 'side', skillLayout: 'list', font: 'serif', fontFamily: 'serif-prestigious', verticalRhythm: 'generous', boldTarget: 'company', sidebarSections: ['skills', 'education'] },
+  'v3-compliance':   { layout: 'minimal', headingStyle: 'underline', skillLayout: 'tags', font: 'serif', fontFamily: 'serif-prestigious', verticalRhythm: 'generous', boldTarget: 'company' },
+
+  // ═══ V4: Leadership Thesis (Senior) — "Strategic Brief" aesthetic ═══
+  // Very generous rhythm (>=30% whitespace), executive serif, bold scale markers
+  'v4-exec-brief':   { layout: 'centered', headingStyle: 'caps', skillLayout: 'tags', font: 'serif', fontFamily: 'serif-executive', verticalRhythm: 'very-generous', boldTarget: 'scale', specialRendering: ['leadership-thesis'] },
+  'v4-leadership':   { layout: 'bold-bars', headingStyle: 'pill', skillLayout: 'tags', font: 'serif', fontFamily: 'serif-executive', verticalRhythm: 'very-generous', boldTarget: 'scale', specialRendering: ['leadership-thesis'] },
+  'v4-csuite':       { layout: 'sidebar-right', headingStyle: 'side', skillLayout: 'list', font: 'serif', fontFamily: 'serif-executive', verticalRhythm: 'very-generous', boldTarget: 'scale', sidebarSections: ['skills', 'education'] },
+  'v4-strategy':     { layout: 'centered', headingStyle: 'underline', skillLayout: 'tags', font: 'serif', fontFamily: 'serif-executive', verticalRhythm: 'very-generous', boldTarget: 'scale' },
+  'v4-board-deck':   { layout: 'header-single', headingStyle: 'pill', skillLayout: 'tags', font: 'serif', fontFamily: 'serif-executive', verticalRhythm: 'very-generous', boldTarget: 'scale' },
+
+  // ═══ V5: Proof Sheet (Research) — "Scientific Journal" aesthetic ═══
+  // Standard rhythm, serif (academic), bold metrics/evidence
+  'v5-academic':     { layout: 'centered', headingStyle: 'caps', skillLayout: 'tags', font: 'serif', fontFamily: 'serif-prestigious', verticalRhythm: 'standard', boldTarget: 'metrics' },
+  'v5-method':       { layout: 'header-single', headingStyle: 'underline', skillLayout: 'tags', font: 'sans', fontFamily: 'sans-modern', verticalRhythm: 'standard', boldTarget: 'metrics' },
+  'v5-paper':        { layout: 'header-single', headingStyle: 'caps', skillLayout: 'tags', font: 'serif', fontFamily: 'serif-prestigious', verticalRhythm: 'standard', boldTarget: 'metrics' },
+  'v5-lab':          { layout: 'sidebar-left', headingStyle: 'side', skillLayout: 'list', font: 'sans', fontFamily: 'sans-modern', verticalRhythm: 'standard', boldTarget: 'metrics', sidebarSections: ['skills', 'education'] },
+  'v5-scholar':      { layout: 'centered', headingStyle: 'underline', skillLayout: 'tags', font: 'serif', fontFamily: 'serif-prestigious', verticalRhythm: 'standard', boldTarget: 'metrics' },
+
+  // ═══ V6: Problem-Solver (Ops) — "Process Rigor" aesthetic ═══
+  // Standard rhythm, clean sans, bold metrics (efficiency deltas)
+  'v6-case-study':   { layout: 'sidebar-right', headingStyle: 'side', skillLayout: 'list', font: 'sans', fontFamily: 'sans-clean', verticalRhythm: 'standard', boldTarget: 'metrics', sidebarSections: ['skills', 'education'] },
+  'v6-consultant':   { layout: 'header-single', headingStyle: 'pill', skillLayout: 'tags', font: 'sans', fontFamily: 'sans-clean', verticalRhythm: 'standard', boldTarget: 'metrics' },
+  'v6-matrix':       { layout: 'bold-bars', headingStyle: 'underline', skillLayout: 'tags', font: 'sans', fontFamily: 'sans-clean', verticalRhythm: 'standard', boldTarget: 'metrics' },
+  'v6-sar':          { layout: 'header-single', headingStyle: 'side', skillLayout: 'tags', font: 'sans', fontFamily: 'sans-clean', verticalRhythm: 'standard', boldTarget: 'metrics' },
+  'v6-process-flow': { layout: 'timeline', headingStyle: 'underline', skillLayout: 'tags', font: 'sans', fontFamily: 'sans-clean', verticalRhythm: 'standard', boldTarget: 'metrics' },
+
+  // ═══ V7: Portfolio Lead (Design) — "Design Gallery" aesthetic ═══
+  // Very generous rhythm (>=30% whitespace), Montserrat display, bold skills
+  'v7-portfolio-hero':  { layout: 'centered', headingStyle: 'caps', skillLayout: 'tags', font: 'sans', fontFamily: 'sans-display', verticalRhythm: 'very-generous', boldTarget: 'skills', specialRendering: ['portfolio-hero'] },
+  'v7-case-gallery':    { layout: 'header-single', headingStyle: 'pill', skillLayout: 'tags', font: 'sans', fontFamily: 'sans-display', verticalRhythm: 'very-generous', boldTarget: 'skills', specialRendering: ['portfolio-hero'] },
+  'v7-design-process':  { layout: 'sidebar-left', headingStyle: 'side', skillLayout: 'list', font: 'sans', fontFamily: 'sans-display', verticalRhythm: 'very-generous', boldTarget: 'skills', sidebarSections: ['skills', 'education'] },
+  'v7-creative-min':    { layout: 'minimal', headingStyle: 'caps', skillLayout: 'tags', font: 'sans', fontFamily: 'sans-display', verticalRhythm: 'very-generous', boldTarget: 'none' },
+  'v7-studio':          { layout: 'header-single', headingStyle: 'side', skillLayout: 'tags', font: 'sans', fontFamily: 'sans-display', verticalRhythm: 'generous', boldTarget: 'skills' },
+
+  // ═══ V8: Versatility Map (Generalist) — "Adaptable Ownership" aesthetic ═══
+  // Standard rhythm, clean sans, bold skills (breadth emphasis)
+  'v8-flexi-grid':   { layout: 'sidebar-left', headingStyle: 'side', skillLayout: 'list', font: 'sans', fontFamily: 'sans-clean', verticalRhythm: 'standard', boldTarget: 'skills', sidebarSections: ['skills', 'education'] },
+  'v8-cross-func':   { layout: 'two-col', headingStyle: 'underline', skillLayout: 'tags', font: 'sans', fontFamily: 'sans-clean', verticalRhythm: 'standard', boldTarget: 'skills' },
+  'v8-adaptive':     { layout: 'header-single', headingStyle: 'underline', skillLayout: 'tags', font: 'sans', fontFamily: 'sans-clean', verticalRhythm: 'standard', boldTarget: 'skills' },
+  'v8-breadth':      { layout: 'bold-bars', headingStyle: 'pill', skillLayout: 'tags', font: 'sans', fontFamily: 'sans-clean', verticalRhythm: 'standard', boldTarget: 'skills' },
+  'v8-hybrid':       { layout: 'sidebar-right', headingStyle: 'side', skillLayout: 'list', font: 'sans', fontFamily: 'sans-clean', verticalRhythm: 'standard', boldTarget: 'skills', sidebarSections: ['skills', 'education'] },
+
+  // ═══ V9: Domain Expert (Specialist) — "Deep Authority" aesthetic ═══
+  // Standard rhythm, sans (high-contrast), bold company names (institutional trust)
+  'v9-authority':    { layout: 'header-single', headingStyle: 'underline', skillLayout: 'tags', font: 'sans', fontFamily: 'sans-modern', verticalRhythm: 'standard', boldTarget: 'company' },
+  'v9-specialist':   { layout: 'header-single', headingStyle: 'caps', skillLayout: 'tags', font: 'sans', fontFamily: 'sans-modern', verticalRhythm: 'standard', boldTarget: 'company' },
+  'v9-credential':   { layout: 'centered', headingStyle: 'underline', skillLayout: 'tags', font: 'sans', fontFamily: 'sans-modern', verticalRhythm: 'standard', boldTarget: 'company' },
+  'v9-industry':     { layout: 'header-single', headingStyle: 'caps', skillLayout: 'tags', font: 'serif', fontFamily: 'serif-prestigious', verticalRhythm: 'standard', boldTarget: 'company' },
+  'v9-expert':       { layout: 'sidebar-left', headingStyle: 'side', skillLayout: 'list', font: 'sans', fontFamily: 'sans-modern', verticalRhythm: 'standard', boldTarget: 'company', sidebarSections: ['skills', 'education'] },
+
+  // ═══ V10: Transition Narrative — "Transferable Narrative" aesthetic ═══
+  // Standard rhythm, approachable sans, bold skills (transferable emphasis)
+  'v10-pivot-bridge': { layout: 'centered', headingStyle: 'underline', skillLayout: 'tags', font: 'sans', fontFamily: 'sans-clean', verticalRhythm: 'standard', boldTarget: 'skills' },
+  'v10-new-chapter':  { layout: 'header-single', headingStyle: 'underline', skillLayout: 'tags', font: 'sans', fontFamily: 'sans-clean', verticalRhythm: 'standard', boldTarget: 'skills' },
+  'v10-transfer':     { layout: 'sidebar-right', headingStyle: 'side', skillLayout: 'list', font: 'sans', fontFamily: 'sans-clean', verticalRhythm: 'standard', boldTarget: 'skills', sidebarSections: ['skills', 'education'] },
+  'v10-fresh-start':  { layout: 'minimal', headingStyle: 'side', skillLayout: 'tags', font: 'sans', fontFamily: 'sans-clean', verticalRhythm: 'standard', boldTarget: 'skills' },
+  'v10-narrative':    { layout: 'timeline', headingStyle: 'caps', skillLayout: 'tags', font: 'serif', fontFamily: 'serif-prestigious', verticalRhythm: 'standard', boldTarget: 'skills' },
+};
+
+
 export default function InlineResumeEditor({
   data,
   onDataChange,
@@ -671,20 +803,233 @@ export default function InlineResumeEditor({
     </div>
   );
 
+
+  /* ─── Flavor Tokens (resolved from config) ─── */
+  const activeConfig = TEMPLATE_LAYOUTS[templateId] || TEMPLATE_LAYOUTS['v1-stack-first'];
+  const resolvedFont = activeConfig.fontFamily ? FONT_REGISTRY[activeConfig.fontFamily] : (activeConfig.font === 'serif' ? FONT_SERIF : FONT_SANS);
+  const rhythm = RHYTHM[activeConfig.verticalRhythm || 'standard'];
+  const boldTarget = activeConfig.boldTarget || 'none';
+
+  const specialComponents = new Set(activeConfig.specialRendering || []);
+
+  /* ─── Specialist Component: KPI Ribbon (V2) ─── */
+  /* Extracts numeric achievements from experience bullets and displays as a highlight ribbon */
+  /* ─── Smart Achievement Highlight (adapts to every template variant) ─── */
+  const extractTopMetrics = () => {
+    const metrics: { value: string; label: string; numericValue: number }[] = [];
+    const metricPattern = /(?:\$[\d,.]+[MBKmk]?|\d+(?:\.\d+)?[%xX]|\d+\+)/g;
+    for (const exp of data.experience) {
+      for (const bullet of exp.bullets) {
+        let match;
+        while ((match = metricPattern.exec(bullet)) !== null) {
+          const raw = match[0];
+          // Parse numeric value for ranking
+          let num = parseFloat(raw.replace(/[$,+xX]/g, ''));
+          if (raw.includes('%')) num *= 1; // percentages as-is
+          else if (/[mM]$/.test(raw)) num *= 1000000;
+          else if (/[bB]$/.test(raw)) num *= 1000000000;
+          else if (/[kK]$/.test(raw)) num *= 1000;
+          // Extract label from words before the metric
+          const beforeMetric = bullet.slice(0, match.index).replace(/^[\s\u2022\-\u2013]+/, '').trim();
+          const words = beforeMetric.split(/\s+/).filter(w => w.length > 1);
+          const labelRaw = words.slice(-3).join(' ').replace(/\b(by|to|of|in|a|an|the|with|and|for)\s*$/i, '').trim();
+          const label = labelRaw.split(/\s+/).slice(-2).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+          metrics.push({ value: raw, label: label || 'Impact', numericValue: num });
+        }
+      }
+    }
+    // Sort by impact (largest numbers first) and deduplicate
+    return metrics
+      .sort((a, b) => b.numericValue - a.numericValue)
+      .filter((m, i, arr) => arr.findIndex(x => x.value === m.value) === i)
+      .slice(0, 4);
+  };
+
+  const topMetrics = extractTopMetrics();
+
+  const KpiRibbon = () => {
+    if (topMetrics.length === 0) return null;
+    return (
+      <div className="flex items-center justify-center gap-6 py-2.5 px-6" style={{ backgroundColor: `${theme.primary}08`, borderBottom: `2px solid ${theme.primary}15` }}>
+        {topMetrics.slice(0, 4).map((m, i) => (
+          <div key={i} className="flex flex-col items-center">
+            <span className="text-[13px] font-bold leading-tight" style={{ color: theme.primary }}>{m.value}</span>
+            <span className="text-[8px] uppercase tracking-wider font-medium text-gray-400 mt-0.5">{m.label}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  /* Achievement highlight strip — adapts style based on variant */
+  const AchievementHighlight = () => {
+    if (topMetrics.length === 0) return null;
+    const variant = (templateId.split('-')[0] || 'v1');
+    const isSerif = activeConfig.font === 'serif';
+    const isMono = activeConfig.fontFamily === 'tech-mono';
+    const metrics = topMetrics.slice(0, 3);
+
+    // V4/executive: single standout metric, large and elegant
+    if (variant === 'v4' || boldTarget === 'scale') {
+      const top = metrics[0];
+      return (
+        <div className="flex items-center justify-center py-2 px-6" style={{ borderBottom: `1px solid ${theme.primary}15` }}>
+          <span className="text-[11px] text-gray-500">
+            <span className="font-bold text-[14px] mr-1.5" style={{ color: theme.primary }}>{top.value}</span>
+            {top.label}
+          </span>
+        </div>
+      );
+    }
+
+    // V1/tech: monospace code-style
+    if (variant === 'v1' || isMono) {
+      return (
+        <div className="flex items-center justify-center gap-4 py-1.5 px-4" style={{ backgroundColor: `${theme.primary}06`, borderBottom: `1px solid ${theme.primary}12` }}>
+          {metrics.map((m, i) => (
+            <span key={i} className="text-[10px] font-mono">
+              <span className="font-bold" style={{ color: theme.primary }}>{m.value}</span>
+              <span className="text-gray-400 ml-1">{m.label.toLowerCase()}</span>
+            </span>
+          ))}
+        </div>
+      );
+    }
+
+    // V3/authority or serif: subtle underlined metrics
+    if (variant === 'v3' || isSerif) {
+      return (
+        <div className="flex items-center justify-center gap-5 py-2 px-6" style={{ borderBottom: `1px solid ${theme.primary}10` }}>
+          {metrics.map((m, i) => (
+            <span key={i} className="text-[10px] italic text-gray-600">
+              <span className="font-bold not-italic" style={{ color: theme.primary }}>{m.value}</span>
+              {' '}{m.label}
+            </span>
+          ))}
+        </div>
+      );
+    }
+
+    // Default (V2, V5-V10): clean metric cards
+    return (
+      <div className="flex items-center justify-center gap-5 py-2 px-6" style={{ backgroundColor: `${theme.primary}06`, borderBottom: `1px solid ${theme.primary}12` }}>
+        {metrics.map((m, i) => (
+          <div key={i} className="flex flex-col items-center">
+            <span className="text-[12px] font-bold leading-tight" style={{ color: theme.primary }}>{m.value}</span>
+            <span className="text-[8px] uppercase tracking-wider font-medium text-gray-400 mt-0.5">{m.label}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  /* ─── Specialist Component: Tech Stack Matrix (V1) ─── */
+  /* Groups skills into conceptual categories for a "blueprint" aesthetic */
+  const TechStackMatrix = () => {
+    const categories: Record<string, string[]> = { 'Languages': [], 'Frameworks': [], 'Infrastructure': [], 'Tools': [] };
+    const langKeywords = ['python', 'java', 'javascript', 'typescript', 'go', 'rust', 'c++', 'c#', 'ruby', 'php', 'swift', 'kotlin', 'scala', 'sql', 'r', 'matlab', 'perl', 'bash', 'html', 'css'];
+    const fwKeywords = ['react', 'angular', 'vue', 'next', 'django', 'flask', 'spring', 'express', 'fastapi', 'rails', 'laravel', 'svelte', 'node', '.net', 'tensorflow', 'pytorch', 'keras'];
+    const infraKeywords = ['aws', 'gcp', 'azure', 'docker', 'kubernetes', 'k8s', 'terraform', 'jenkins', 'ci/cd', 'linux', 'nginx', 'redis', 'kafka', 'rabbitmq', 'elasticsearch', 'postgresql', 'mongodb', 'mysql', 'graphql'];
+    for (const skill of data.skills) {
+      const lower = skill.toLowerCase();
+      if (langKeywords.some(k => lower.includes(k))) categories['Languages'].push(skill);
+      else if (fwKeywords.some(k => lower.includes(k))) categories['Frameworks'].push(skill);
+      else if (infraKeywords.some(k => lower.includes(k))) categories['Infrastructure'].push(skill);
+      else categories['Tools'].push(skill);
+    }
+    const filled = Object.entries(categories).filter(([, skills]) => skills.length > 0);
+    if (filled.length === 0) return null;
+    return (
+      <div style={{ marginBottom: rhythm.sectionGap }} data-resume-section="skills">
+        <SectionHeading label="Tech Stack" icon="ri-code-s-slash-line" color={theme.sectionLine} borderColor={theme.sectionLine} style={activeConfig.headingStyle} />
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-1">
+          {filled.map(([cat, skills]) => (
+            <div key={cat}>
+              <span className="text-[8px] font-bold uppercase tracking-[0.2em] opacity-50">{cat}</span>
+              <div className="flex flex-wrap gap-x-1 gap-y-0.5 mt-0.5">
+                {skills.map((s, i) => (
+                  <span key={i} className="text-[9px] font-medium px-1.5 py-0.5 rounded" style={{ backgroundColor: theme.skillBg, color: theme.skillText }}>{s}</span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  /* ─── Specialist Component: Leadership Thesis (V4) ─── */
+  /* Renders summary as a strategic narrative with executive framing */
+  const LeadershipThesis = () => (
+    <div style={{ marginBottom: rhythm.sectionGap }} data-resume-section="summary">
+      <div className="flex items-center gap-2 mb-2">
+        <div className="w-1 h-4 rounded-full" style={{ backgroundColor: theme.primary }} />
+        <span className="text-[10px] font-bold uppercase tracking-[0.25em]" style={{ color: theme.primary }}>Leadership Thesis</span>
+      </div>
+      <EditableText
+        value={data.summary}
+        onChange={(v) => update('summary', v)}
+        tag="p"
+        className="text-[12px] leading-[1.8] text-gray-700 italic pl-3 border-l-2"
+        style={{ borderColor: `${theme.primary}30` }}
+        placeholder="Describe your leadership philosophy and strategic vision..."
+        multiline
+      />
+    </div>
+  );
+
+  /* ─── Specialist Component: Portfolio Hero (V7) ─── */
+  /* Renders LinkedIn/portfolio as a hero-sized CTA in the header area */
+  const PortfolioHero = () => (
+    <div className="flex flex-col items-center py-2" style={{ backgroundColor: `${theme.primary}08` }}>
+      <span className="text-[8px] uppercase tracking-[0.3em] font-bold mb-1" style={{ color: theme.primary, opacity: 0.6 }}>Portfolio</span>
+      <EditableText
+        value={data.linkedin}
+        onChange={(v) => update('linkedin', v)}
+        className="text-[14px] font-semibold tracking-wide"
+        style={{ color: theme.primary }}
+        placeholder="portfolio-url.com"
+      />
+    </div>
+  );
+
+  /* ─── Specialist Component: GitHub Ribbon (V1) ─── */
+  /* Text-based GitHub activity ribbon in header area */
+  const GitHubRibbon = () => {
+    // If LinkedIn contains github, use it; otherwise show a placeholder
+    const hasGitHub = data.linkedin.toLowerCase().includes('github');
+    if (!hasGitHub) return null;
+    return (
+      <div className="flex items-center justify-center gap-3 py-1.5 text-[9px]" style={{ backgroundColor: `${theme.primary}08`, borderTop: `1px solid ${theme.primary}15` }}>
+        <i className="ri-github-fill text-[11px]" style={{ color: theme.primary }} />
+        <EditableText
+          value={data.linkedin}
+          onChange={(v) => update('linkedin', v)}
+          className="font-mono font-medium"
+          style={{ color: theme.primary }}
+          placeholder="github.com/username"
+        />
+        <span className="opacity-40">|</span>
+        <span style={{ color: theme.primary, opacity: 0.7 }}>Open Source Contributor</span>
+      </div>
+    );
+  };
+
+
   const SummaryBlock = ({ headingStyle }: { headingStyle?: 'underline' | 'pill' | 'side' | 'caps' }) => (
-    <div className="mb-5" data-resume-section="summary">
+    <div style={{ marginBottom: rhythm.sectionGap }} data-resume-section="summary">
       <SectionHeading label="Professional Summary" icon="ri-file-text-line" color={theme.sectionLine} borderColor={theme.sectionLine} style={headingStyle} />
       <EditableText value={data.summary} onChange={(v) => update('summary', v)} tag="p" className="text-[11px] leading-[1.65] text-gray-600" placeholder="Write a compelling summary..." multiline />
     </div>
   );
 
   const ExperienceBlock = ({ headingStyle }: { headingStyle?: 'underline' | 'pill' | 'side' | 'caps' }) => (
-    <div className="mb-5" data-resume-section="experience">
+    <div style={{ marginBottom: rhythm.sectionGap }} data-resume-section="experience">
       <div className="flex items-center justify-between">
         <SectionHeading label="Work Experience" icon="ri-briefcase-line" color={theme.sectionLine} borderColor={theme.sectionLine} style={headingStyle} />
         <button onClick={addExperience} className="opacity-0 group-hover:opacity-100 text-[10px] px-2 py-0.5 rounded bg-gray-100 text-gray-600 hover:bg-blue-100 hover:text-blue-700 font-medium"><i className="ri-add-line mr-0.5" />Add</button>
       </div>
-      <div className="space-y-4 mt-1">
+      <div className="mt-1" style={{ display: "flex", flexDirection: "column", gap: rhythm.sectionGap }}>
         {data.experience.map((exp, i) => (
           <div key={i} data-resume-entry className="relative group/exp pl-3 border-l-2" style={{ borderColor: `${theme.bulletColor}30` }}>
             <div className="absolute -right-1 top-0 flex items-center gap-0.5 opacity-0 group-hover/exp:opacity-100 transition-opacity">
@@ -697,14 +1042,14 @@ export default function InlineResumeEditor({
               <div className="flex-1 min-w-0">
                 <EditableText value={exp.role} onChange={(v) => updateExp(i, 'role', v)} tag="h4" className="text-[12px] font-bold text-gray-900" placeholder="Job Title" />
                 <div className="flex items-center gap-1 text-[11px]">
-                  <EditableText value={exp.company} onChange={(v) => updateExp(i, 'company', v)} className="font-semibold" style={{ color: theme.bulletColor }} placeholder="Company" />
+                  <EditableText value={exp.company} onChange={(v) => updateExp(i, 'company', v)} className={boldTarget === 'company' ? 'font-bold' : 'font-semibold'} style={{ color: theme.bulletColor }} placeholder="Company" />
                   <span className="text-gray-400">·</span>
                   <EditableText value={exp.location} onChange={(v) => updateExp(i, 'location', v)} className="text-gray-500" placeholder="Location" />
                 </div>
               </div>
               <EditableText value={exp.period} onChange={(v) => updateExp(i, 'period', v)} className="text-[10px] text-gray-400 whitespace-nowrap ml-3 flex-shrink-0 bg-gray-50 px-2 py-0.5 rounded-full" placeholder="Period" />
             </div>
-            <ul className="mt-1.5 space-y-1">
+            <ul className="mt-1.5" style={{ display: "flex", flexDirection: "column", gap: rhythm.bulletGap }}>
               {exp.bullets.map((b, j) => (
                 <li key={j} data-resume-bullet className="flex items-start gap-1.5 group/bullet text-[11px] text-gray-600">
                   <span className="mt-[5px] flex-shrink-0 w-1 h-1 rounded-full" style={{ backgroundColor: theme.bulletColor }} />
@@ -721,7 +1066,7 @@ export default function InlineResumeEditor({
   );
 
   const SkillsBlock = ({ headingStyle, layout = 'tags' }: { headingStyle?: 'underline' | 'pill' | 'side' | 'caps'; layout?: 'tags' | 'list' }) => (
-    <div className="mb-5" data-resume-section="skills">
+    <div style={{ marginBottom: rhythm.sectionGap }} data-resume-section="skills">
       <div className="flex items-center justify-between">
         <SectionHeading label="Skills" icon="ri-tools-line" color={theme.sectionLine} borderColor={theme.sectionLine} style={headingStyle} />
         <button onClick={addSkill} className="opacity-0 group-hover:opacity-100 text-[10px] px-2 py-0.5 rounded bg-gray-100 text-gray-600 hover:bg-blue-100 hover:text-blue-700 font-medium"><i className="ri-add-line mr-0.5" />Add</button>
@@ -741,7 +1086,7 @@ export default function InlineResumeEditor({
           {data.skills.map((skill, i) => (
             <span key={i} className="group/skill inline-flex items-center text-[10px] font-medium" style={{ color: theme.skillText }}>
               <span className="px-1.5 py-0.5 rounded" style={{ backgroundColor: theme.skillBg }}>
-                <EditableText value={skill} onChange={(v) => updateSkill(i, v)} className="text-[10px]" placeholder="Skill" />
+                <EditableText value={skill} onChange={(v) => updateSkill(i, v)} className={`text-[10px] ${boldTarget === 'skills' || boldTarget === 'stack' ? 'font-bold' : ''}`} placeholder="Skill" />
               </span>
               <button onClick={() => removeSkill(i)} className="opacity-0 group-hover/skill:opacity-100 text-red-400 hover:text-red-600 text-[9px] ml-0.5"><i className="ri-close-line" /></button>
             </span>
@@ -752,7 +1097,7 @@ export default function InlineResumeEditor({
   );
 
   const EducationBlock = ({ headingStyle }: { headingStyle?: 'underline' | 'pill' | 'side' | 'caps' }) => (
-    <div className="mb-5" data-resume-section="education">
+    <div style={{ marginBottom: rhythm.sectionGap }} data-resume-section="education">
       <div className="flex items-center justify-between">
         <SectionHeading label="Education" icon="ri-graduation-cap-line" color={theme.sectionLine} borderColor={theme.sectionLine} style={headingStyle} />
         <button onClick={addEducation} className="opacity-0 group-hover:opacity-100 text-[10px] px-2 py-0.5 rounded bg-gray-100 text-gray-600 hover:bg-blue-100 hover:text-blue-700 font-medium"><i className="ri-add-line mr-0.5" />Add</button>
@@ -790,98 +1135,15 @@ export default function InlineResumeEditor({
     }
   };
 
-  /* ════════════════════════════════════════════
-     Layout Configuration System
-     Each template maps to a layout config to avoid
-     50 separate component definitions.
-     ════════════════════════════════════════════ */
-
-  type LayoutType = 'header-single' | 'sidebar-left' | 'sidebar-right' | 'centered' | 'minimal' | 'bold-bars' | 'timeline' | 'two-col';
-  type HeadingStyle = 'underline' | 'pill' | 'side' | 'caps';
-  type SkillLayout = 'tags' | 'list';
-
-  interface LayoutConfig {
-    layout: LayoutType;
-    headingStyle: HeadingStyle;
-    skillLayout: SkillLayout;
-    font: 'sans' | 'serif';
-    sidebarSections?: SectionId[];
-  }
-
-  const FONT_SANS = "'Inter', 'Segoe UI', system-ui, sans-serif";
-  const FONT_SERIF = "'Georgia', 'Times New Roman', serif";
-
-  const TEMPLATE_LAYOUTS: Record<string, LayoutConfig> = {
-    // V1: Signal Stack (Tech)
-    'v1-stack-first':  { layout: 'header-single', headingStyle: 'underline', skillLayout: 'tags', font: 'sans' },
-    'v1-dev-card':     { layout: 'minimal', headingStyle: 'side', skillLayout: 'tags', font: 'sans' },
-    'v1-tech-grid':    { layout: 'two-col', headingStyle: 'underline', skillLayout: 'tags', font: 'sans' },
-    'v1-system-arch':  { layout: 'sidebar-left', headingStyle: 'side', skillLayout: 'list', font: 'sans', sidebarSections: ['skills', 'education'] },
-    'v1-terminal':     { layout: 'minimal', headingStyle: 'caps', skillLayout: 'tags', font: 'sans' },
-    // V2: Outcome Ledger (Business)
-    'v2-metric-hero':  { layout: 'header-single', headingStyle: 'pill', skillLayout: 'tags', font: 'sans' },
-    'v2-impact-first': { layout: 'centered', headingStyle: 'underline', skillLayout: 'tags', font: 'sans' },
-    'v2-results-dash': { layout: 'two-col', headingStyle: 'underline', skillLayout: 'tags', font: 'sans' },
-    'v2-board-ready':  { layout: 'sidebar-right', headingStyle: 'caps', skillLayout: 'list', font: 'serif', sidebarSections: ['skills', 'education'] },
-    'v2-numbers-lead': { layout: 'sidebar-right', headingStyle: 'side', skillLayout: 'list', font: 'sans', sidebarSections: ['skills', 'education'] },
-    // V3: Authority Frame (Enterprise)
-    'v3-corporate':    { layout: 'header-single', headingStyle: 'underline', skillLayout: 'tags', font: 'sans' },
-    'v3-governance':   { layout: 'bold-bars', headingStyle: 'pill', skillLayout: 'tags', font: 'sans' },
-    'v3-enterprise':   { layout: 'header-single', headingStyle: 'caps', skillLayout: 'tags', font: 'sans' },
-    'v3-process':      { layout: 'sidebar-right', headingStyle: 'side', skillLayout: 'list', font: 'serif', sidebarSections: ['skills', 'education'] },
-    'v3-compliance':   { layout: 'minimal', headingStyle: 'underline', skillLayout: 'tags', font: 'sans' },
-    // V4: Leadership Thesis (Senior)
-    'v4-exec-brief':   { layout: 'centered', headingStyle: 'caps', skillLayout: 'tags', font: 'serif' },
-    'v4-leadership':   { layout: 'bold-bars', headingStyle: 'pill', skillLayout: 'tags', font: 'sans' },
-    'v4-csuite':       { layout: 'sidebar-right', headingStyle: 'side', skillLayout: 'list', font: 'sans', sidebarSections: ['skills', 'education'] },
-    'v4-strategy':     { layout: 'centered', headingStyle: 'underline', skillLayout: 'tags', font: 'serif' },
-    'v4-board-deck':   { layout: 'header-single', headingStyle: 'pill', skillLayout: 'tags', font: 'sans' },
-    // V5: Proof Sheet (Research)
-    'v5-academic':     { layout: 'centered', headingStyle: 'caps', skillLayout: 'tags', font: 'serif' },
-    'v5-method':       { layout: 'header-single', headingStyle: 'underline', skillLayout: 'tags', font: 'sans' },
-    'v5-paper':        { layout: 'header-single', headingStyle: 'caps', skillLayout: 'tags', font: 'serif' },
-    'v5-lab':          { layout: 'sidebar-left', headingStyle: 'side', skillLayout: 'list', font: 'sans', sidebarSections: ['skills', 'education'] },
-    'v5-scholar':      { layout: 'centered', headingStyle: 'underline', skillLayout: 'tags', font: 'serif' },
-    // V6: Problem-Solver (Ops)
-    'v6-case-study':   { layout: 'sidebar-right', headingStyle: 'side', skillLayout: 'list', font: 'sans', sidebarSections: ['skills', 'education'] },
-    'v6-consultant':   { layout: 'header-single', headingStyle: 'pill', skillLayout: 'tags', font: 'sans' },
-    'v6-matrix':       { layout: 'bold-bars', headingStyle: 'underline', skillLayout: 'tags', font: 'sans' },
-    'v6-sar':          { layout: 'header-single', headingStyle: 'side', skillLayout: 'tags', font: 'sans' },
-    'v6-process-flow': { layout: 'timeline', headingStyle: 'underline', skillLayout: 'tags', font: 'sans' },
-    // V7: Portfolio Lead (Design)
-    'v7-portfolio-hero':  { layout: 'centered', headingStyle: 'caps', skillLayout: 'tags', font: 'sans' },
-    'v7-case-gallery':    { layout: 'header-single', headingStyle: 'pill', skillLayout: 'tags', font: 'sans' },
-    'v7-design-process':  { layout: 'sidebar-left', headingStyle: 'side', skillLayout: 'list', font: 'sans', sidebarSections: ['skills', 'education'] },
-    'v7-creative-min':    { layout: 'minimal', headingStyle: 'caps', skillLayout: 'tags', font: 'sans' },
-    'v7-studio':          { layout: 'header-single', headingStyle: 'side', skillLayout: 'tags', font: 'sans' },
-    // V8: Versatility Map (Generalist)
-    'v8-flexi-grid':   { layout: 'sidebar-left', headingStyle: 'side', skillLayout: 'list', font: 'sans', sidebarSections: ['skills', 'education'] },
-    'v8-cross-func':   { layout: 'two-col', headingStyle: 'underline', skillLayout: 'tags', font: 'sans' },
-    'v8-adaptive':     { layout: 'header-single', headingStyle: 'underline', skillLayout: 'tags', font: 'sans' },
-    'v8-breadth':      { layout: 'bold-bars', headingStyle: 'pill', skillLayout: 'tags', font: 'sans' },
-    'v8-hybrid':       { layout: 'sidebar-right', headingStyle: 'side', skillLayout: 'list', font: 'sans', sidebarSections: ['skills', 'education'] },
-    // V9: Domain Expert (Specialist)
-    'v9-authority':    { layout: 'header-single', headingStyle: 'underline', skillLayout: 'tags', font: 'sans' },
-    'v9-specialist':   { layout: 'header-single', headingStyle: 'caps', skillLayout: 'tags', font: 'sans' },
-    'v9-credential':   { layout: 'centered', headingStyle: 'underline', skillLayout: 'tags', font: 'sans' },
-    'v9-industry':     { layout: 'header-single', headingStyle: 'caps', skillLayout: 'tags', font: 'serif' },
-    'v9-expert':       { layout: 'sidebar-left', headingStyle: 'side', skillLayout: 'list', font: 'sans', sidebarSections: ['skills', 'education'] },
-    // V10: Transition Narrative
-    'v10-pivot-bridge': { layout: 'centered', headingStyle: 'underline', skillLayout: 'tags', font: 'sans' },
-    'v10-new-chapter':  { layout: 'header-single', headingStyle: 'underline', skillLayout: 'tags', font: 'sans' },
-    'v10-transfer':     { layout: 'sidebar-right', headingStyle: 'side', skillLayout: 'list', font: 'sans', sidebarSections: ['skills', 'education'] },
-    'v10-fresh-start':  { layout: 'minimal', headingStyle: 'side', skillLayout: 'tags', font: 'sans' },
-    'v10-narrative':    { layout: 'timeline', headingStyle: 'caps', skillLayout: 'tags', font: 'serif' },
-  };
 
   /* No-heading variants for bold-bars layout */
   const SummaryBlockNoHeading = () => (
-    <div className="mb-5" data-resume-section="summary">
+    <div style={{ marginBottom: rhythm.sectionGap }} data-resume-section="summary">
       <EditableText value={data.summary} onChange={(v) => update('summary', v)} tag="p" className="text-[11px] leading-[1.65] text-gray-600" placeholder="Write a compelling summary..." multiline />
     </div>
   );
   const ExperienceBlockNoHeading = () => (
-    <div className="mb-5" data-resume-section="experience">
+    <div style={{ marginBottom: rhythm.sectionGap }} data-resume-section="experience">
       <div className="flex justify-end mb-1">
         <button onClick={addExperience} className="opacity-0 group-hover:opacity-100 text-[10px] px-2 py-0.5 rounded bg-gray-100 text-gray-600 hover:bg-blue-100 hover:text-blue-700 font-medium"><i className="ri-add-line mr-0.5" />Add</button>
       </div>
@@ -898,14 +1160,14 @@ export default function InlineResumeEditor({
               <div className="flex-1 min-w-0">
                 <EditableText value={exp.role} onChange={(v) => updateExp(i, 'role', v)} tag="h4" className="text-[12px] font-bold text-gray-900" placeholder="Job Title" />
                 <div className="flex items-center gap-1 text-[11px]">
-                  <EditableText value={exp.company} onChange={(v) => updateExp(i, 'company', v)} className="font-semibold" style={{ color: theme.bulletColor }} placeholder="Company" />
+                  <EditableText value={exp.company} onChange={(v) => updateExp(i, 'company', v)} className={boldTarget === 'company' ? 'font-bold' : 'font-semibold'} style={{ color: theme.bulletColor }} placeholder="Company" />
                   <span className="text-gray-400">·</span>
                   <EditableText value={exp.location} onChange={(v) => updateExp(i, 'location', v)} className="text-gray-500" placeholder="Location" />
                 </div>
               </div>
               <EditableText value={exp.period} onChange={(v) => updateExp(i, 'period', v)} className="text-[10px] text-gray-400 whitespace-nowrap ml-3 flex-shrink-0 bg-gray-50 px-2 py-0.5 rounded-full" placeholder="Period" />
             </div>
-            <ul className="mt-1.5 space-y-1">
+            <ul className="mt-1.5" style={{ display: "flex", flexDirection: "column", gap: rhythm.bulletGap }}>
               {exp.bullets.map((b, j) => (
                 <li key={j} data-resume-bullet className="flex items-start gap-1.5 group/bullet text-[11px] text-gray-600">
                   <span className="mt-[5px] flex-shrink-0 w-1 h-1 rounded-full" style={{ backgroundColor: theme.bulletColor }} />
@@ -921,12 +1183,12 @@ export default function InlineResumeEditor({
     </div>
   );
   const SkillsBlockNoHeading = () => (
-    <div className="mb-5" data-resume-section="skills">
+    <div style={{ marginBottom: rhythm.sectionGap }} data-resume-section="skills">
       <div className="flex flex-wrap gap-x-1 gap-y-0.5 mt-1">
         {data.skills.map((skill, i) => (
           <span key={i} className="group/skill inline-flex items-center text-[10px] font-medium" style={{ color: theme.skillText }}>
             <span className="px-1.5 py-0.5 rounded" style={{ backgroundColor: theme.skillBg }}>
-              <EditableText value={skill} onChange={(v) => updateSkill(i, v)} className="text-[10px]" placeholder="Skill" />
+              <EditableText value={skill} onChange={(v) => updateSkill(i, v)} className={`text-[10px] ${boldTarget === 'skills' || boldTarget === 'stack' ? 'font-bold' : ''}`} placeholder="Skill" />
             </span>
             <button onClick={() => removeSkill(i)} className="opacity-0 group-hover/skill:opacity-100 text-red-400 hover:text-red-600 text-[9px] ml-0.5"><i className="ri-close-line" /></button>
           </span>
@@ -936,7 +1198,7 @@ export default function InlineResumeEditor({
     </div>
   );
   const EducationBlockNoHeading = () => (
-    <div className="mb-5" data-resume-section="education">
+    <div style={{ marginBottom: rhythm.sectionGap }} data-resume-section="education">
       <div className="flex justify-end mb-1">
         <button onClick={addEducation} className="opacity-0 group-hover:opacity-100 text-[10px] px-2 py-0.5 rounded bg-gray-100 text-gray-600 hover:bg-blue-100 hover:text-blue-700 font-medium"><i className="ri-add-line mr-0.5" />Add</button>
       </div>
@@ -964,7 +1226,7 @@ export default function InlineResumeEditor({
 
   const renderTemplate = () => {
     const config = TEMPLATE_LAYOUTS[templateId] || TEMPLATE_LAYOUTS['v1-stack-first'];
-    const fontFamily = config.font === 'serif' ? FONT_SERIF : FONT_SANS;
+    const fontFamily = resolvedFont;
     const sidebarSections = config.sidebarSections || ['skills', 'education'];
     const mainSections = visibleSections.filter((s) => !sidebarSections.includes(s.id));
     const sidebarVisible = visibleSections.filter((s) => sidebarSections.includes(s.id));
@@ -972,14 +1234,20 @@ export default function InlineResumeEditor({
     /* ─── Layout: header-single ─── */
     if (config.layout === 'header-single') {
       return (
-        <div ref={resumeRef} className="w-[612px] bg-white shadow-2xl rounded-sm overflow-hidden" style={{ fontFamily }}>
+        <div ref={resumeRef} className="w-[612px] bg-white shadow-2xl rounded-sm overflow-hidden" style={{ fontFamily, '--section-gap': rhythm.sectionGap, '--bullet-gap': rhythm.bulletGap, '--header-pad': rhythm.headerPad } as React.CSSProperties}>
           <div className="px-8 py-5" style={{ backgroundColor: theme.headerBg }}>
             <EditableText value={data.name} onChange={(v) => update('name', v)} tag="h1" className="text-xl font-bold mb-0.5" style={{ color: theme.headerText }} placeholder="Your Name" />
             <EditableText value={data.title} onChange={(v) => update('title', v)} tag="p" className="text-sm font-medium mb-3 opacity-85" style={{ color: theme.headerText }} placeholder="Professional Title" />
             <ContactRow color={`${theme.headerText}cc`} />
           </div>
+          {specialComponents.has('kpi-ribbon') ? <KpiRibbon /> : <AchievementHighlight />}
+          {specialComponents.has('github-ribbon') && <GitHubRibbon />}
           <div className="px-8 py-6">
-            {visibleSections.map((s, i) => renderSection(s, i, config.headingStyle, config.skillLayout))}
+            {visibleSections.map((s, i) => {
+              if (s.id === 'summary' && specialComponents.has('leadership-thesis')) return <LeadershipThesis key={s.id} />;
+              if (s.id === 'skills' && specialComponents.has('tech-stack-matrix')) return <TechStackMatrix key={s.id} />;
+              return renderSection(s, i, config.headingStyle, config.skillLayout);
+            })}
           </div>
         </div>
       );
@@ -988,7 +1256,7 @@ export default function InlineResumeEditor({
     /* ─── Layout: sidebar-left ─── */
     if (config.layout === 'sidebar-left') {
       return (
-        <div ref={resumeRef} className="w-[612px] bg-white shadow-2xl rounded-sm overflow-hidden flex" style={{ fontFamily }}>
+        <div ref={resumeRef} className="w-[612px] bg-white shadow-2xl rounded-sm overflow-hidden flex" style={{ fontFamily, '--section-gap': rhythm.sectionGap, '--bullet-gap': rhythm.bulletGap, '--header-pad': rhythm.headerPad } as React.CSSProperties}>
           {/* Sidebar */}
           <div className="w-[190px] flex-shrink-0 px-5 py-6" style={{ backgroundColor: theme.headerBg }}>
             <EditableText value={data.name} onChange={(v) => update('name', v)} tag="h1" className="text-[16px] font-bold mb-0.5 leading-tight" style={{ color: theme.headerText }} placeholder="Your Name" />
@@ -1005,7 +1273,7 @@ export default function InlineResumeEditor({
             </div>
             {/* Sidebar: Skills */}
             {sidebarVisible.find((s) => s.id === 'skills') && (
-              <div className="mb-5" data-resume-section="skills">
+              <div style={{ marginBottom: rhythm.sectionGap }} data-resume-section="skills">
                 <h3 className="text-[9px] font-bold uppercase tracking-[0.25em] mb-2 opacity-60" style={{ color: theme.headerText }}>Skills</h3>
                 <div className="flex flex-wrap gap-x-1 gap-y-0.5">
                   {data.skills.map((skill, i) => (
@@ -1042,6 +1310,7 @@ export default function InlineResumeEditor({
           </div>
           {/* Main body */}
           <div className="flex-1 px-6 py-6">
+            <AchievementHighlight />
             {mainSections.map((s, i) => renderSection(s, i, config.headingStyle, config.skillLayout))}
           </div>
         </div>
@@ -1051,7 +1320,7 @@ export default function InlineResumeEditor({
     /* ─── Layout: sidebar-right ─── */
     if (config.layout === 'sidebar-right') {
       return (
-        <div ref={resumeRef} className="w-[612px] bg-white shadow-2xl rounded-sm overflow-hidden" style={{ fontFamily }}>
+        <div ref={resumeRef} className="w-[612px] bg-white shadow-2xl rounded-sm overflow-hidden" style={{ fontFamily, '--section-gap': rhythm.sectionGap, '--bullet-gap': rhythm.bulletGap, '--header-pad': rhythm.headerPad } as React.CSSProperties}>
           <div className="px-8 py-5 flex items-end justify-between" style={{ backgroundColor: theme.headerBg }}>
             <div>
               <EditableText value={data.name} onChange={(v) => update('name', v)} tag="h1" className="text-lg font-bold mb-0.5" style={{ color: theme.headerText }} placeholder="Your Name" />
@@ -1065,6 +1334,7 @@ export default function InlineResumeEditor({
           </div>
           <div className="flex">
             <div className="flex-1 px-6 py-5 border-r border-gray-100">
+              <AchievementHighlight />
               {mainSections.map((s, i) => renderSection(s, i, config.headingStyle, config.skillLayout))}
             </div>
             <div className="w-[185px] flex-shrink-0 px-4 py-5" style={{ backgroundColor: theme.primaryLight }}>
@@ -1078,7 +1348,7 @@ export default function InlineResumeEditor({
     /* ─── Layout: centered ─── */
     if (config.layout === 'centered') {
       return (
-        <div ref={resumeRef} className="w-[612px] bg-white shadow-2xl rounded-sm overflow-hidden" style={{ fontFamily }}>
+        <div ref={resumeRef} className="w-[612px] bg-white shadow-2xl rounded-sm overflow-hidden" style={{ fontFamily, '--section-gap': rhythm.sectionGap, '--bullet-gap': rhythm.bulletGap, '--header-pad': rhythm.headerPad } as React.CSSProperties}>
           <div className="h-2" style={{ backgroundColor: theme.primary }} />
           <div className="px-10 pt-6 pb-4 text-center">
             <EditableText value={data.name} onChange={(v) => update('name', v)} tag="h1" className="text-2xl font-bold tracking-wide mb-0.5" style={{ color: theme.primary }} placeholder="Your Name" />
@@ -1086,8 +1356,14 @@ export default function InlineResumeEditor({
             <div className="w-16 h-px mx-auto mb-3" style={{ backgroundColor: theme.primary }} />
             <ContactRow color="#6b7280" separator="|" />
           </div>
+          {specialComponents.has('portfolio-hero') && <PortfolioHero />}
+          {specialComponents.has('kpi-ribbon') ? <KpiRibbon /> : <AchievementHighlight />}
           <div className="px-10 py-4">
-            {visibleSections.map((s, i) => renderSection(s, i, config.headingStyle, config.skillLayout))}
+            {visibleSections.map((s, i) => {
+              if (s.id === 'summary' && specialComponents.has('leadership-thesis')) return <LeadershipThesis key={s.id} />;
+              if (s.id === 'skills' && specialComponents.has('tech-stack-matrix')) return <TechStackMatrix key={s.id} />;
+              return renderSection(s, i, config.headingStyle, config.skillLayout);
+            })}
           </div>
         </div>
       );
@@ -1096,15 +1372,20 @@ export default function InlineResumeEditor({
     /* ─── Layout: minimal ─── */
     if (config.layout === 'minimal') {
       return (
-        <div ref={resumeRef} className="w-[612px] bg-white shadow-2xl rounded-sm overflow-hidden" style={{ fontFamily }}>
+        <div ref={resumeRef} className="w-[612px] bg-white shadow-2xl rounded-sm overflow-hidden" style={{ fontFamily, '--section-gap': rhythm.sectionGap, '--bullet-gap': rhythm.bulletGap, '--header-pad': rhythm.headerPad } as React.CSSProperties}>
           <div className="px-8 pt-7 pb-4">
             <EditableText value={data.name} onChange={(v) => update('name', v)} tag="h1" className="text-xl font-extrabold text-gray-900 mb-0.5" placeholder="Your Name" />
             <EditableText value={data.title} onChange={(v) => update('title', v)} tag="p" className="text-[12px] text-gray-500 mb-3" placeholder="Professional Title" />
             <div className="h-px bg-gray-200 mb-3" />
             <ContactRow color="#6b7280" />
           </div>
+          {specialComponents.has('github-ribbon') && <GitHubRibbon />}
+          {!specialComponents.has('github-ribbon') && <AchievementHighlight />}
           <div className="px-8 pb-6">
-            {visibleSections.map((s, i) => renderSection(s, i, config.headingStyle, config.skillLayout))}
+            {visibleSections.map((s, i) => {
+              if (s.id === 'skills' && specialComponents.has('tech-stack-matrix')) return <TechStackMatrix key={s.id} />;
+              return renderSection(s, i, config.headingStyle, config.skillLayout);
+            })}
           </div>
         </div>
       );
@@ -1113,14 +1394,17 @@ export default function InlineResumeEditor({
     /* ─── Layout: bold-bars ─── */
     if (config.layout === 'bold-bars') {
       return (
-        <div ref={resumeRef} className="w-[612px] bg-white shadow-2xl rounded-sm overflow-hidden" style={{ fontFamily }}>
+        <div ref={resumeRef} className="w-[612px] bg-white shadow-2xl rounded-sm overflow-hidden" style={{ fontFamily, '--section-gap': rhythm.sectionGap, '--bullet-gap': rhythm.bulletGap, '--header-pad': rhythm.headerPad } as React.CSSProperties}>
           <div className="px-8 pt-6 pb-3">
+            {!specialComponents.has('leadership-thesis') && <AchievementHighlight />}
             <EditableText value={data.name} onChange={(v) => update('name', v)} tag="h1" className="text-3xl font-black tracking-tight mb-0" style={{ color: theme.primary }} placeholder="Your Name" />
             <EditableText value={data.title} onChange={(v) => update('title', v)} tag="p" className="text-[13px] font-semibold uppercase tracking-[0.15em] text-gray-400 mb-3" placeholder="Professional Title" />
             <ContactRow color="#6b7280" separator="|" />
           </div>
           <div className="px-8 py-4">
-            {visibleSections.map((s, i) => (
+            {visibleSections.map((s, i) => {
+              if (s.id === 'summary' && specialComponents.has('leadership-thesis')) return <LeadershipThesis key={s.id} />;
+              return (
               <div key={s.id}>
                 <div className="flex items-center gap-2 px-3 py-1.5 -mx-1 mb-3 rounded" style={{ backgroundColor: theme.primary }}>
                   <i className={`${s.icon} text-[10px] text-white/80`} />
@@ -1133,7 +1417,8 @@ export default function InlineResumeEditor({
                   {s.id === 'education' && <EducationBlockNoHeading />}
                 </SectionWrapper>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       );
@@ -1142,12 +1427,13 @@ export default function InlineResumeEditor({
     /* ─── Layout: timeline ─── */
     if (config.layout === 'timeline') {
       return (
-        <div ref={resumeRef} className="w-[612px] bg-white shadow-2xl rounded-sm overflow-hidden" style={{ fontFamily }}>
+        <div ref={resumeRef} className="w-[612px] bg-white shadow-2xl rounded-sm overflow-hidden" style={{ fontFamily, '--section-gap': rhythm.sectionGap, '--bullet-gap': rhythm.bulletGap, '--header-pad': rhythm.headerPad } as React.CSSProperties}>
           <div className="px-8 pt-6 pb-3">
             <EditableText value={data.name} onChange={(v) => update('name', v)} tag="h1" className="text-xl font-extrabold mb-0.5" style={{ color: theme.primary }} placeholder="Your Name" />
             <EditableText value={data.title} onChange={(v) => update('title', v)} tag="p" className="text-[12px] text-gray-500 mb-3" placeholder="Professional Title" />
             <ContactRow color="#6b7280" />
           </div>
+          <AchievementHighlight />
           <div className="px-8 py-4">
             {visibleSections.find((s) => s.id === 'summary') && (
               <SectionWrapper section={visibleSections.find((s) => s.id === 'summary')!} index={0} total={visibleSections.length} onMove={moveSection} onToggle={toggleSection}>
@@ -1156,7 +1442,7 @@ export default function InlineResumeEditor({
             )}
             {visibleSections.find((s) => s.id === 'experience') && (
               <SectionWrapper section={visibleSections.find((s) => s.id === 'experience')!} index={visibleSections.findIndex((s) => s.id === 'experience')} total={visibleSections.length} onMove={moveSection} onToggle={toggleSection}>
-                <div className="mb-5" data-resume-section="experience">
+                <div style={{ marginBottom: rhythm.sectionGap }} data-resume-section="experience">
                   <div className="flex items-center justify-between">
                     <SectionHeading label="Work Experience" icon="ri-briefcase-line" color={theme.sectionLine} borderColor={theme.sectionLine} style={config.headingStyle} />
                     <button onClick={addExperience} className="opacity-0 group-hover:opacity-100 text-[10px] px-2 py-0.5 rounded bg-gray-100 text-gray-600 hover:bg-blue-100 hover:text-blue-700 font-medium"><i className="ri-add-line mr-0.5" />Add</button>
@@ -1176,14 +1462,14 @@ export default function InlineResumeEditor({
                             <div className="flex-1 min-w-0">
                               <EditableText value={exp.role} onChange={(v) => updateExp(i, 'role', v)} tag="h4" className="text-[12px] font-bold text-gray-900" placeholder="Job Title" />
                               <div className="flex items-center gap-1 text-[11px]">
-                                <EditableText value={exp.company} onChange={(v) => updateExp(i, 'company', v)} className="font-semibold" style={{ color: theme.bulletColor }} placeholder="Company" />
+                                <EditableText value={exp.company} onChange={(v) => updateExp(i, 'company', v)} className={boldTarget === 'company' ? 'font-bold' : 'font-semibold'} style={{ color: theme.bulletColor }} placeholder="Company" />
                                 <span className="text-gray-400">·</span>
                                 <EditableText value={exp.location} onChange={(v) => updateExp(i, 'location', v)} className="text-gray-500" placeholder="Location" />
                               </div>
                             </div>
                             <EditableText value={exp.period} onChange={(v) => updateExp(i, 'period', v)} className="text-[10px] text-gray-400 whitespace-nowrap ml-3 flex-shrink-0 px-2 py-0.5 rounded-full" style={{ backgroundColor: `${theme.primary}10`, color: theme.primary }} placeholder="Period" />
                           </div>
-                          <ul className="mt-1.5 space-y-1">
+                          <ul className="mt-1.5" style={{ display: "flex", flexDirection: "column", gap: rhythm.bulletGap }}>
                             {exp.bullets.map((b, j) => (
                               <li key={j} data-resume-bullet className="flex items-start gap-1.5 group/bullet text-[11px] text-gray-600">
                                 <span className="mt-[5px] flex-shrink-0 w-1 h-1 rounded-full" style={{ backgroundColor: theme.bulletColor }} />
@@ -1211,7 +1497,7 @@ export default function InlineResumeEditor({
       const leftSections = visibleSections.filter((s) => s.id === 'experience');
       const rightSections = visibleSections.filter((s) => s.id === 'summary' || s.id === 'skills' || s.id === 'education');
       return (
-        <div ref={resumeRef} className="w-[612px] bg-white shadow-2xl rounded-sm overflow-hidden" style={{ fontFamily }}>
+        <div ref={resumeRef} className="w-[612px] bg-white shadow-2xl rounded-sm overflow-hidden" style={{ fontFamily, '--section-gap': rhythm.sectionGap, '--bullet-gap': rhythm.bulletGap, '--header-pad': rhythm.headerPad } as React.CSSProperties}>
           <div className="px-6 py-3 flex items-center justify-between" style={{ backgroundColor: theme.headerBg }}>
             <div>
               <EditableText value={data.name} onChange={(v) => update('name', v)} tag="h1" className="text-base font-bold" style={{ color: theme.headerText }} placeholder="Your Name" />
@@ -1224,6 +1510,7 @@ export default function InlineResumeEditor({
               <span className="flex items-center gap-0.5"><i className="ri-map-pin-line" /><EditableText value={data.location} onChange={(v) => update('location', v)} placeholder="Location" /></span>
             </div>
           </div>
+          <AchievementHighlight />
           <div className="flex">
             <div className="flex-1 px-5 py-4">
               {leftSections.map((s, i) => renderSection(s, i, config.headingStyle, config.skillLayout))}
@@ -1238,12 +1525,13 @@ export default function InlineResumeEditor({
 
     /* fallback — header-single */
     return (
-      <div ref={resumeRef} className="w-[612px] bg-white shadow-2xl rounded-sm overflow-hidden" style={{ fontFamily: FONT_SANS }}>
+      <div ref={resumeRef} className="w-[612px] bg-white shadow-2xl rounded-sm overflow-hidden" style={{ fontFamily: FONT_SANS, '--section-gap': rhythm.sectionGap, '--bullet-gap': rhythm.bulletGap, '--header-pad': rhythm.headerPad } as React.CSSProperties}>
         <div className="px-8 py-5" style={{ backgroundColor: theme.headerBg }}>
           <EditableText value={data.name} onChange={(v) => update('name', v)} tag="h1" className="text-xl font-bold mb-0.5" style={{ color: theme.headerText }} placeholder="Your Name" />
           <EditableText value={data.title} onChange={(v) => update('title', v)} tag="p" className="text-sm font-medium mb-3 opacity-85" style={{ color: theme.headerText }} placeholder="Professional Title" />
           <ContactRow color={`${theme.headerText}cc`} />
         </div>
+        <AchievementHighlight />
         <div className="px-8 py-6">
           {visibleSections.map((s, i) => renderSection(s, i, 'underline', 'tags'))}
         </div>
@@ -1345,14 +1633,14 @@ export default function InlineResumeEditor({
 
       {/* ─── Resume Preview ─── */}
       <div className="relative pl-12">
-        {/* Multi-page container: gray surface behind page cards */}
+        {/* Multi-page container: gray surface pages sit on (PDF viewer style) */}
         <div
           className={`relative ${
             totalPages > 1
-              ? 'bg-slate-200/70 rounded-xl p-5'
+              ? 'bg-gray-200 rounded-sm p-4 pt-4 pb-4'
               : ''
           }`}
-          style={{ width: totalPages > 1 ? 652 : 612 }}
+          style={{ width: totalPages > 1 ? 644 : 612 }}
         >
           {/* Content layer: actual editable resumeRef (for editing + html2canvas capture) */}
           <div
@@ -1364,81 +1652,53 @@ export default function InlineResumeEditor({
           >
             {renderTemplate()}
 
-            {/* Per-page number watermarks (overlaid on content) */}
-            {totalPages > 1 && pageRanges.map((range, idx) => (
-              <div
-                key={`pn-${idx}`}
-                className="absolute right-4 z-10 pointer-events-none select-none"
-                style={{ top: range.startY + range.height - 24 }}
-              >
-                <span className="text-[9px] font-medium text-gray-300">
-                  {idx + 1} / {totalPages}
-                </span>
-              </div>
-            ))}
 
-            {/* Page-break gap overlays: solid strips that visually separate pages */}
+
+            {/* Page-break overlays: clean gap between stacked pages (PDF viewer style) */}
             {pageBreakPositions.map((y, idx) => (
               <div
                 key={`gap-${idx}`}
                 className="absolute z-20 pointer-events-none"
                 style={{
-                  left: totalPages > 1 ? -20 : -16,
-                  right: totalPages > 1 ? -20 : -16,
+                  left: -4,
+                  right: -4,
                   top: y - PAGE_GAP / 2,
                   height: PAGE_GAP,
                 }}
               >
-                {/* Top shadow: bottom edge of current page */}
+                {/* Bottom edge shadow of current page */}
                 <div
-                  className="absolute top-0 left-0 right-0 h-2"
+                  className="absolute top-0 left-1 right-1 h-[6px]"
                   style={{
-                    background: 'linear-gradient(to bottom, rgba(255,255,255,0.9), transparent)',
-                    boxShadow: '0 4px 12px -2px rgba(0,0,0,0.12)',
+                    boxShadow: '0 4px 8px -1px rgba(0,0,0,0.15), 0 2px 4px -2px rgba(0,0,0,0.1)',
+                    borderRadius: '0 0 2px 2px',
+                    background: 'white',
                   }}
                 />
-                {/* Gap area */}
+                {/* Visible gap — shows the gray background between pages */}
+                <div className="w-full h-full" style={{ backgroundColor: '#e5e7eb' }} />
+                {/* Top edge shadow of next page */}
                 <div
-                  className="w-full h-full flex items-center justify-center"
-                  style={{ backgroundColor: totalPages > 1 ? '#cbd5e1' : '#e2e8f0' }}
-                >
-                  <div className="flex items-center gap-1.5 px-3 py-1 bg-white/90 rounded-full shadow-sm border border-slate-300/60">
-                    <i className="ri-file-line text-[10px] text-slate-400" />
-                    <span className="text-[10px] font-semibold text-slate-500">
-                      Page {idx + 2}
-                    </span>
-                  </div>
-                </div>
-                {/* Bottom shadow: top edge of next page */}
-                <div
-                  className="absolute bottom-0 left-0 right-0 h-2"
+                  className="absolute bottom-0 left-1 right-1 h-[6px]"
                   style={{
-                    background: 'linear-gradient(to top, rgba(255,255,255,0.9), transparent)',
-                    boxShadow: '0 -4px 12px -2px rgba(0,0,0,0.12)',
+                    boxShadow: '0 -4px 8px -1px rgba(0,0,0,0.15), 0 -2px 4px -2px rgba(0,0,0,0.1)',
+                    borderRadius: '2px 2px 0 0',
+                    background: 'white',
                   }}
                 />
               </div>
             ))}
           </div>
 
-          {/* "Page 1" label at top-right when multi-page */}
-          {totalPages > 1 && (
-            <div className="absolute top-7 right-7 pointer-events-none select-none">
-              <span className="text-[10px] font-medium text-slate-400 bg-white/80 px-2 py-0.5 rounded-full border border-slate-200/60 shadow-sm">
-                Page 1
-              </span>
-            </div>
-          )}
+
         </div>
 
         {/* Page count indicator */}
-        <div className={`mt-4 text-center text-xs font-medium ${
-          totalPages > 1 ? 'text-amber-600' : 'text-emerald-600'
-        }`}>
-          {totalPages === 1
-            ? <span className="flex items-center justify-center gap-1"><i className="ri-checkbox-circle-line" />Fits on 1 page</span>
-            : <span className="flex items-center justify-center gap-1"><i className="ri-file-copy-2-line" />{totalPages} pages — consider condensing to fit on 1 page</span>
-          }
+        <div className="mt-4 text-center text-xs font-medium text-slate-500">
+          <span className="flex items-center justify-center gap-1">
+            <i className={totalPages === 1 ? 'ri-file-line' : 'ri-file-copy-2-line'} />
+            {totalPages} {totalPages === 1 ? 'page' : 'pages'}
+          </span>
         </div>
       </div>
 
