@@ -32,7 +32,19 @@ function EditableText({
   const [editing, setEditing] = useState(false);
 
   useEffect(() => {
-    if (ref.current && !editing) ref.current.textContent = value;
+    if (ref.current && !editing) {
+      // Escape HTML entities, then parse **bold** markers into <strong> tags
+      const escaped = value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      const html = escaped.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+      if (html !== escaped || value.includes('**')) {
+        ref.current.innerHTML = html;
+      } else {
+        ref.current.textContent = value;
+      }
+    }
   }, [value, editing]);
 
   const Tag = tag as any;
@@ -52,7 +64,8 @@ function EditableText({
       onBlur={(e: any) => {
         setEditing(false);
         const text = multiline ? e.target.innerText : e.target.textContent;
-        if (text !== value) onChange(text || '');
+        const cleanValue = value.replace(/\*\*/g, '');
+        if (text !== cleanValue) onChange(text || '');
       }}
       onKeyDown={(e: React.KeyboardEvent) => {
         if (!multiline && e.key === 'Enter') {
@@ -819,7 +832,8 @@ export default function InlineResumeEditor({
     const metrics: { value: string; label: string; numericValue: number }[] = [];
     const metricPattern = /(?:\$[\d,.]+[MBKmk]?|\d+(?:\.\d+)?[%xX]|\d+\+)/g;
     for (const exp of data.experience) {
-      for (const bullet of exp.bullets) {
+      for (const rawBullet of exp.bullets) {
+        const bullet = rawBullet.replace(/\*\*/g, '');
         let match;
         while ((match = metricPattern.exec(bullet)) !== null) {
           const raw = match[0];
