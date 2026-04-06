@@ -73,7 +73,7 @@ export default function ResumeComparisonPage() {
   const location = useLocation();
   const [optimizationData, setOptimizationData] = useState<OptimizationData | null>(null);
   const [resumeData, setResumeData] = useState<ResumeData | null>(null);
-  const [activeTab, setActiveTab] = useState<'editor' | 'changes'>('editor');
+
 
   // Page optimization state
   const [selectedVariant, setSelectedVariant] = useState<any>(null);
@@ -655,126 +655,15 @@ export default function ResumeComparisonPage() {
             )}
           </div>
 
-          {/* Tabs */}
-          <div className="flex gap-1 mb-6 justify-center">
-            <button
-              onClick={() => setActiveTab('editor')}
-              className={`px-5 py-2.5 rounded-xl font-semibold text-sm transition-all ${
-                activeTab === 'editor'
-                  ? 'bg-gray-900 text-white shadow-lg'
-                  : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
-              }`}
-            >
-              <i className="ri-edit-2-line mr-1.5"></i>Edit Resume
-            </button>
-            <button
-              onClick={() => setActiveTab('changes')}
-              className={`px-5 py-2.5 rounded-xl font-semibold text-sm transition-all ${
-                activeTab === 'changes'
-                  ? 'bg-gray-900 text-white shadow-lg'
-                  : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
-              }`}
-            >
-              <i className="ri-git-commit-line mr-1.5"></i>What Changed
-            </button>
-          </div>
-
-          {/* Editor Tab */}
-          {activeTab === 'editor' && resumeData && (
-            <InlineResumeEditor data={resumeData} onDataChange={setResumeData} initialTemplateId={recommendedTemplate} variantId={variantId} variantRationale={variantRationale} onPageCountChange={handlePageCountChange} activeDynamicConfig={activeDynamicConfig} dynamicConfigs={dynamicConfigs} dynamicLoading={dynamicLoading} onDynamicTemplateSelect={handleDynamicTemplateSelect} />
+          {/* Resume Editor with inline annotations */}
+          {resumeData && (
+            <InlineResumeEditor data={resumeData} onDataChange={setResumeData} initialTemplateId={recommendedTemplate} variantId={variantId} variantRationale={variantRationale} onPageCountChange={handlePageCountChange} activeDynamicConfig={activeDynamicConfig} dynamicConfigs={dynamicConfigs} dynamicLoading={dynamicLoading} onDynamicTemplateSelect={handleDynamicTemplateSelect} changesMade={optimizationData?.changes_made} keywordsAdded={optimizationData?.keywords_added} />
           )}
 
-          {activeTab === 'editor' && !resumeData && (
+          {!resumeData && (
             <div className="text-center py-20">
               <i className="ri-file-warning-line text-5xl text-gray-300 mb-4 block"></i>
               <p className="text-gray-500">Unable to load resume data. Please try optimizing again.</p>
-            </div>
-          )}
-
-          {/* Changes Tab */}
-          {activeTab === 'changes' && (
-            <div className="max-w-3xl mx-auto space-y-8">
-              {optimizationData.changes_made && optimizationData.changes_made.length > 0 && (
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                    <i className="ri-git-commit-line text-teal-600"></i>
-                    Changes Made
-                  </h2>
-                  <div className="space-y-3">
-                    {optimizationData.changes_made.map((change, idx) => (
-                      <div
-                        key={idx}
-                        className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 hover:border-teal-200 transition-all"
-                      >
-                        <div className="flex items-start gap-3">
-                          <div className="w-7 h-7 rounded-lg bg-teal-100 flex items-center justify-center flex-shrink-0">
-                            <span className="text-xs font-bold text-teal-600">{idx + 1}</span>
-                          </div>
-                          <div className="flex-1">
-                            <h3 className="text-sm font-bold text-gray-900 capitalize mb-1">
-                              {change.section}
-                            </h3>
-                            <p className="text-sm text-gray-600 mb-2">{change.what_changed}</p>
-                            <div className="text-xs text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg inline-flex items-center gap-1">
-                              <i className="ri-lightbulb-line"></i>
-                              {change.why}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {optimizationData.key_improvements && optimizationData.key_improvements.length > 0 && (
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                    <i className="ri-rocket-line text-emerald-600"></i>
-                    Key Improvements
-                  </h2>
-                  <div className="grid gap-2">
-                    {optimizationData.key_improvements.map((imp, idx) => (
-                      <div
-                        key={idx}
-                        className="flex items-start gap-2.5 px-4 py-3 bg-emerald-50 rounded-xl border border-emerald-100"
-                      >
-                        <i className="ri-check-double-line text-emerald-600 mt-0.5 flex-shrink-0"></i>
-                        <span className="text-sm text-emerald-900">{imp}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {optimizationData.keywords_added && optimizationData.keywords_added.length > 0 && (
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                    <i className="ri-hashtag text-blue-600"></i>
-                    Keywords Added
-                  </h2>
-                  <div className="flex flex-wrap gap-2">
-                    {optimizationData.keywords_added.map((kw, idx) => (
-                      <span
-                        key={idx}
-                        className="px-3 py-1.5 rounded-full bg-blue-50 text-blue-700 text-sm font-medium border border-blue-100"
-                      >
-                        {kw}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="text-center pt-4">
-                <button
-                  onClick={() => setActiveTab('editor')}
-                  className="px-6 py-3 rounded-xl bg-gray-900 text-white font-semibold hover:bg-gray-800 transition-all shadow-lg"
-                >
-                  <i className="ri-edit-2-line mr-2"></i>
-                  Edit Your Resume
-                </button>
-              </div>
             </div>
           )}
         </div>

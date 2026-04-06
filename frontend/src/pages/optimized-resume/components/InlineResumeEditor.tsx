@@ -1,7 +1,8 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo, createContext, useContext } from 'react';
 import { ResumeData, SectionId, ResumeSection, ColorTheme, TemplateId, DynamicTemplateConfig } from '../types';
 import { RESUME_TEMPLATES, getDefaultTheme, getVariantTemplates } from './themes';
 import TemplatePicker from './TemplatePicker';
+import ChangeAnnotations, { ChangeAnnotation } from './ChangeAnnotations';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import PaymentModal from '../../../components/PaymentModal';
@@ -11,6 +12,8 @@ import { authFetch } from '../../../services/authFetch';
 /* ══════════════════════════════════════════════
    Editable Text — click-to-edit with contentEditable
    ══════════════════════════════════════════════ */
+const HighlightContext = createContext<string[]>([]);
+
 function EditableText({
   value,
   onChange,
@@ -19,6 +22,7 @@ function EditableText({
   placeholder = 'Click to edit',
   multiline = false,
   style,
+  highlights,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -27,8 +31,11 @@ function EditableText({
   placeholder?: string;
   multiline?: boolean;
   style?: React.CSSProperties;
+  highlights?: string[];
 }) {
   const ref = useRef<HTMLElement>(null);
+  const ctxHighlights = useContext(HighlightContext);
+  const effectiveHighlights = highlights?.length ? highlights : ctxHighlights;
   const [editing, setEditing] = useState(false);
 
   useEffect(() => {
@@ -38,14 +45,18 @@ function EditableText({
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;');
-      const html = escaped.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-      if (html !== escaped || value.includes('**')) {
-        ref.current.innerHTML = html;
-      } else {
-        ref.current.textContent = value;
+      let html = escaped.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+      // Highlight added keywords with subtle mark
+      if (effectiveHighlights?.length) {
+        const sorted = [...effectiveHighlights].sort((a, b) => b.length - a.length);
+        for (const kw of sorted) {
+          const safeKw = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          html = html.replace(new RegExp(`(\\b)(${safeKw})(\\b)`, 'gi'), '$1<mark class="bg-amber-100/70 text-inherit rounded-sm px-[1px]" style="text-decoration:none">$2</mark>$3');
+        }
       }
+      ref.current.innerHTML = html;
     }
-  }, [value, editing]);
+  }, [value, editing, effectiveHighlights]);
 
   const Tag = tag as any;
 
@@ -345,6 +356,8 @@ export default function InlineResumeEditor({
   dynamicConfigs,
   dynamicLoading,
   onDynamicTemplateSelect,
+  changesMade,
+  keywordsAdded,
 }: {
   data: ResumeData;
   onDataChange: (d: ResumeData) => void;
@@ -356,6 +369,8 @@ export default function InlineResumeEditor({
   dynamicConfigs?: Record<string, DynamicTemplateConfig>;
   dynamicLoading?: Record<string, boolean>;
   onDynamicTemplateSelect?: (configKey: string | undefined) => void;
+  changesMade?: ChangeAnnotation[];
+  keywordsAdded?: string[];
 }) {
   const [templateId, setTemplateId] = useState<TemplateId>(initialTemplateId);
   const variantTemplates = variantId ? getVariantTemplates(variantId) : RESUME_TEMPLATES.slice(0, 5);
@@ -1951,6 +1966,8 @@ export default function InlineResumeEditor({
       </div>
 
       {/* ─── Resume Preview ─── */}
+      <HighlightContext.Provider value={keywordsAdded || []}>
+      <div className="flex items-start gap-5">
       <div className="relative pl-12">
         {/* Multi-page container: gray surface pages sit on (PDF viewer style) */}
         <div
@@ -2020,6 +2037,19 @@ export default function InlineResumeEditor({
           </span>
         </div>
       </div>
+
+      {/* Change Annotations Sidebar */}
+      {(changesMade?.length || keywordsAdded?.length) ? (
+        <div className="sticky top-4 mt-12 hidden xl:block">
+          <ChangeAnnotations
+            changes={changesMade || []}
+            keywords={keywordsAdded || []}
+            resumeContainerRef={resumeRef}
+          />
+        </div>
+      ) : null}
+      </div>
+      </HighlightContext.Provider>
 
       {/* Click-outside to close section picker */}
       {showAddSection && (
