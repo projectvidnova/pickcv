@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import Navbar from '../../components/feature/Navbar';
 import Footer from '../../components/feature/Footer';
 import InlineResumeEditor from '../optimized-resume/components/InlineResumeEditor';
-import { ResumeData } from '../optimized-resume/types';
+import { ResumeData, DynamicTemplateConfig, PersonaAngle } from '../optimized-resume/types';
 import { getVariantTemplates } from '../optimized-resume/components/themes';
 import { authFetch } from '../../services/authFetch';
 
@@ -91,12 +91,26 @@ export default function ResumeComparisonPage() {
   const [variantId, setVariantId] = useState<string | undefined>();
   const [variantRationale, setVariantRationale] = useState<string | undefined>();
 
+  // Dynamic template configs (LLM-generated per-person templates)
+  const [dynamicConfigs, setDynamicConfigs] = useState<Record<string, DynamicTemplateConfig>>({});
+  const [dynamicLoading, setDynamicLoading] = useState<Record<string, boolean>>({});
+  const [activeDynamicConfig, setActiveDynamicConfig] = useState<DynamicTemplateConfig | undefined>();
+
   // Full (original) data preserved for switching between views
   const [fullResumeData, setFullResumeData] = useState<ResumeData | null>(null);
 
   // Actual rendered page count from InlineResumeEditor
   const [actualPageCount, setActualPageCount] = useState(1);
   const handlePageCountChange = useCallback((pages: number) => setActualPageCount(pages), []);
+
+  // Callback for when TemplatePicker (inside editor) selects a dynamic template
+  const handleDynamicTemplateSelect = useCallback((configKey: string | undefined) => {
+    if (!configKey) {
+      setActiveDynamicConfig(undefined);
+    } else {
+      setActiveDynamicConfig(dynamicConfigs[configKey]);
+    }
+  }, [dynamicConfigs]);
 
   // Smart deprioritize options derived from actual resume data
   const smartDeprioritizeOptions = useMemo(() => {
@@ -171,6 +185,44 @@ export default function ResumeComparisonPage() {
       navigate('/');
     }
   }, [navigate, location.state]);
+
+  /* ─── Fire 4 parallel dynamic template generation calls ─── */
+  useEffect(() => {
+    if (!fullResumeData || !variantId || !selectedVariant?.resume_data) return;
+
+    const PERSONA_ANGLES: PersonaAngle[] = ['depth', 'impact', 'narrative', 'breadth'];
+    const staticConfig = getVariantTemplates(variantId as any)[0];
+
+    PERSONA_ANGLES.forEach((angle, idx) => {
+      const slotIndex = idx + 2; // slots 2-5
+      const configKey = `dynamic-${slotIndex}`;
+
+      setDynamicLoading(prev => ({ ...prev, [configKey]: true }));
+
+      authFetch(`${import.meta.env.VITE_API_URL}/resume/generate-dynamic-template`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          variant_id: variantId,
+          resume_data: selectedVariant.resume_data,
+          persona_angle: angle,
+          slot_index: slotIndex,
+          role_dna: optimizationData?.resume_os?.recommended_variant?.rationale || '',
+          static_template_config: staticConfig ? { layout: staticConfig.layout, headingStyle: staticConfig.headingStyle, fontFamily: staticConfig.fontFamily } : {},
+        }),
+      })
+        .then(res => res.json())
+        .then(json => {
+          if (json.config) {
+            setDynamicConfigs(prev => ({ ...prev, [configKey]: json.config as DynamicTemplateConfig }));
+          }
+        })
+        .catch(() => { /* silently fail — static templates remain */ })
+        .finally(() => {
+          setDynamicLoading(prev => ({ ...prev, [configKey]: false }));
+        });
+    });
+  }, [fullResumeData, variantId, selectedVariant]);
 
   const hydrateOptimizationData = (data: OptimizationData) => {
     setOptimizationData(data);
@@ -626,7 +678,7 @@ export default function ResumeComparisonPage() {
 
           {/* Editor Tab */}
           {activeTab === 'editor' && resumeData && (
-            <InlineResumeEditor data={resumeData} onDataChange={setResumeData} initialTemplateId={recommendedTemplate} variantId={variantId} variantRationale={variantRationale} onPageCountChange={handlePageCountChange} />
+            <InlineResumeEditor data={resumeData} onDataChange={setResumeData} initialTemplateId={recommendedTemplate} variantId={variantId} variantRationale={variantRationale} onPageCountChange={handlePageCountChange} activeDynamicConfig={activeDynamicConfig} dynamicConfigs={dynamicConfigs} dynamicLoading={dynamicLoading} onDynamicTemplateSelect={handleDynamicTemplateSelect} />
           )}
 
           {activeTab === 'editor' && !resumeData && (

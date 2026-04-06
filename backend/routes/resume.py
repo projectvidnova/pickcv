@@ -7,7 +7,7 @@ import logging
 
 from database import get_db
 from models import User, Resume
-from schemas import ResumeResponse, ResumeDetail, ResumeOptimizationRequest, ResumeCompressRequest
+from schemas import ResumeResponse, ResumeDetail, ResumeOptimizationRequest, ResumeCompressRequest, DynamicTemplateRequest
 from routes.auth import get_current_user
 from services.resume_processor import resume_processor
 from services.gemini_service import gemini_service
@@ -636,4 +636,30 @@ async def get_stored_linkedin_data(
         "posts": current_user.linkedin_profile_data.get("posts", []),
         "fetched_at": current_user.linkedin_profile_data.get("fetched_at"),
     }
+
+
+@router.post("/generate-dynamic-template")
+async def generate_dynamic_template(
+    request: DynamicTemplateRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """Generate a unique LLM-designed template configuration for a specific person.
+
+    Called for template slots 2-5 after the initial optimization loads.
+    Each slot gets a different persona_angle (depth/impact/narrative/breadth)
+    producing a truly unique template tailored to the individual.
+    """
+    try:
+        config = await resume_os_orchestrator.generate_dynamic_template(
+            resume_data=request.resume_data,
+            variant_id=request.variant_id,
+            persona_angle=request.persona_angle,
+            slot_index=request.slot_index,
+            role_dna=request.role_dna,
+            static_template_config=request.static_template_config,
+        )
+        return config
+    except Exception as e:
+        logger.error(f"Dynamic template generation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Template generation failed: {str(e)}")
 
