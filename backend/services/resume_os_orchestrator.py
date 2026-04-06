@@ -1154,6 +1154,7 @@ class ResumeOSOrchestrator:
         slot_index: int,
         role_dna: Dict,
         job_title: str = "",
+        job_description: str = "",
         static_template_config: Optional[Dict] = None,
     ) -> Dict:
         """Generate a unique, person-specific template configuration using LLM.
@@ -1202,6 +1203,13 @@ class ResumeOSOrchestrator:
                 jd_context_parts.append(f"Work Environment: {role_dna['environment']}")
             if role_dna.get("cluster_name"):
                 jd_context_parts.append(f"Industry Cluster: {role_dna['cluster_name']}")
+        # Include truncated JD text for rich context (max 800 chars to stay within prompt budget)
+        if job_description:
+            jd_summary = job_description[:800].strip()
+            if len(job_description) > 800:
+                jd_summary += "..."
+            jd_context_parts.append(f"Job Description (excerpt):\n{jd_summary}")
+
         jd_block = ""
         if jd_context_parts:
             jd_block = "\nTARGET JOB CONTEXT:\n" + "\n".join(f"- {p}" for p in jd_context_parts)

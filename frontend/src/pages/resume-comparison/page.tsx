@@ -16,6 +16,7 @@ interface DeprioritizeOption {
 interface OptimizationData {
   resumeId: number;
   job_title: string;
+  job_description?: string;
   optimized_resume: string;
   changes_made: Array<{ section: string; what_changed: string; why: string }>;
   key_improvements: string[];
@@ -209,6 +210,7 @@ export default function ResumeComparisonPage() {
           slot_index: slotIndex,
           role_dna: optimizationData?.resume_os?.role_dna || {},
           job_title: optimizationData?.job_title || '',
+          job_description: optimizationData?.job_description || '',
           static_template_config: staticConfig ? { layout: staticConfig.layout, headingStyle: staticConfig.headingStyle, fontFamily: staticConfig.fontFamily } : {},
         }),
       })

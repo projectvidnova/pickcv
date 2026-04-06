@@ -343,6 +343,7 @@ async def optimize_resume_for_job(
     return {
         "resume_id": resume_id,
         "job_title": job_title,
+        "job_description": job_description,
         "optimized_resume": optimization_result.get("optimized_resume", ""),
         "name": optimization_result.get("name", ""),
         "title": optimization_result.get("title", ""),
@@ -657,6 +658,7 @@ async def generate_dynamic_template(
             slot_index=request.slot_index,
             role_dna=request.role_dna,
             job_title=request.job_title,
+            job_description=request.job_description,
             static_template_config=request.static_template_config,
         )
         return config
