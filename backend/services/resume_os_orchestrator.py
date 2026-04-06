@@ -1153,6 +1153,7 @@ class ResumeOSOrchestrator:
         persona_angle: str,
         slot_index: int,
         role_dna: Dict,
+        job_title: str = "",
         static_template_config: Optional[Dict] = None,
     ) -> Dict:
         """Generate a unique, person-specific template configuration using LLM.
@@ -1187,6 +1188,23 @@ class ResumeOSOrchestrator:
 
         metric_bullets = [b for b in all_bullets if _re.search(r'\d+[%xX$+]|\$[\d,]+', b)]
         density = "dense" if total_bullets > 15 else "moderate" if total_bullets > 8 else "sparse"
+
+        # ── Build job description context ──
+        jd_context_parts = []
+        if job_title:
+            jd_context_parts.append(f"Target Job Title: {job_title}")
+        if isinstance(role_dna, dict):
+            if role_dna.get("function"):
+                jd_context_parts.append(f"Role Function: {role_dna['function']}")
+            if role_dna.get("level"):
+                jd_context_parts.append(f"Seniority Level: {role_dna['level']}")
+            if role_dna.get("environment"):
+                jd_context_parts.append(f"Work Environment: {role_dna['environment']}")
+            if role_dna.get("cluster_name"):
+                jd_context_parts.append(f"Industry Cluster: {role_dna['cluster_name']}")
+        jd_block = ""
+        if jd_context_parts:
+            jd_block = "\nTARGET JOB CONTEXT:\n" + "\n".join(f"- {p}" for p in jd_context_parts)
 
         # Build role summaries for LLM
         role_summaries = []
@@ -1230,6 +1248,8 @@ ALL BULLETS (with indices for selection):
 SKILLS LIST:
 {', '.join(skills[:30])}
 
+{jd_block}
+
 DESIGN BRIEF:
 - Variant voice: {voice}
 - Narrative angle: {persona_angle.upper()} — {angle_info['instruction']}
@@ -1247,14 +1267,15 @@ AVAILABLE OPTIONS:
 RULES:
 1. Pick a layout that best serves this person's content shape and the narrative angle
 2. Choose typography that matches the variant voice
-3. Set sectionOrder to put the person's STRONGEST content first based on the angle
-4. Write creative sectionTitles that match the narrative (e.g. "Engineering Impact" not just "Experience")
-5. Select 2-3 most compelling metrics for achievementBarMetrics
-6. For bulletStrategy: pick the strongest bullets per role for this angle (max 4 per role). Use actual [role,bullet] indices from the bullet list above. If the angle is "impact", prioritize metric-heavy bullets. If "depth", prioritize technical detail bullets.
-7. If the person has 8+ skills, group them into 2-4 meaningful categories
-8. Optionally rewrite the summary (2-3 sentences) to match this template's narrative angle. Keep ALL facts true — only change the framing/emphasis. If the existing summary is good for this angle, set summaryRewrite to null.
-9. Choose colors that feel professional. primary must be a dark, muted hex color. accent is a complementary color.
-10. NEVER fabricate data. Only reorder, select, or rephrase what exists.
+3. Set sectionOrder to put the person's STRONGEST content first based on the angle AND the target job requirements. If targeting a technical role, lead with skills/experience. If targeting a leadership role, lead with impact/summary.
+4. Tailor sectionTitles, bullet selection, and skill grouping to EMPHASIZE alignment with the target job. For example, if the target is "Senior Data Engineer", title the skills section "Data Engineering Stack" and prioritize data-related bullets.
+5. Write creative sectionTitles that match the narrative AND target role (e.g. "Engineering Impact at Scale" not just "Experience")
+6. Select 2-3 most compelling metrics for achievementBarMetrics
+7. For bulletStrategy: pick the strongest bullets per role for this angle (max 4 per role). Use actual [role,bullet] indices from the bullet list above. If the angle is "impact", prioritize metric-heavy bullets. If "depth", prioritize technical detail bullets.
+8. If the person has 8+ skills, group them into 2-4 meaningful categories
+9. Optionally rewrite the summary (2-3 sentences) to match this template's narrative angle. Keep ALL facts true — only change the framing/emphasis. If the existing summary is good for this angle, set summaryRewrite to null.
+10. Choose colors that feel professional. primary must be a dark, muted hex color. accent is a complementary color.
+11. NEVER fabricate data. Only reorder, select, or rephrase what exists.
 
 Return a JSON object with this exact schema:
 {{

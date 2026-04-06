@@ -56,6 +56,7 @@ class DynamicTemplateRequest(BaseModel):
     persona_angle: str = Field(..., pattern=r'^(depth|impact|narrative|breadth)$')
     slot_index: int = Field(..., ge=2, le=5)
     role_dna: Dict[str, Any] = Field(default_factory=dict)
+    job_title: str = Field(default="")
     static_template_config: Optional[Dict[str, Any]] = None
 
     class Config:

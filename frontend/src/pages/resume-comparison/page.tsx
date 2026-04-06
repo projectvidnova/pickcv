@@ -207,7 +207,8 @@ export default function ResumeComparisonPage() {
           resume_data: selectedVariant.resume_data,
           persona_angle: angle,
           slot_index: slotIndex,
-          role_dna: optimizationData?.resume_os?.recommended_variant?.rationale || '',
+          role_dna: optimizationData?.resume_os?.role_dna || {},
+          job_title: optimizationData?.job_title || '',
           static_template_config: staticConfig ? { layout: staticConfig.layout, headingStyle: staticConfig.headingStyle, fontFamily: staticConfig.fontFamily } : {},
         }),
       })

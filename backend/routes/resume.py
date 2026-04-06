@@ -656,6 +656,7 @@ async def generate_dynamic_template(
             persona_angle=request.persona_angle,
             slot_index=request.slot_index,
             role_dna=request.role_dna,
+            job_title=request.job_title,
             static_template_config=request.static_template_config,
         )
         return config
