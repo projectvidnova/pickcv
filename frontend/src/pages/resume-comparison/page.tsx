@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Navbar from '../../components/feature/Navbar';
 import Footer from '../../components/feature/Footer';
@@ -7,28 +7,17 @@ import { ResumeData, DynamicTemplateConfig, PersonaAngle } from '../optimized-re
 import { getVariantTemplates } from '../optimized-resume/components/themes';
 import { authFetch } from '../../services/authFetch';
 
-/** Word-level diff: returns JSX with changed words highlighted */
-function renderWordDiff(original: string, rewritten: string): { origNodes: ReactNode; newNodes: ReactNode } {
-  const origWords = original.split(/(\s+)/);
-  const newWords = rewritten.split(/(\s+)/);
-  const origSet = new Set(origWords.filter(w => w.trim()));
-  const newSet = new Set(newWords.filter(w => w.trim()));
-
-  const origNodes = origWords.map((word, i) => {
-    if (!word.trim()) return word;
-    return newSet.has(word)
-      ? <span key={i}>{word}</span>
-      : <span key={i} className="bg-red-100 text-red-700 px-0.5 rounded">{word}</span>;
-  });
-
-  const newNodes = newWords.map((word, i) => {
-    if (!word.trim()) return word;
-    return origSet.has(word)
-      ? <span key={i}>{word}</span>
-      : <span key={i} className="bg-emerald-100 text-emerald-700 px-0.5 rounded">{word}</span>;
-  });
-
-  return { origNodes, newNodes };
+/** Build a set of rewritten bullet strings for quick lookup */
+function buildChangeLookup(changes: OptimizationData['changes_made']) {
+  const rewrittenSet = new Set<string>();
+  const changeMap = new Map<string, { original?: string; why: string; section: string; requirement_matched?: string }>();
+  for (const c of (changes || [])) {
+    if (c.rewritten) {
+      rewrittenSet.add(c.rewritten.trim());
+      changeMap.set(c.rewritten.trim(), { original: c.original, why: c.why, section: c.section, requirement_matched: c.requirement_matched });
+    }
+  }
+  return { rewrittenSet, changeMap };
 }
 
 interface DeprioritizeOption {
@@ -689,32 +678,17 @@ export default function ResumeComparisonPage() {
           </div>
 
           {/* View Mode Toggle */}
-          <div className="flex items-center justify-center gap-2 mb-6">
-            <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-xl">
+          {!showComparison && (
+            <div className="flex items-center justify-center mb-6">
               <button
                 onClick={() => setShowComparison(true)}
-                className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-                  showComparison
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
+                className="px-5 py-2.5 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 bg-white text-gray-700 border border-gray-200 shadow-sm hover:shadow-md hover:border-gray-300"
               >
-                <i className="ri-layout-column-line mr-1.5"></i>
-                Before & After
-              </button>
-              <button
-                onClick={() => setShowComparison(false)}
-                className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-                  !showComparison
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                <i className="ri-edit-2-line mr-1.5"></i>
-                Editor
+                <i className="ri-arrow-left-line text-gray-400"></i>
+                Back to Before & After
               </button>
             </div>
-          </div>
+          )}
 
           {/* ═══ Side-by-Side Comparison View ═══ */}
           {showComparison && resumeData && (
@@ -729,192 +703,264 @@ export default function ResumeComparisonPage() {
                 </div>
               )}
 
-              <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* LEFT: Original Resume */}
-                <div>
-                  <div className="flex items-center gap-2 mb-3 px-1">
-                    <div className="w-3 h-3 rounded-full bg-gray-400"></div>
-                    <h3 className="text-sm font-bold text-gray-600 uppercase tracking-wider">Original Resume</h3>
-                  </div>
-                  <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6 sm:p-8 text-sm leading-relaxed text-gray-700 max-h-[800px] overflow-y-auto">
-                    {optimizationData.original_resume_text ? (
-                      <pre className="whitespace-pre-wrap font-sans text-sm text-gray-600 leading-relaxed">
-                        {optimizationData.original_resume_text}
-                      </pre>
-                    ) : (
-                      <pre className="whitespace-pre-wrap font-sans text-sm text-gray-600 leading-relaxed">
-                        {(() => {
-                          const changeOriginals = (optimizationData.changes_made || [])
-                            .map(c => c.original)
-                            .filter(Boolean);
-                          const compOriginals = (optimizationData.comparison?.detailed_changes || [])
-                            .map(c => c.before)
-                            .filter(Boolean);
-                          const allOriginals = [...changeOriginals, ...compOriginals].filter((v, i, a) => a.indexOf(v) === i);
-                          return allOriginals.length > 0
-                            ? allOriginals.map((text, idx) => (
-                                <div key={idx} className="mb-3 pb-3 border-b border-gray-100 last:border-0">
-                                  {text}
+              {(() => {
+                const { rewrittenSet, changeMap } = buildChangeLookup(optimizationData.changes_made);
+                const keywordSet = new Set((optimizationData.keywords_added || []).map(k => k.toLowerCase()));
+
+                /* Parse original_resume_text into rough sections for a structured left panel */
+                const parseOriginalText = (text: string) => {
+                  const sectionRegex = /^(PROFESSIONAL SUMMARY|SUMMARY|EXPERIENCE|WORK EXPERIENCE|EDUCATION|SKILLS|TECHNICAL SKILLS|CERTIFICATIONS|PROJECTS|AWARDS|PUBLICATIONS|LANGUAGES|INTERESTS|OBJECTIVE|PROFILE)\s*$/im;
+                  const lines = text.split('\n');
+                  const sections: { heading: string; content: string[] }[] = [];
+                  let current: { heading: string; content: string[] } = { heading: '', content: [] };
+
+                  for (const line of lines) {
+                    const trimmed = line.trim();
+                    if (!trimmed) continue;
+                    if (sectionRegex.test(trimmed)) {
+                      if (current.heading || current.content.length) sections.push(current);
+                      current = { heading: trimmed, content: [] };
+                    } else {
+                      current.content.push(trimmed);
+                    }
+                  }
+                  if (current.heading || current.content.length) sections.push(current);
+                  return sections;
+                };
+
+                /* Check if a bullet text was changed */
+                const isChanged = (text: string) => rewrittenSet.has(text.trim());
+                const getChangeInfo = (text: string) => changeMap.get(text.trim());
+
+                /* Highlight keywords in a text string */
+                const highlightText = (text: string, highlight: boolean) => {
+                  if (!highlight) return <>{text}</>;
+                  // Split words, highlight the ones that match added keywords
+                  const words = text.split(/(\s+)/);
+                  return <>{words.map((word, i) => {
+                    if (!word.trim()) return word;
+                    if (keywordSet.has(word.toLowerCase().replace(/[.,;:!?]/g, ''))) {
+                      return <span key={i} className="bg-amber-100 text-amber-800 px-0.5 rounded font-medium">{word}</span>;
+                    }
+                    return word;
+                  })}</>;
+                };
+
+                return (
+                  <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* LEFT: Original Resume — Structured */}
+                    <div>
+                      <div className="flex items-center gap-2 mb-3 px-1">
+                        <div className="w-3 h-3 rounded-full bg-gray-400"></div>
+                        <h3 className="text-sm font-bold text-gray-600 uppercase tracking-wider">Original Resume</h3>
+                      </div>
+                      <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6 sm:p-8 text-sm leading-relaxed text-gray-700 max-h-[800px] overflow-y-auto">
+                        {optimizationData.original_resume_text ? (() => {
+                          const sections = parseOriginalText(optimizationData.original_resume_text);
+                          return sections.length > 1 ? (
+                            <div className="space-y-4">
+                              {sections.map((sec, idx) => (
+                                <div key={idx}>
+                                  {sec.heading && (
+                                    <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 border-b border-gray-100 pb-1">{sec.heading}</h4>
+                                  )}
+                                  {sec.content.map((line, lIdx) => {
+                                    const isBullet = /^[-•·▪]/.test(line) || /^\d+[.)]\s/.test(line);
+                                    const cleanLine = line.replace(/^[-•·▪]\s*/, '').replace(/^\d+[.)]\s*/, '');
+                                    return isBullet ? (
+                                      <div key={lIdx} className="text-gray-600 pl-4 relative mb-1 before:content-['•'] before:absolute before:left-0 before:text-gray-400">
+                                        {cleanLine}
+                                      </div>
+                                    ) : (
+                                      <p key={lIdx} className="text-gray-600 mb-1">{line}</p>
+                                    );
+                                  })}
                                 </div>
-                              ))
-                            : <span className="text-gray-400 italic">Original resume text not available for comparison. Use the Editor view to see your optimized resume.</span>;
-                        })()}
-                      </pre>
-                    )}
-                  </div>
-                </div>
-
-                {/* RIGHT: Optimized Resume */}
-                <div>
-                  <div className="flex items-center gap-2 mb-3 px-1">
-                    <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
-                    <h3 className="text-sm font-bold text-emerald-700 uppercase tracking-wider">Optimized Resume</h3>
-                  </div>
-                  <div className="bg-white rounded-2xl shadow-lg border border-emerald-200 p-6 sm:p-8 text-sm leading-relaxed max-h-[800px] overflow-y-auto">
-                    {/* Summary */}
-                    {resumeData.summary && (
-                      <div className="mb-4">
-                        <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Professional Summary</h4>
-                        <p className="text-gray-800 leading-relaxed">{resumeData.summary}</p>
-                      </div>
-                    )}
-                    {/* Experience */}
-                    {resumeData.experience?.map((exp, idx) => (
-                      <div key={idx} className="mb-4">
-                        <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
-                          {exp.role} {exp.company ? `at ${exp.company}` : ''} {exp.period ? `· ${exp.period}` : ''}
-                        </h4>
-                        <ul className="space-y-1.5">
-                          {exp.bullets?.map((bullet: string, bIdx: number) => (
-                            <li key={bIdx} className="text-gray-700 pl-4 relative before:content-['•'] before:absolute before:left-0 before:text-emerald-500 before:font-bold">
-                              {bullet}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ))}
-                    {/* Skills */}
-                    {resumeData.skills?.length > 0 && (
-                      <div className="mb-4">
-                        <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Skills</h4>
-                        <div className="flex flex-wrap gap-1.5">
-                          {resumeData.skills.map((skill: string, idx: number) => (
-                            <span key={idx} className="text-xs px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">
-                              {skill}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {/* Education */}
-                    {resumeData.education?.map((edu, idx) => (
-                      <div key={idx} className="mb-2">
-                        <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Education</h4>
-                        <p className="text-gray-700">{edu.degree} — {edu.school} {edu.period ? `(${edu.period})` : ''}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Detailed Changes List */}
-              {(optimizationData.changes_made?.length > 0 || optimizationData.comparison?.detailed_changes?.length > 0) && (
-                <div className="max-w-6xl mx-auto mt-6">
-                  <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
-                    <i className="ri-git-commit-line text-teal-500"></i>
-                    What Changed & Why
-                  </h3>
-                  <div className="space-y-3">
-                    {/* Show changes_made from step 3 (has requirement_matched) */}
-                    {(optimizationData.changes_made || []).slice(0, 8).map((change, idx) => (
-                      <div key={`cm-${idx}`} className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
-                        <div className="flex items-start gap-3">
-                          <div className="w-6 h-6 rounded-full bg-teal-100 flex items-center justify-center shrink-0 mt-0.5">
-                            <span className="text-xs font-bold text-teal-700">{idx + 1}</span>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1 flex-wrap">
-                              <span className="text-xs font-bold text-gray-500 uppercase">{change.section}</span>
-                              {change.requirement_matched && (
-                                <span className="text-xs px-2 py-0.5 rounded-full bg-violet-50 text-violet-600 border border-violet-100">
-                                  JD: {change.requirement_matched}
-                                </span>
-                              )}
+                              ))}
                             </div>
-                            {change.original && change.rewritten ? (() => {
-                              const { origNodes, newNodes } = renderWordDiff(change.original, change.rewritten);
-                              return (
-                                <div className="space-y-2 mb-1">
-                                  <div className="text-xs leading-relaxed p-2 rounded-lg bg-red-50/60 border border-red-100/60">
-                                    <span className="text-[10px] font-bold text-red-400 uppercase mr-1.5">Before:</span>
-                                    <span className="text-gray-500">{origNodes}</span>
-                                  </div>
-                                  <div className="text-sm leading-relaxed p-2 rounded-lg bg-emerald-50/60 border border-emerald-100/60">
-                                    <span className="text-[10px] font-bold text-emerald-500 uppercase mr-1.5">After:</span>
-                                    <span className="text-gray-800">{newNodes}</span>
-                                  </div>
-                                </div>
+                          ) : (
+                            /* Fallback: no clear sections found — show with cleaned whitespace */
+                            <div className="space-y-2 text-gray-600">
+                              {optimizationData.original_resume_text.split('\n').filter(l => l.trim()).map((line, idx) => (
+                                <p key={idx} className="leading-relaxed">{line.trim()}</p>
+                              ))}
+                            </div>
+                          );
+                        })() : (
+                          <div className="space-y-3 text-gray-500">
+                            {(() => {
+                              const originals = (optimizationData.changes_made || []).filter(c => c.original).map(c => ({ section: c.section, text: c.original! }));
+                              return originals.length > 0 ? (
+                                <>
+                                  <p className="text-xs text-gray-400 italic mb-2">Reconstructed from change history</p>
+                                  {originals.map((item, idx) => (
+                                    <div key={idx} className="mb-2 pb-2 border-b border-gray-100 last:border-0">
+                                      <span className="text-[10px] font-bold text-gray-400 uppercase">{item.section}</span>
+                                      <p className="text-gray-600 mt-0.5">{item.text}</p>
+                                    </div>
+                                  ))}
+                                </>
+                              ) : (
+                                <p className="text-gray-400 italic">Original resume text not available. Use "Preview & Edit" to see your optimized version.</p>
                               );
-                            })() : (
-                              <>
-                                {change.original && (
-                                  <div className="text-xs text-gray-400 line-through mb-1">{change.original}</div>
-                                )}
-                                {change.rewritten && (
-                                  <div className="text-sm text-gray-800 mb-1">{change.rewritten}</div>
-                                )}
-                                {!change.rewritten && change.what_changed && (
-                                  <div className="text-sm text-gray-800 mb-1">{change.what_changed}</div>
-                                )}
-                              </>
-                            )}
-                            <p className="text-xs text-gray-500">{change.why}</p>
+                            })()}
                           </div>
-                        </div>
+                        )}
                       </div>
-                    ))}
-                    {/* Fallback: show comparison.detailed_changes */}
-                    {(!optimizationData.changes_made?.length) && (optimizationData.comparison?.detailed_changes || []).slice(0, 7).map((change, idx) => {
-                      const { origNodes, newNodes } = renderWordDiff(change.before, change.after);
-                      return (
-                        <div key={`dc-${idx}`} className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div className="p-2 rounded-lg bg-red-50/60 border border-red-100/60">
-                              <span className="text-[10px] font-bold text-red-400 uppercase mb-1 block">Before</span>
-                              <p className="text-sm text-gray-500">{origNodes}</p>
-                            </div>
-                            <div className="p-2 rounded-lg bg-emerald-50/60 border border-emerald-100/60">
-                              <span className="text-[10px] font-bold text-emerald-500 uppercase mb-1 block">After</span>
-                              <p className="text-sm text-gray-800">{newNodes}</p>
-                            </div>
-                          </div>
-                          <div className="mt-2 flex items-start gap-2">
-                            <i className="ri-lightbulb-line text-amber-500 text-sm mt-0.5"></i>
-                            <p className="text-xs text-gray-500">{change.reason} — {change.impact}</p>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+                    </div>
 
-              {/* Keywords Added */}
-              {optimizationData.keywords_added?.length > 0 && (
-                <div className="max-w-6xl mx-auto mt-4">
-                  <h3 className="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
-                    <i className="ri-key-2-line text-amber-500"></i>
-                    Keywords Added
-                  </h3>
-                  <div className="flex flex-wrap gap-2">
-                    {optimizationData.keywords_added.map((kw, idx) => (
-                      <span key={idx} className="text-xs px-3 py-1.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-medium">
-                        {kw}
-                      </span>
-                    ))}
+                    {/* RIGHT: Optimized Resume — With Inline Change Highlighting */}
+                    <div>
+                      <div className="flex items-center justify-between mb-3 px-1">
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
+                          <h3 className="text-sm font-bold text-emerald-700 uppercase tracking-wider">Optimized Resume</h3>
+                        </div>
+                        {(rewrittenSet.size > 0 || keywordSet.size > 0) && (
+                          <div className="flex items-center gap-3 text-[10px]">
+                            {rewrittenSet.size > 0 && (
+                              <span className="flex items-center gap-1">
+                                <span className="w-2.5 h-2.5 rounded-sm bg-emerald-200 border border-emerald-300"></span>
+                                <span className="text-gray-500">{rewrittenSet.size} changed</span>
+                              </span>
+                            )}
+                            {keywordSet.size > 0 && (
+                              <span className="flex items-center gap-1">
+                                <span className="w-2.5 h-2.5 rounded-sm bg-amber-200 border border-amber-300"></span>
+                                <span className="text-gray-500">{keywordSet.size} keywords</span>
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <div className="bg-white rounded-2xl shadow-lg border border-emerald-200 p-6 sm:p-8 text-sm leading-relaxed max-h-[800px] overflow-y-auto">
+                        {/* Summary */}
+                        {resumeData.summary && (
+                          <div className="mb-4">
+                            <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Professional Summary</h4>
+                            <p className="text-gray-800 leading-relaxed">{highlightText(resumeData.summary, true)}</p>
+                          </div>
+                        )}
+                        {/* Experience */}
+                        {resumeData.experience?.map((exp, idx) => (
+                          <div key={idx} className="mb-4">
+                            <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+                              {exp.role} {exp.company ? `at ${exp.company}` : ''} {exp.period ? `· ${exp.period}` : ''}
+                            </h4>
+                            <ul className="space-y-1.5">
+                              {exp.bullets?.map((bullet: string, bIdx: number) => {
+                                const changed = isChanged(bullet);
+                                const info = changed ? getChangeInfo(bullet) : null;
+                                return (
+                                  <li
+                                    key={bIdx}
+                                    className={`pl-4 relative before:content-['•'] before:absolute before:left-0 before:font-bold group ${
+                                      changed
+                                        ? 'bg-emerald-50 border-l-2 border-emerald-400 pl-5 py-1 rounded-r-lg before:text-emerald-600'
+                                        : 'text-gray-700 before:text-emerald-500'
+                                    }`}
+                                  >
+                                    <span className={changed ? 'text-gray-800' : 'text-gray-700'}>
+                                      {highlightText(bullet, true)}
+                                    </span>
+                                    {changed && (
+                                      <span className="ml-1.5 inline-flex items-center text-[10px] text-emerald-600 font-medium">
+                                        <i className="ri-edit-circle-line mr-0.5"></i>improved
+                                      </span>
+                                    )}
+                                    {/* Tooltip on hover showing original + why */}
+                                    {info && (
+                                      <div className="hidden group-hover:block absolute left-0 right-0 top-full z-20 mt-1 p-3 bg-white rounded-xl shadow-xl border border-gray-200 text-xs">
+                                        {info.original && (
+                                          <div className="mb-2">
+                                            <span className="font-bold text-red-400 uppercase text-[10px]">Before: </span>
+                                            <span className="text-gray-500 line-through">{info.original}</span>
+                                          </div>
+                                        )}
+                                        <div>
+                                          <span className="font-bold text-teal-600 uppercase text-[10px]">Why: </span>
+                                          <span className="text-gray-600">{info.why}</span>
+                                        </div>
+                                        {info.requirement_matched && (
+                                          <div className="mt-1.5">
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-600 border border-violet-100">
+                                              JD Match: {info.requirement_matched}
+                                            </span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          </div>
+                        ))}
+                        {/* Skills — highlight added keywords */}
+                        {resumeData.skills?.length > 0 && (
+                          <div className="mb-4">
+                            <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Skills</h4>
+                            <div className="flex flex-wrap gap-1.5">
+                              {resumeData.skills.map((skill: string, idx: number) => {
+                                const isNewKeyword = keywordSet.has(skill.toLowerCase());
+                                return (
+                                  <span
+                                    key={idx}
+                                    className={`text-xs px-2.5 py-1 rounded-full border ${
+                                      isNewKeyword
+                                        ? 'bg-amber-50 text-amber-700 border-amber-200 font-semibold ring-1 ring-amber-200'
+                                        : 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                                    }`}
+                                  >
+                                    {skill}
+                                    {isNewKeyword && <i className="ri-add-line ml-0.5 text-amber-500 text-[10px]"></i>}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                        {/* Education */}
+                        {resumeData.education?.map((edu, idx) => (
+                          <div key={idx} className="mb-2">
+                            <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Education</h4>
+                            <p className="text-gray-700">{edu.degree} — {edu.school} {edu.period ? `(${edu.period})` : ''}</p>
+                          </div>
+                        ))}
+
+                        {/* Inline Keywords Summary */}
+                        {optimizationData.keywords_added?.length > 0 && (
+                          <div className="mt-4 pt-3 border-t border-gray-100">
+                            <div className="flex items-center gap-2 mb-2">
+                              <i className="ri-key-2-line text-amber-500 text-xs"></i>
+                              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Keywords Added</span>
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {optimizationData.keywords_added.map((kw, idx) => (
+                                <span key={idx} className="text-[11px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-medium">
+                                  {kw}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
+
+              {/* CTA: Preview & Edit Button */}
+              <div className="max-w-6xl mx-auto mt-8 flex justify-center">
+                <button
+                  onClick={() => setShowComparison(false)}
+                  className="group px-8 py-4 rounded-2xl text-base font-bold transition-all bg-gradient-to-r from-teal-600 to-emerald-500 text-white shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] flex items-center gap-3"
+                >
+                  <i className="ri-eye-line text-lg"></i>
+                  Preview & Edit Your Resume
+                  <i className="ri-arrow-right-line text-lg opacity-60 group-hover:opacity-100 transition-opacity"></i>
+                </button>
+              </div>
             </div>
           )}
 

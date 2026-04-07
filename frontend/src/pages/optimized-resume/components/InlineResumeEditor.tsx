@@ -485,7 +485,7 @@ export default function InlineResumeEditor({
   const totalPages = pageBreakPositions.length + 1;
 
   // Calculate page ranges for multi-page display
-  const PAGE_GAP = 48;
+  const PAGE_GAP = 40;
   const pageRanges = useMemo(() => {
     const ranges: { startY: number; height: number }[] = [];
     let lastY = 0;
@@ -926,78 +926,26 @@ export default function InlineResumeEditor({
 
   const topMetrics = extractTopMetrics();
 
-  const KpiRibbon = () => {
-    if (topMetrics.length === 0) return null;
-    return (
-      <div className="flex items-center justify-center gap-6 py-2.5 px-6" style={{ backgroundColor: `${theme.primary}08`, borderBottom: `2px solid ${theme.primary}15` }}>
-        {topMetrics.slice(0, 4).map((m, i) => (
-          <div key={i} className="flex flex-col items-center">
-            <span className="text-[13px] font-bold leading-tight" style={{ color: theme.primary }}>{m.value}</span>
-            <span className="text-[8px] uppercase tracking-wider font-medium text-gray-400 mt-0.5">{m.label}</span>
-          </div>
-        ))}
-      </div>
-    );
-  };
+  /* KPI Ribbon removed — metrics now inline in summary */
+  const KpiRibbon = () => null;
 
   /* Achievement highlight strip — adapts style based on variant */
+  /* Achievement highlight — rendered as subtle inline text, not a banner */
   const AchievementHighlight = () => {
     if (topMetrics.length === 0) return null;
-    const variant = (templateId.split('-')[0] || 'v1');
-    const isSerif = activeConfig.font === 'serif';
-    const isMono = activeConfig.fontFamily === 'tech-mono';
     const metrics = topMetrics.slice(0, 3);
-
-    // V4/executive: single standout metric, large and elegant
-    if (variant === 'v4' || boldTarget === 'scale') {
-      const top = metrics[0];
-      return (
-        <div className="flex items-center justify-center py-2 px-6" style={{ borderBottom: `1px solid ${theme.primary}15` }}>
-          <span className="text-[11px] text-gray-500">
-            <span className="font-bold text-[14px] mr-1.5" style={{ color: theme.primary }}>{top.value}</span>
-            {top.label}
-          </span>
-        </div>
-      );
-    }
-
-    // V1/tech: monospace code-style
-    if (variant === 'v1' || isMono) {
-      return (
-        <div className="flex items-center justify-center gap-4 py-1.5 px-4" style={{ backgroundColor: `${theme.primary}06`, borderBottom: `1px solid ${theme.primary}12` }}>
-          {metrics.map((m, i) => (
-            <span key={i} className="text-[10px] font-mono">
-              <span className="font-bold" style={{ color: theme.primary }}>{m.value}</span>
-              <span className="text-gray-400 ml-1">{m.label.toLowerCase()}</span>
-            </span>
-          ))}
-        </div>
-      );
-    }
-
-    // V3/authority or serif: subtle underlined metrics
-    if (variant === 'v3' || isSerif) {
-      return (
-        <div className="flex items-center justify-center gap-5 py-2 px-6" style={{ borderBottom: `1px solid ${theme.primary}10` }}>
-          {metrics.map((m, i) => (
-            <span key={i} className="text-[10px] italic text-gray-600">
-              <span className="font-bold not-italic" style={{ color: theme.primary }}>{m.value}</span>
-              {' '}{m.label}
-            </span>
-          ))}
-        </div>
-      );
-    }
-
-    // Default (V2, V5-V10): clean metric cards
     return (
-      <div className="flex items-center justify-center gap-5 py-2 px-6" style={{ backgroundColor: `${theme.primary}06`, borderBottom: `1px solid ${theme.primary}12` }}>
-        {metrics.map((m, i) => (
-          <div key={i} className="flex flex-col items-center">
-            <span className="text-[12px] font-bold leading-tight" style={{ color: theme.primary }}>{m.value}</span>
-            <span className="text-[8px] uppercase tracking-wider font-medium text-gray-400 mt-0.5">{m.label}</span>
-          </div>
-        ))}
+      <div className="px-6 pb-1" style={{ marginTop: -2 }}>
+        <p className="text-[9.5px] italic text-gray-500 leading-relaxed">
+          <span className="font-semibold not-italic" style={{ color: theme.primary }}>Key Impact:</span>
+          {metrics.map((m, i) => (
+            <span key={i}>
+              {i > 0 && <span className="mx-1 text-gray-300">|</span>}
+              <span className="font-bold not-italic" style={{ color: theme.primary }}>{m.value}</span>
+              {" "}{m.label}
+            </span>
+          ))}
+        </p>
       </div>
     );
   };
@@ -2015,7 +1963,7 @@ export default function InlineResumeEditor({
         <div
           className={`relative ${
             totalPages > 1
-              ? 'bg-gray-200 rounded-sm p-4 pt-4 pb-4'
+              ? 'bg-slate-100 rounded-lg shadow-inner p-0'
               : ''
           }`}
           style={{ width: totalPages > 1 ? 644 : 612 }}
@@ -2032,39 +1980,38 @@ export default function InlineResumeEditor({
 
 
 
-            {/* Page-break indicators: thin line markers (content is NOT hidden) */}
+            {/* Page break indicators — clean paper separation like PDF/Word */}
             {pageBreakPositions.map((y, idx) => {
-              const offset = idx * PAGE_GAP; // cumulative shift from prior gaps
+              const offset = idx * PAGE_GAP;
               return (
               <div
                 key={`gap-${idx}`}
                 className="absolute z-20 pointer-events-none"
                 style={{
-                  left: -4,
-                  right: -4,
+                  left: -16,
+                  right: -16,
                   top: y + offset,
                   height: PAGE_GAP,
                 }}
               >
-                {/* Bottom edge shadow of current page */}
+                {/* Tear-off bottom edge of current page */}
                 <div
-                  className="absolute top-0 left-1 right-1 h-[6px]"
-                  style={{
-                    boxShadow: '0 4px 8px -1px rgba(0,0,0,0.15), 0 2px 4px -2px rgba(0,0,0,0.1)',
-                    borderRadius: '0 0 2px 2px',
-                    background: 'white',
-                  }}
+                  className="absolute top-0 left-4 right-4 h-[1px]"
+                  style={{ background: 'rgba(0,0,0,0.08)' }}
                 />
-                {/* Visible gap — shows the gray background between pages */}
-                <div className="w-full h-full" style={{ backgroundColor: '#e5e7eb' }} />
-                {/* Top edge shadow of next page */}
+                {/* Gap between pages — neutral background */}
                 <div
-                  className="absolute bottom-0 left-1 right-1 h-[6px]"
-                  style={{
-                    boxShadow: '0 -4px 8px -1px rgba(0,0,0,0.15), 0 -2px 4px -2px rgba(0,0,0,0.1)',
-                    borderRadius: '2px 2px 0 0',
-                    background: 'white',
-                  }}
+                  className="w-full h-full flex items-center justify-center"
+                  style={{ background: '#f1f5f9' }}
+                >
+                  <span className="text-[10px] text-gray-400 font-medium tracking-wide select-none">
+                    Page {idx + 2}
+                  </span>
+                </div>
+                {/* Top edge line of next page */}
+                <div
+                  className="absolute bottom-0 left-4 right-4 h-[1px]"
+                  style={{ background: 'rgba(0,0,0,0.08)' }}
                 />
               </div>
               );
@@ -2085,7 +2032,7 @@ export default function InlineResumeEditor({
 
       {/* Change Annotations Sidebar */}
       {(changesMade?.length || keywordsAdded?.length) ? (
-        <div className="sticky top-4 mt-12 hidden xl:block">
+        <div className="sticky top-4 mt-12 hidden lg:block w-[240px] shrink-0">
           <ChangeAnnotations
             changes={changesMade || []}
             keywords={keywordsAdded || []}

@@ -44,32 +44,40 @@ function sectionIcon(attr: string): string {
   }
 }
 
-/* ── Single annotation card ── */
-function AnnotationCard({
-  annotation,
+function sectionLabel(attr: string): string {
+  switch (attr) {
+    case 'summary': return 'Professional Summary';
+    case 'experience': return 'Experience';
+    case 'skills': return 'Skills';
+    case 'education': return 'Education';
+    default: return attr.charAt(0).toUpperCase() + attr.slice(1);
+  }
+}
+
+/* ── Grouped section card ── */
+function GroupedAnnotationCard({
+  sectionAttr,
+  items,
   top,
   isExpanded,
   onToggle,
-  idx,
 }: {
-  annotation: ChangeAnnotation;
+  sectionAttr: string;
+  items: ChangeAnnotation[];
   top: number;
   isExpanded: boolean;
   onToggle: () => void;
-  idx: number;
 }) {
-  const attr = mapSectionToAttr(annotation.section);
   return (
     <div
-      className="absolute left-0 right-0 transition-all duration-200 group"
+      className="absolute left-0 right-0 transition-all duration-200"
       style={{ top }}
     >
-      {/* Connector line from resume to card */}
+      {/* Connector line */}
       <div
         className="absolute left-[-20px] top-[14px] w-[20px] h-[2px] bg-amber-300"
         style={{ opacity: isExpanded ? 1 : 0.5 }}
       />
-      {/* The card */}
       <div
         onClick={onToggle}
         className={`
@@ -81,34 +89,37 @@ function AnnotationCard({
         `}
         style={{ padding: isExpanded ? '10px 12px' : '6px 10px' }}
       >
-        {/* Index badge */}
-        <div className="absolute -left-2 -top-2 w-5 h-5 rounded-full bg-amber-400 text-white text-[10px] font-bold flex items-center justify-center shadow-sm">
-          {idx + 1}
-        </div>
-
-        {/* Collapsed: one-line summary */}
+        {/* Collapsed view */}
         {!isExpanded && (
           <div className="flex items-center gap-1.5 text-[11px] text-gray-600 leading-tight">
-            <i className={`${sectionIcon(attr)} text-amber-500 text-xs flex-shrink-0`} />
-            <span className="truncate font-medium">{annotation.section}</span>
-            <i className="ri-arrow-down-s-line text-gray-400 text-xs ml-auto flex-shrink-0" />
+            <i className={`${sectionIcon(sectionAttr)} text-amber-500 text-xs flex-shrink-0`} />
+            <span className="truncate font-medium">{sectionLabel(sectionAttr)}</span>
+            <span className="ml-auto flex items-center gap-1 flex-shrink-0">
+              <span className="text-[10px] text-amber-600 font-semibold bg-amber-100 px-1.5 py-0.5 rounded-full">{items.length}</span>
+              <i className="ri-arrow-down-s-line text-gray-400 text-xs" />
+            </span>
           </div>
         )}
 
-        {/* Expanded: full detail */}
+        {/* Expanded view — show all changes in this section */}
         {isExpanded && (
           <div>
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <i className={`${sectionIcon(attr)} text-amber-600 text-xs`} />
-              <span className="text-[11px] font-bold text-gray-900 capitalize">{annotation.section}</span>
+            <div className="flex items-center gap-1.5 mb-2">
+              <i className={`${sectionIcon(sectionAttr)} text-amber-600 text-xs`} />
+              <span className="text-[11px] font-bold text-gray-900">{sectionLabel(sectionAttr)}</span>
+              <span className="text-[10px] text-amber-600 font-semibold bg-amber-100 px-1.5 py-0.5 rounded-full ml-1">{items.length} edits</span>
               <i className="ri-arrow-up-s-line text-gray-400 text-xs ml-auto" />
             </div>
-            <p className="text-[11px] leading-[1.4] text-gray-700 mb-1.5">
-              {annotation.what_changed}
-            </p>
-            <div className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-1 rounded inline-flex items-center gap-1">
-              <i className="ri-lightbulb-line text-[10px]" />
-              {annotation.why}
+            <div className="space-y-2">
+              {items.map((item, j) => (
+                <div key={j} className="pl-2 border-l-2 border-amber-200">
+                  <p className="text-[10.5px] leading-[1.4] text-gray-700">{item.what_changed}</p>
+                  <p className="text-[9.5px] text-emerald-600 mt-0.5 flex items-start gap-1">
+                    <i className="ri-lightbulb-line text-[10px] mt-0.5 flex-shrink-0" />
+                    <span>{item.why}</span>
+                  </p>
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -145,11 +156,26 @@ function KeywordsPill({ keywords }: { keywords: string[] }) {
   );
 }
 
-/* ── Main ChangeAnnotations sidebar ── */
+/* ── Main ChangeAnnotations sidebar — grouped by section ── */
 export default function ChangeAnnotations({ changes, keywords, resumeContainerRef }: ChangeAnnotationsProps) {
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
   const [sectionTops, setSectionTops] = useState<Record<string, number>>({});
   const sidebarRef = useRef<HTMLDivElement>(null);
+
+  /* Group changes by section attribute */
+  const grouped = (() => {
+    const map = new Map<string, ChangeAnnotation[]>();
+    const order: string[] = [];
+    for (const c of changes) {
+      const attr = mapSectionToAttr(c.section);
+      if (!map.has(attr)) {
+        map.set(attr, []);
+        order.push(attr);
+      }
+      map.get(attr)!.push(c);
+    }
+    return order.map(attr => ({ attr, items: map.get(attr)! }));
+  })();
 
   /* Measure section positions from the resume DOM */
   const measureSections = useCallback(() => {
@@ -168,13 +194,11 @@ export default function ChangeAnnotations({ changes, keywords, resumeContainerRe
 
   useEffect(() => {
     measureSections();
-    // Re-measure after layout settles
     const t1 = setTimeout(measureSections, 300);
     const t2 = setTimeout(measureSections, 1000);
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [measureSections, changes]);
 
-  // Also observe resize
   useEffect(() => {
     const container = resumeContainerRef.current;
     if (!container) return;
@@ -183,44 +207,43 @@ export default function ChangeAnnotations({ changes, keywords, resumeContainerRe
     return () => ro.disconnect();
   }, [resumeContainerRef, measureSections]);
 
-  if (!changes.length && !keywords.length) return null;
+  if (!grouped.length && !keywords.length) return null;
 
-  /* Compute card positions: try to align with section, but prevent overlap */
-  const MIN_GAP = 8;
-  const COLLAPSED_HEIGHT = 32;
-  const EXPANDED_HEIGHT = 110;
+  /* Compute card positions — one per section group */
+  const MIN_GAP = 12;
+  const COLLAPSED_HEIGHT = 36;
+  const EXPANDED_HEIGHT = 160;
 
   const cardPositions: number[] = [];
-  const sortedChanges = [...changes];
-
-  // First pass: compute ideal positions
-  sortedChanges.forEach((c) => {
-    const attr = mapSectionToAttr(c.section);
-    const idealTop = sectionTops[attr] ?? 0;
+  grouped.forEach((g) => {
+    const idealTop = sectionTops[g.attr] ?? 0;
     cardPositions.push(idealTop);
   });
 
-  // Second pass: resolve overlaps (push down)
   for (let i = 1; i < cardPositions.length; i++) {
-    const prevHeight = expandedIdx === i - 1 ? EXPANDED_HEIGHT : COLLAPSED_HEIGHT;
+    const prevHeight = expandedIdx === i - 1
+      ? Math.min(EXPANDED_HEIGHT, 60 + grouped[i - 1].items.length * 50)
+      : COLLAPSED_HEIGHT;
     const minTop = cardPositions[i - 1] + prevHeight + MIN_GAP;
     if (cardPositions[i] < minTop) {
       cardPositions[i] = minTop;
     }
   }
 
+  const totalEdits = changes.length;
+
   return (
     <div
       ref={sidebarRef}
-      className="relative"
-      style={{ width: 220, minHeight: 200 }}
+      className="relative w-full"
+      style={{ minHeight: 200 }}
     >
       {/* Header */}
       <div className="mb-3 px-1">
         <div className="flex items-center gap-1.5 mb-0.5">
           <i className="ri-chat-check-line text-amber-500 text-sm" />
           <span className="text-xs font-bold text-gray-700">Changes</span>
-          <span className="text-[10px] text-gray-400 font-medium ml-auto">{changes.length} edits</span>
+          <span className="text-[10px] text-gray-400 font-medium ml-auto">{totalEdits} edits · {grouped.length} sections</span>
         </div>
         <div className="h-px bg-gradient-to-r from-amber-200 to-transparent" />
       </div>
@@ -228,16 +251,16 @@ export default function ChangeAnnotations({ changes, keywords, resumeContainerRe
       {/* Keywords */}
       <KeywordsPill keywords={keywords} />
 
-      {/* Annotation cards */}
+      {/* Grouped annotation cards */}
       <div className="relative" style={{ minHeight: cardPositions.length ? cardPositions[cardPositions.length - 1] + 120 : 100 }}>
-        {sortedChanges.map((c, i) => (
-          <AnnotationCard
-            key={i}
-            annotation={c}
+        {grouped.map((g, i) => (
+          <GroupedAnnotationCard
+            key={g.attr}
+            sectionAttr={g.attr}
+            items={g.items}
             top={cardPositions[i]}
             isExpanded={expandedIdx === i}
             onToggle={() => setExpandedIdx(expandedIdx === i ? null : i)}
-            idx={i}
           />
         ))}
       </div>

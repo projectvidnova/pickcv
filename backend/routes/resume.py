@@ -392,60 +392,18 @@ async def optimize_resume_for_job_stream(
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
 
-    job_title = request.job_title
-    job_description = request.job_description
-    job_link = request.job_link
-
-    # ── Resolve JD (same logic as non-streaming endpoint) ──
-    if job_link:
-        logger.info(f"Stream optimize: LINK — scraping {job_link}")
-        job_description = scraper_service.scrape_job_description(job_link)
-        if not job_description:
-            raise HTTPException(
-                status_code=400,
-                detail="Failed to scrape job description from link. Please try pasting the description instead."
-            )
-    elif not job_description or job_description.strip() == "":
-        logger.info(f"Stream optimize: TITLE ONLY — generating JD for '{job_title}'")
-        job_description = await gemini_service.generate_job_description_from_title(job_title)
-        if not job_description:
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to generate job description from title."
-            )
-    else:
-        logger.info(f"Stream optimize: PASTE — {len(job_description)} chars")
-
-    # ── GitHub enrichment ──
-    github_url = None
-    github_context = None
-    try:
-        github_url = scraper_service.extract_github_profile_url(resume.raw_text or "")
-        if not github_url and isinstance(resume.contact_info, dict):
-            for key in ("github", "github_url", "portfolio", "website", "links"):
-                value = resume.contact_info.get(key)
-                if isinstance(value, str):
-                    github_url = scraper_service.extract_github_profile_url(value)
-                    if github_url:
-                        break
-                elif isinstance(value, list):
-                    for item in value:
-                        if isinstance(item, str):
-                            github_url = scraper_service.extract_github_profile_url(item)
-                            if github_url:
-                                break
-                    if github_url:
-                        break
-        if github_url:
-            github_context = scraper_service.build_github_resume_context(github_url)
-    except Exception as e:
-        logger.warning(f"GitHub enrichment skipped: {e}")
+    # Capture request params — all slow work moves inside the generator
+    _job_title = request.job_title
+    _job_description = request.job_description
+    _job_link = request.job_link
+    _raw_text = resume.raw_text or ""
+    _contact_info = resume.contact_info
 
     # ── SSE stream generator ──
     async def event_stream():
         progress_queue: asyncio.Queue = asyncio.Queue()
 
-        async def on_progress(step: int, total: int, message: str, detail: str = ""):
+        async def emit(step: int, total: int, message: str, detail: str = ""):
             event_data = _json.dumps({
                 "type": "progress",
                 "step": step,
@@ -456,16 +414,73 @@ async def optimize_resume_for_job_stream(
             })
             await progress_queue.put(f"data: {event_data}\n\n")
 
-        async def run_optimization():
+        async def run_full_pipeline():
+            job_title = _job_title
+            job_description = _job_description
+            job_link = _job_link
+
             try:
+                # ── Step 0: Resolve JD (inside stream so events flow) ──
+                await emit(1, 10, "Resolving job description", "Preparing job context...")
+                if job_link:
+                    logger.info(f"Stream optimize: LINK — scraping {job_link}")
+                    job_description = scraper_service.scrape_job_description(job_link)
+                    if not job_description:
+                        error_event = _json.dumps({"type": "error", "message": "Failed to scrape job description from link. Please try pasting the description instead."})
+                        await progress_queue.put(f"data: {error_event}\n\n")
+                        return
+                elif not job_description or job_description.strip() == "":
+                    logger.info(f"Stream optimize: TITLE ONLY — generating JD for '{job_title}'")
+                    job_description = await gemini_service.generate_job_description_from_title(job_title)
+                    if not job_description:
+                        error_event = _json.dumps({"type": "error", "message": "Failed to generate job description from title."})
+                        await progress_queue.put(f"data: {error_event}\n\n")
+                        return
+                else:
+                    logger.info(f"Stream optimize: PASTE — {len(job_description)} chars")
+
+                # ── Step 1: GitHub enrichment ──
+                await emit(1, 10, "Enriching profile", "Checking GitHub and portfolio links...")
+                github_url = None
+                github_context = None
+                try:
+                    github_url = scraper_service.extract_github_profile_url(_raw_text)
+                    if not github_url and isinstance(_contact_info, dict):
+                        for key in ("github", "github_url", "portfolio", "website", "links"):
+                            value = _contact_info.get(key)
+                            if isinstance(value, str):
+                                github_url = scraper_service.extract_github_profile_url(value)
+                                if github_url:
+                                    break
+                            elif isinstance(value, list):
+                                for item in value:
+                                    if isinstance(item, str):
+                                        github_url = scraper_service.extract_github_profile_url(item)
+                                        if github_url:
+                                            break
+                                if github_url:
+                                    break
+                    if github_url:
+                        github_context = scraper_service.build_github_resume_context(github_url)
+                except Exception as e:
+                    logger.warning(f"GitHub enrichment skipped: {e}")
+
+                # ── Steps 2-9: Multi-step optimization (remapped to 2/10 → 9/10) ──
+                async def on_progress(step: int, total: int, message: str, detail: str = ""):
+                    # Remap orchestrator steps (1-8) to overall steps (2-9 of 10)
+                    await emit(step + 1, 10, message, detail)
+
                 optimization_result = await resume_os_orchestrator.optimize_multistep(
-                    resume_text=resume.raw_text,
+                    resume_text=_raw_text,
                     job_title=job_title,
                     job_description=job_description,
                     job_link=job_link,
                     github_context=github_context,
                     progress_callback=on_progress,
                 )
+
+                # ── Step 10: Send result ──
+                await emit(10, 10, "Complete", "Your optimized resume is ready!")
 
                 if "error" in optimization_result:
                     error_event = _json.dumps({"type": "error", "message": optimization_result["error"]})
@@ -478,7 +493,7 @@ async def optimize_resume_for_job_stream(
                             "resume_id": resume_id,
                             "job_title": job_title,
                             "job_description": job_description,
-                            "original_resume_text": resume.raw_text or "",
+                            "original_resume_text": _raw_text,
                             "optimized_resume": optimization_result.get("optimized_resume", ""),
                             "name": optimization_result.get("name", ""),
                             "title": optimization_result.get("title", ""),
@@ -514,8 +529,8 @@ async def optimize_resume_for_job_stream(
             finally:
                 await progress_queue.put(None)  # sentinel
 
-        # Start optimization as a background task
-        task = asyncio.create_task(run_optimization())
+        # Start pipeline as a background task
+        task = asyncio.create_task(run_full_pipeline())
 
         while True:
             msg = await progress_queue.get()

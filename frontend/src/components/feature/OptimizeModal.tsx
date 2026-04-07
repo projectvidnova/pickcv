@@ -77,6 +77,8 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
 
   const processingSteps = [
     { icon: 'ri-upload-cloud-2-line', label: 'Uploading resume', detail: 'Securely processing your document' },
+    { icon: 'ri-file-search-line', label: 'Resolving job description', detail: 'Scraping & preparing job context' },
+    { icon: 'ri-github-fill', label: 'Enriching profile', detail: 'Checking GitHub and portfolio links' },
     { icon: 'ri-settings-4-line', label: 'Preparing context', detail: 'Classifying role, ATS platform & gap analysis' },
     { icon: 'ri-file-search-line', label: 'Analyzing job description', detail: 'Extracting requirements, skills & qualifiers' },
     { icon: 'ri-links-line', label: 'Mapping evidence', detail: 'Matching your experience to each JD requirement' },
@@ -192,11 +194,13 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
     jobLink?: string,
   ) => {
     try {
-      setCurrentStep(3);
-      setProcessingStep(1);
-      setSmoothProgress(5);
-      setServerMessage('Starting optimization...');
-      setServerDetail('Connecting to optimization pipeline');
+      // Upload is already done — now we're connecting to the streaming pipeline
+      setProcessingStep(2);
+      setSmoothProgress(8);
+      setServerMessage('Connecting to optimization pipeline');
+      setServerDetail('Starting real-time optimization stream...');
+      // Start a slow crawl so user sees motion while waiting for first SSE event
+      startSmoothProgress(8, 18, 15000);
 
       const token = localStorage.getItem('access_token');
 
@@ -244,12 +248,14 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
             const event = JSON.parse(dataLine.slice(6));
 
             if (event.type === 'progress') {
-              // Map server step (1-8) to processing UI step (1-8)
+              // Kill any crawl animation and snap to real server progress
+              if (progressTimerRef.current) clearInterval(progressTimerRef.current);
+              // Server sends step/total (1-10 of 10). Step 1 = upload (already done client-side),
+              // so offset by 1 for the frontend display steps (upload = step 1 stays)
               setProcessingStep(event.step);
-              setSmoothProgress(event.percent);
+              setSmoothProgress(Math.max(event.percent, 10)); // never go below 10% once streaming
               setServerMessage(event.message);
               setServerDetail(event.detail || '');
-              // Also update AI message index for cycling
               setAiMessageIndex(prev => (prev + 1) % aiInsightMessages.length);
             } else if (event.type === 'result') {
               finalData = event.data;
@@ -311,12 +317,14 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
       // 2) Check access/paywall
       // 3) Only then run optimize-for-job
 
-      // ── Uploading resume (background prep before optimization screen) ──
+      // ── Uploading resume (show processing screen immediately) ──
       setCurrentStep(3);
       setProcessingStep(1);
-      setSmoothProgress(5);
+      setSmoothProgress(2);
       setServerMessage('Uploading resume');
       setServerDetail('Securely processing your document...');
+      // Start slow crawl so user sees motion during upload
+      startSmoothProgress(2, 8, 10000);
 
       const formData = new FormData();
       if (uploadedFile) {
