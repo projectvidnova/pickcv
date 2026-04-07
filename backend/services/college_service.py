@@ -72,12 +72,8 @@ class CollegeService:
 
             # Common extra fields from upload
             extra_fields = {
-                "roll_number": student_data.get("roll_number"),
-                "degree_type": student_data.get("degree_type"),
-                "phone": student_data.get("phone"),
                 "cgpa": student_data.get("cgpa"),
                 "current_semester": student_data.get("current_semester"),
-                "admission_year": student_data.get("admission_year"),
             }
 
             if user:
@@ -185,6 +181,45 @@ class CollegeService:
         await db.commit()
         return {"sent": sent, "failed": failed, "total": len(students)}
 
+    async def notify_existing_students(
+        self,
+        db: AsyncSession,
+        college_id: int,
+        college_name: str,
+        frontend_url: str,
+    ) -> dict:
+        """Send notification emails to registered/ready students just linked to this college."""
+        from services.email_service import email_service
+
+        result = await db.execute(
+            select(CollegeStudent).where(
+                CollegeStudent.college_id == college_id,
+                CollegeStudent.status.in_(["registered", "ready"]),
+                CollegeStudent.invited_at.is_(None),
+            )
+        )
+        students = result.scalars().all()
+
+        sent = 0
+        failed = 0
+        now = datetime.now(timezone.utc)
+
+        for student in students:
+            success = email_service.send_student_college_linked_email(
+                recipient_email=student.email,
+                student_name=student.name or "Student",
+                college_name=college_name,
+                frontend_url=frontend_url,
+            )
+            if success:
+                student.invited_at = now
+                sent += 1
+            else:
+                failed += 1
+
+        await db.commit()
+        return {"sent": sent, "failed": failed, "total": len(students)}
+
     async def update_student_status_on_register(
         self, db: AsyncSession, user_id: int, user_email: str
     ):
@@ -210,25 +245,56 @@ class CollegeService:
             await db.commit()
 
     async def update_student_status_on_resume_upload(
-        self, db: AsyncSession, user_id: int
+        self, db: AsyncSession, user_id: int, raw_text: str = ""
     ):
-        """Called when a user uploads their first resume — update to 'ready'."""
+        """Called on every resume upload — update status and extract skills + CGPA."""
+        # Find ALL college students for this user (registered or ready)
         result = await db.execute(
             select(CollegeStudent).where(
                 CollegeStudent.user_id == user_id,
-                CollegeStudent.status == "registered",
+                CollegeStudent.status.in_(["registered", "ready"]),
             )
         )
         students = result.scalars().all()
 
         now = datetime.now(timezone.utc)
         for student in students:
-            student.status = "ready"
-            student.ready_at = now
-            logger.info(
-                f"Student user_id={user_id} uploaded resume — status → ready "
-                f"(college {student.college_id})"
-            )
+            # Transition registered → ready on first upload
+            if student.status == "registered":
+                student.status = "ready"
+                student.ready_at = now
+                logger.info(
+                    f"Student user_id={user_id} uploaded resume — status → ready "
+                    f"(college {student.college_id})"
+                )
+
+            # Extract skills and CGPA from resume text
+            if raw_text:
+                try:
+                    from services.gemini_service import gemini_service
+                    from services.skill_analytics_service import extract_and_store_student_skills
+
+                    skills_list = await gemini_service.extract_skills(raw_text)
+                    if skills_list:
+                        count = await extract_and_store_student_skills(
+                            db, student.id, skills_list, source="resume"
+                        )
+                        logger.info(
+                            f"Extracted {count} skills for student {student.id} from resume"
+                        )
+                except Exception as e:
+                    logger.warning(f"Skill extraction failed for student {student.id}: {e}")
+
+                try:
+                    from services.gemini_service import gemini_service as gs
+                    cgpa = await gs.extract_cgpa(raw_text)
+                    if cgpa is not None:
+                        student.cgpa = cgpa
+                        logger.info(
+                            f"Extracted CGPA {cgpa} for student {student.id} from resume"
+                        )
+                except Exception as e:
+                    logger.warning(f"CGPA extraction failed for student {student.id}: {e}")
 
         if students:
             await db.commit()
@@ -251,19 +317,13 @@ class CollegeService:
         student["name"] = self._get_field(row, "name", "Name", "NAME", "student_name", "Student Name")
         student["branch"] = self._get_field(row, "branch", "Branch", "BRANCH", "department", "Department")
         student["graduation_year"] = self._parse_year(
-            self._get_field(row, "graduation_year", "Graduation Year", "graduation year", "GRADUATION_YEAR") or ""
+            self._get_field(row, "graduation_year", "Graduation Year", "graduation year", "GRADUATION_YEAR", "year", "Year", "YEAR") or ""
         )
-        student["roll_number"] = self._get_field(row, "roll_number", "Roll Number", "roll_no", "Roll No", "ROLL_NUMBER")
-        student["degree_type"] = self._get_field(row, "degree_type", "Degree Type", "degree", "Degree", "DEGREE_TYPE")
-        student["phone"] = self._get_field(row, "phone", "Phone", "PHONE", "mobile", "Mobile", "phone_number", "Phone Number")
         # Numeric fields
         cgpa_val = self._get_field(row, "cgpa", "CGPA", "Cgpa", "gpa", "GPA")
         student["cgpa"] = float(cgpa_val) if cgpa_val else None
-        sem_val = self._get_field(row, "current_semester", "Current Semester", "semester", "Semester", "SEMESTER")
-        student["current_semester"] = int(sem_val) if sem_val and sem_val.isdigit() else None
-        student["admission_year"] = self._parse_year(
-            self._get_field(row, "admission_year", "Admission Year", "admission year", "ADMISSION_YEAR") or ""
-        )
+        sem_val = self._get_field(row, "current_semester", "Current Semester", "semester", "Semester", "SEMESTER", "sem", "Sem", "SEM")
+        student["current_semester"] = int(sem_val) if sem_val and str(sem_val).strip().isdigit() else None
         return student
 
     def parse_csv_content(self, content: str) -> List[dict]:

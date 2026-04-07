@@ -209,11 +209,17 @@ class GeminiService:
             resume_text: Resume text to extract skills from
             
         Returns:
-            List of identified skills
+            List of identified skills (max 15 core skills)
         """
         prompt = f"""
-        Extract all technical and professional skills from the following resume.
-        Return ONLY a comma-separated list of skills, nothing else.
+        Extract ONLY programming languages, frameworks, libraries, databases, and software tools from the following resume.
+        Rules:
+        - Return at most 15 items.
+        - ONLY include: programming languages (Python, Java, C++), frameworks (React, Django, Spring Boot), libraries (NumPy, Pandas, TensorFlow), databases (MySQL, MongoDB, PostgreSQL), and software tools (Git, Docker, AWS, VS Code, Tableau, Power BI).
+        - Do NOT include soft skills (leadership, communication, teamwork).
+        - Do NOT include domain knowledge (machine learning, data analysis, web development).
+        - Do NOT include duplicates or near-synonyms.
+        - Return ONLY a comma-separated list, nothing else.
         
         Resume:
         {resume_text}
@@ -225,10 +231,38 @@ class GeminiService:
                 contents=prompt
             )
             skills_text = response.text.strip()
-            skills = [skill.strip() for skill in skills_text.split(',')]
-            return skills
+            skills = [skill.strip() for skill in skills_text.split(',') if skill.strip()]
+            return skills[:15]
         except Exception as e:
             return []
+
+    async def extract_cgpa(self, resume_text: str) -> Optional[float]:
+        """Extract CGPA/GPA from resume text using Gemini."""
+        prompt = (
+            "Extract the CGPA or GPA value from the following resume. "
+            "Return ONLY the numeric value (e.g. 8.5 or 3.7). "
+            "If no CGPA/GPA is found, return NONE.\n\n"
+            f"Resume:\n{resume_text}"
+        )
+        try:
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt
+            )
+            text = response.text.strip().upper()
+            if "NONE" in text or not text:
+                return None
+            # Extract first number from response
+            import re
+            match = re.search(r'(\d+\.\d+|\d+)', text)
+            if match:
+                val = float(match.group(1))
+                # Sanity check: CGPA should be 0-10 range
+                if 0 <= val <= 10:
+                    return val
+            return None
+        except Exception as e:
+            return None
 
     async def classify_role_dna(self, job_description: str, job_title: Optional[str] = None) -> Dict:
         """Classify target role into Resume OS Role DNA dimensions.

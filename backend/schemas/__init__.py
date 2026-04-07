@@ -301,13 +301,8 @@ class StudentUploadItem(BaseModel):
     name: Optional[str] = None
     branch: Optional[str] = None
     graduation_year: Optional[int] = None
-    roll_number: Optional[str] = None
-    department_code: Optional[str] = None
-    degree_type: Optional[str] = None
     current_semester: Optional[int] = None
     cgpa: Optional[float] = None
-    admission_year: Optional[int] = None
-    phone: Optional[str] = None
 
 
 class StudentUploadResponse(BaseModel):
@@ -351,6 +346,39 @@ class CollegeStatsResponse(BaseModel):
     skill_heatmap: List[Dict[str, Any]] = []           # [{skill, category, count, proficiency_dist}]
     coe_stats: List[Dict[str, Any]] = []               # [{coe_name, member_count, avg_score}]
     alerts_count: int = 0
+
+
+class StudentCGPATier(BaseModel):
+    """Student info in CGPA segregation."""
+    id: int
+    email: str
+    name: Optional[str]
+    cgpa: Optional[float]
+    department: Optional[str]
+    status: str
+    placement_status: Optional[str] = None
+    resume_uploaded: bool = False
+    
+    class Config:
+        from_attributes = True
+
+
+class CGPASegregationResponse(BaseModel):
+    """Students segregated by CGPA ranges."""
+    elite: List[StudentCGPATier] = []           # CGPA >= 3.7
+    excellent: List[StudentCGPATier] = []      # 3.4 <= CGPA < 3.7
+    very_good: List[StudentCGPATier] = []      # 3.0 <= CGPA < 3.4
+    good: List[StudentCGPATier] = []           # 2.5 <= CGPA < 3.0
+    average: List[StudentCGPATier] = []        # CGPA < 2.5
+    no_cgpa: List[StudentCGPATier] = []        # CGPA not provided
+    
+    # Summary stats
+    total_count: int = 0
+    avg_cgpa: Optional[float] = None
+    cgpa_provided_count: int = 0
+    
+    class Config:
+        from_attributes = True
 
 
 # ============= ADMIN MODULE SCHEMAS =============
@@ -434,6 +462,8 @@ class UserProfileUpdateRequest(BaseModel):
     target_role: Optional[str] = None
     experience_level: Optional[str] = None
     work_mode: Optional[str] = None
+    graduation_year: Optional[int] = None
+    current_semester: Optional[int] = None
     preferred_locations: Optional[List[str]] = None
     skills: Optional[List[SkillItem]] = None
 

@@ -38,12 +38,14 @@ export default function Navbar() {
     checkAuth();
     // Listen for storage changes (logout from other tabs)
     window.addEventListener('storage', checkAuth);
-    // Listen for custom logout event (logout in same tab)
+    // Listen for custom auth events (login/logout in same tab)
     window.addEventListener('auth-logout', checkAuth);
+    window.addEventListener('auth-login', checkAuth);
     
     return () => {
       window.removeEventListener('storage', checkAuth);
       window.removeEventListener('auth-logout', checkAuth);
+      window.removeEventListener('auth-login', checkAuth);
     };
   }, []);
 

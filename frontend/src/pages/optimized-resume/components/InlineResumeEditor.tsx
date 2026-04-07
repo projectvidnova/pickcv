@@ -7,6 +7,7 @@ import jsPDF from 'jspdf';
 import PaymentModal from '../../../components/PaymentModal';
 import paymentService, { PlanInfo, SubscriptionInfo } from '../../../services/paymentService';
 import { authFetch } from '../../../services/authFetch';
+import { API_BASE_URL } from '../../../config/api';
 
 /* ══════════════════════════════════════════════
    Editable Text — click-to-edit with contentEditable
@@ -466,7 +467,7 @@ export default function InlineResumeEditor({
       const parsedResumeId = Number(parsed.resumeId ?? parsed.resume_id);
       if (!parsedResumeId) { setIsSaving(false); return; }
 
-      const res = await authFetch(`${import.meta.env.VITE_API_URL}/resume/${parsedResumeId}/save-edited`, {
+      const res = await authFetch(`${API_BASE_URL}/resume/${parsedResumeId}/save-edited`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...data, template_id: `${templateId}-${theme.id}` }),

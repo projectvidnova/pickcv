@@ -136,25 +136,33 @@ class EmailService:
             return False
 
     def _send_email(self, to_email: str, subject: str, html: str, text: str) -> bool:
-        """Unified sender — tries providers in priority order."""
+        """Unified sender — tries providers in priority order with fallback."""
         # 1. SendGrid (primary)
         if self.sendgrid_api_key:
-            return self._send_via_sendgrid(to_email, subject, html, text)
-        # 2. Resend
+            if self._send_via_sendgrid(to_email, subject, html, text):
+                return True
+            logger.warning("SendGrid failed for %s — trying fallback providers", to_email)
+        # 2. Resend (fallback)
         if self.resend_api_key:
-            return self._send_via_resend(to_email, subject, html, text)
-        # 3. SMTP
+            if self._send_via_resend(to_email, subject, html, text):
+                return True
+            logger.warning("Resend failed for %s — trying next fallback", to_email)
+        # 3. SMTP (fallback)
         if self.sender_password:
-            return self._send_via_smtp(to_email, subject, html, text)
-        # 4. Dev mode — console log only
-        logger.warning(
-            "📧 EMAIL (Dev Mode — no provider configured)  To: %s  Subject: %s",
-            to_email, subject,
-        )
-        print(f"\n📧 DEV EMAIL → {to_email}")
-        print(f"   Subject: {subject}")
-        print("=" * 60)
-        return True  # Don't block the flow in dev
+            if self._send_via_smtp(to_email, subject, html, text):
+                return True
+            logger.warning("SMTP failed for %s — no more providers", to_email)
+        # 4. Dev mode — console log only (no provider configured or all failed)
+        if not (self.sendgrid_api_key or self.resend_api_key or self.sender_password):
+            logger.warning(
+                "📧 EMAIL (Dev Mode — no provider configured)  To: %s  Subject: %s",
+                to_email, subject,
+            )
+            print(f"\n📧 DEV EMAIL → {to_email}")
+            print(f"   Subject: {subject}")
+            print("=" * 60)
+            return True  # Don't block the flow in dev
+        return False
 
     # ── Public email methods ──────────────────────────────────
 
@@ -407,6 +415,54 @@ class EmailService:
             return self._send_email(recipient_email, subject, _wrap_html(body), text)
         except Exception as e:
             logger.error("Failed to send student invitation email: %s", e)
+            return False
+
+
+    def send_student_college_linked_email(
+        self,
+        recipient_email: str,
+        student_name: str,
+        college_name: str,
+        frontend_url: str = "",
+    ) -> bool:
+        """Notify an existing user that their college has added them to PickCV."""
+        try:
+            base = frontend_url or settings.frontend_url
+            name_display = student_name if student_name else "Student"
+            dashboard_link = f"{base}/profile"
+
+            subject = f"{college_name} has linked your PickCV profile"
+            body = f"""\
+<h2 style="color:#0d9488; margin:0 0 16px;">Hello {name_display}! 🎓</h2>
+<p style="color:#334155; font-size:15px; line-height:1.6;">
+  <strong>{college_name}</strong> has added you to their student network on
+  <strong>PickCV</strong>. Your college can now track your career readiness
+  and share your profile with top recruiters.
+</p>
+<p style="color:#334155; font-size:15px; line-height:1.6;">
+  Make sure your resume is up to date so you don't miss any opportunities!
+</p>
+<div style="text-align:center; margin:28px 0;">
+  <a href="{dashboard_link}"
+     style="background:linear-gradient(135deg,#0d9488,#10b981); color:white;
+            padding:14px 40px; text-decoration:none; border-radius:8px;
+            display:inline-block; font-weight:600; font-size:15px;">
+    Go to Dashboard
+  </a>
+</div>
+<p style="color:#94a3b8; font-size:12px; margin-top:24px;">
+  This notification was sent by {college_name} via PickCV.
+</p>"""
+
+            text = (
+                f"Hello {name_display},\n\n"
+                f"{college_name} has added you to their student network on PickCV.\n\n"
+                f"Visit your dashboard: {dashboard_link}\n\n"
+                f"The PickCV Team"
+            )
+            return self._send_email(recipient_email, subject, _wrap_html(body), text)
+        except Exception as e:
+            logger.error("Failed to send college-linked notification email: %s", e)
             return False
 
 

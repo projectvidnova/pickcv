@@ -12,27 +12,19 @@ interface UploadResult {
 interface StudentFormEntry {
   email: string;
   name: string;
-  roll_number: string;
   branch: string;
-  degree_type: string;
   graduation_year: string;
-  admission_year: string;
   current_semester: string;
   cgpa: string;
-  phone: string;
 }
 
 const emptyStudent = (): StudentFormEntry => ({
   email: '',
   name: '',
-  roll_number: '',
   branch: '',
-  degree_type: '',
   graduation_year: '',
-  admission_year: '',
   current_semester: '',
   cgpa: '',
-  phone: '',
 });
 
 interface AddStudentsModalProps {
@@ -105,22 +97,20 @@ export default function AddStudentsModal({ isOpen, onClose, onStudentsAdded }: A
           .map(s => ({
             email: s.email.trim(),
             name: s.name.trim() || null,
-            roll_number: s.roll_number.trim() || null,
             branch: s.branch.trim() || null,
-            degree_type: s.degree_type.trim() || null,
             graduation_year: s.graduation_year ? parseInt(s.graduation_year) || null : null,
-            admission_year: s.admission_year ? parseInt(s.admission_year) || null : null,
             current_semester: s.current_semester ? parseInt(s.current_semester) || null : null,
             cgpa: s.cgpa ? parseFloat(s.cgpa) || null : null,
-            phone: s.phone.trim() || null,
           }));
         res = await apiService.addStudentsManual(payload);
       }
       if (res.success && res.data) {
         setResult(res.data);
-        // Auto-send invitation emails to newly added students
+        // Also trigger invite endpoint as backup (backend auto-sends via background task too)
         if (res.data.invited > 0) {
-          await apiService.inviteStudents();
+          apiService.inviteStudents().catch(() => {
+            // Ignore — backend already sends invitations via background task
+          });
         }
       } else {
         setError(res.error || 'Upload failed');
@@ -297,18 +287,8 @@ export default function AddStudentsModal({ isOpen, onClose, onStudentsAdded }: A
                           </button>
                         )}
                       </div>
-                      {/* Row 1: Email, Name */}
+                      {/* Row 1: Name, Email */}
                       <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="text-xs font-medium text-gray-600 mb-1 block">Email *</label>
-                          <input
-                            type="email"
-                            value={student.email}
-                            onChange={(e) => updateStudent(index, 'email', e.target.value)}
-                            placeholder="student@college.edu"
-                            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-teal-200 focus:border-teal-400 transition-all"
-                          />
-                        </div>
                         <div>
                           <label className="text-xs font-medium text-gray-600 mb-1 block">Full Name</label>
                           <input
@@ -319,19 +299,19 @@ export default function AddStudentsModal({ isOpen, onClose, onStudentsAdded }: A
                             className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-teal-200 focus:border-teal-400 transition-all"
                           />
                         </div>
-                      </div>
-                      {/* Row 2: Roll Number, Branch */}
-                      <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="text-xs font-medium text-gray-600 mb-1 block">Roll Number</label>
+                          <label className="text-xs font-medium text-gray-600 mb-1 block">Email *</label>
                           <input
-                            type="text"
-                            value={student.roll_number}
-                            onChange={(e) => updateStudent(index, 'roll_number', e.target.value)}
-                            placeholder="CS2024001"
+                            type="email"
+                            value={student.email}
+                            onChange={(e) => updateStudent(index, 'email', e.target.value)}
+                            placeholder="student@college.edu"
                             className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-teal-200 focus:border-teal-400 transition-all"
                           />
                         </div>
+                      </div>
+                      {/* Row 2: Branch, Year */}
+                      <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="text-xs font-medium text-gray-600 mb-1 block">Branch / Department</label>
                           <input
@@ -342,33 +322,8 @@ export default function AddStudentsModal({ isOpen, onClose, onStudentsAdded }: A
                             className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-teal-200 focus:border-teal-400 transition-all"
                           />
                         </div>
-                      </div>
-                      {/* Row 3: Degree, Graduation Year */}
-                      <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="text-xs font-medium text-gray-600 mb-1 block">Degree Type</label>
-                          <select
-                            value={student.degree_type}
-                            onChange={(e) => updateStudent(index, 'degree_type', e.target.value)}
-                            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-teal-200 focus:border-teal-400 transition-all bg-white"
-                          >
-                            <option value="">Select degree</option>
-                            <option value="B.Tech">B.Tech</option>
-                            <option value="M.Tech">M.Tech</option>
-                            <option value="BCA">BCA</option>
-                            <option value="MCA">MCA</option>
-                            <option value="B.Sc">B.Sc</option>
-                            <option value="M.Sc">M.Sc</option>
-                            <option value="MBA">MBA</option>
-                            <option value="BBA">BBA</option>
-                            <option value="B.E">B.E</option>
-                            <option value="M.E">M.E</option>
-                            <option value="PhD">PhD</option>
-                            <option value="Other">Other</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="text-xs font-medium text-gray-600 mb-1 block">Graduation Year</label>
+                          <label className="text-xs font-medium text-gray-600 mb-1 block">Year</label>
                           <input
                             type="number"
                             value={student.graduation_year}
@@ -380,8 +335,8 @@ export default function AddStudentsModal({ isOpen, onClose, onStudentsAdded }: A
                           />
                         </div>
                       </div>
-                      {/* Row 4: Semester, CGPA, Phone */}
-                      <div className="grid grid-cols-3 gap-3">
+                      {/* Row 3: Semester, CGPA */}
+                      <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="text-xs font-medium text-gray-600 mb-1 block">Semester</label>
                           <input
@@ -404,16 +359,6 @@ export default function AddStudentsModal({ isOpen, onClose, onStudentsAdded }: A
                             step="0.1"
                             min="0"
                             max="10"
-                            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-teal-200 focus:border-teal-400 transition-all"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-xs font-medium text-gray-600 mb-1 block">Phone</label>
-                          <input
-                            type="tel"
-                            value={student.phone}
-                            onChange={(e) => updateStudent(index, 'phone', e.target.value)}
-                            placeholder="9876543210"
                             className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-teal-200 focus:border-teal-400 transition-all"
                           />
                         </div>

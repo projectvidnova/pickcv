@@ -14,6 +14,8 @@ interface OnboardingData {
   phone: string;
   linkedin: string;
   location: string;
+  graduationYear: string;
+  currentSemester: string;
   targetRole: string;
   preferredLocations: string[];
   experienceLevel: string;
@@ -102,6 +104,8 @@ export default function OnboardingPage() {
     phone: locationState.prefill?.phone || '',
     linkedin: '',
     location: '',
+    graduationYear: '',
+    currentSemester: '',
     targetRole: '',
     preferredLocations: [],
     experienceLevel: '',
@@ -144,6 +148,8 @@ export default function OnboardingPage() {
         target_role: formData.targetRole,
         experience_level: formData.experienceLevel,
         work_mode: formData.workMode,
+        graduation_year: formData.graduationYear ? parseInt(formData.graduationYear) : undefined,
+        current_semester: formData.currentSemester ? parseInt(formData.currentSemester) : undefined,
         preferred_locations: formData.preferredLocations,
         skills: formData.skills.map(s => ({ name: s.name, years: s.years })),
       });
@@ -322,7 +328,7 @@ export default function OnboardingPage() {
 
               {currentStep === 1 && (
                 <StepBasicInfo
-                  data={{ name: formData.name, email: formData.email, phone: formData.phone, linkedin: formData.linkedin, location: formData.location }}
+                  data={{ name: formData.name, email: formData.email, phone: formData.phone, linkedin: formData.linkedin, location: formData.location, graduationYear: formData.graduationYear, currentSemester: formData.currentSemester }}
                   onChange={(data) => updateFormData(data)}
                 />
               )}

@@ -331,6 +331,10 @@ async def update_profile(
         current_user.experience_level = data.experience_level
     if data.work_mode is not None:
         current_user.work_mode = data.work_mode
+    if data.graduation_year is not None:
+        current_user.graduation_year = data.graduation_year
+    if data.current_semester is not None:
+        current_user.current_semester = data.current_semester
 
     # Update preferred_locations in UserProfile
     if data.preferred_locations is not None:

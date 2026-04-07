@@ -3,7 +3,7 @@
  * Handles all backend API communication
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+import { API_BASE_URL } from '../config/api';
 
 interface LoginResponse {
   access_token: string;
@@ -76,6 +76,21 @@ class ApiService {
       // Store token in localStorage
       localStorage.setItem('access_token', data.access_token);
       this.token = data.access_token;
+
+      // Fetch user profile and store name/email for Navbar display
+      try {
+        const meRes = await fetch(`${this.baseUrl}/auth/me`, {
+          headers: { 'Authorization': `Bearer ${data.access_token}` },
+        });
+        if (meRes.ok) {
+          const user = await meRes.json();
+          if (user.full_name) localStorage.setItem('user_name', user.full_name);
+          if (user.email) localStorage.setItem('user_email', user.email);
+        }
+      } catch { /* non-critical */ }
+
+      // Notify Navbar and other components that auth state changed
+      window.dispatchEvent(new Event('auth-login'));
 
       return { success: true, token: data.access_token };
     } catch (error) {

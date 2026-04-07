@@ -27,6 +27,8 @@ class User(Base):
     target_role = Column(String(255))
     experience_level = Column(String(50))  # Entry, Mid, Senior, Lead
     work_mode = Column(String(50))  # Remote, Hybrid, On-site
+    graduation_year = Column(Integer)  # e.g. 2025, 2026
+    current_semester = Column(Integer)  # 1-12
     is_active = Column(Boolean, default=True, index=True)
     is_verified = Column(Boolean, default=False, index=True)  # Email verified
     email_verified_at = Column(DateTime(timezone=True))  # When email was verified

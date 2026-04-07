@@ -7,7 +7,7 @@ from datetime import datetime, timezone, timedelta
 import secrets
 import logging
 
-from database import get_db
+from database import get_db, async_session_maker
 from models import (
     College, CollegeStudent, User, Resume, SharedProfile,
     Department, StudentSkill, SkillTaxonomy, COEGroup, COEMembership,
@@ -19,7 +19,7 @@ from schemas import (
     ShareProfilesRequest, ShareProfilesResponse, CollegeStatsResponse,
     StudentUploadItem, StudentResumeInfo, StudentProfileUpdate,
     StudentBulkUpdateRequest, CollegeAlertResponse, AlertDismissRequest,
-    CollegeAuditLogResponse,
+    CollegeAuditLogResponse, CGPASegregationResponse, StudentCGPATier,
 )
 from services.auth_service import auth_service
 from services.college_service import college_service
@@ -30,6 +30,37 @@ from config import settings, get_frontend_origin
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+async def _send_invitations_background(
+    college_id: int, college_name: str, frontend_url: str
+):
+    """Background task: send invitation emails to new students AND notify existing ones."""
+    async with async_session_maker() as db:
+        try:
+            inv = await college_service.send_invitations(
+                db, college_id, college_name, frontend_url
+            )
+            logger.info(
+                f"Background invitation emails — sent: {inv['sent']}, "
+                f"failed: {inv['failed']} (college {college_id})"
+            )
+        except Exception:
+            logger.exception(
+                f"Background invitation emails failed (college {college_id})"
+            )
+        try:
+            notif = await college_service.notify_existing_students(
+                db, college_id, college_name, frontend_url
+            )
+            logger.info(
+                f"Background notification emails — sent: {notif['sent']}, "
+                f"failed: {notif['failed']} (college {college_id})"
+            )
+        except Exception:
+            logger.exception(
+                f"Background notification emails failed (college {college_id})"
+            )
 
 
 # ─── Auth helpers ────────────────────────────────────────────
@@ -194,10 +225,12 @@ async def complete_onboarding(
 
 @router.post("/students/upload")
 async def upload_students(
+    request: Request,
     file: UploadFile = File(None),
     emails: str = Form(None),
     college: College = Depends(get_current_college_auth),
     db: AsyncSession = Depends(get_db),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
     """
     Upload student list — accepts:
@@ -249,6 +282,20 @@ async def upload_students(
             )
         )
 
+    # Auto-send emails to all newly added students
+    new_count = result["invited"] + result["registered"] + result["ready"]
+    if new_count > 0:
+        background_tasks.add_task(
+            _send_invitations_background,
+            college_id=college.id,
+            college_name=college.institution_name,
+            frontend_url=get_frontend_origin(request),
+        )
+        logger.info(
+            f"Queued emails for {new_count} new students "
+            f"(college {college.id})"
+        )
+
     return StudentUploadResponse(
         total=result["total"],
         invited=result["invited"],
@@ -261,9 +308,11 @@ async def upload_students(
 
 @router.post("/students/add")
 async def add_students_manual(
+    request: Request,
     students: List[StudentUploadItem],
     college: College = Depends(get_current_college_auth),
     db: AsyncSession = Depends(get_db),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
     """Add students via JSON (manual form entry). Each item has full student fields."""
     students_data = [s.model_dump() for s in students]
@@ -290,6 +339,20 @@ async def add_students_manual(
             )
         )
 
+    # Auto-send emails to all newly added students
+    new_count = result["invited"] + result["registered"] + result["ready"]
+    if new_count > 0:
+        background_tasks.add_task(
+            _send_invitations_background,
+            college_id=college.id,
+            college_name=college.institution_name,
+            frontend_url=get_frontend_origin(request),
+        )
+        logger.info(
+            f"Queued emails for {new_count} new students "
+            f"(college {college.id})"
+        )
+
     return StudentUploadResponse(
         total=result["total"],
         invited=result["invited"],
@@ -304,8 +367,8 @@ async def add_students_manual(
 async def download_student_template():
     """Download a CSV template for bulk student upload."""
     from fastapi.responses import StreamingResponse
-    headers_row = "email,name,roll_number,branch,degree_type,graduation_year,admission_year,current_semester,cgpa,phone\n"
-    sample_row = "student@college.edu,John Doe,CS2024001,Computer Science,B.Tech,2025,2021,8,8.5,9876543210\n"
+    headers_row = "name,email,branch,year,sem,cgpa\n"
+    sample_row = "John Doe,student@college.edu,Computer Science,2025,8,8.5\n"
     csv_content = headers_row + sample_row
     return StreamingResponse(
         iter([csv_content]),
@@ -351,9 +414,6 @@ async def invite_students(
     db: AsyncSession = Depends(get_db),
 ):
     """Send invitation emails to all 'invited' students."""
-    if college.status != "approved":
-        raise HTTPException(status_code=403, detail="College must be approved before sending invitations")
-
     result = await college_service.send_invitations(
         db=db,
         college_id=college.id,
@@ -367,6 +427,7 @@ async def invite_students(
 async def list_students(
     department_id: int = Query(None),
     graduation_year: int = Query(None),
+    current_semester: int = Query(None),
     status_filter: str = Query(None, alias="status"),
     placement_status: str = Query(None),
     page: int = Query(1, ge=1),
@@ -382,6 +443,8 @@ async def list_students(
         query = query.where(CollegeStudent.department_id == department_id)
     if graduation_year:
         query = query.where(CollegeStudent.graduation_year == graduation_year)
+    if current_semester:
+        query = query.where(CollegeStudent.current_semester == current_semester)
     if status_filter:
         query = query.where(CollegeStudent.status == status_filter)
     if placement_status:
@@ -734,7 +797,106 @@ async def get_student_stats(
     )
 
 
-# ─── Share Profiles ───────────────────────────────────────────
+@router.get("/students/cgpa-segregation", response_model=CGPASegregationResponse)
+async def get_students_by_cgpa(
+    college: College = Depends(get_current_college_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get students segregated by CGPA ranges for the registered (linked) students in the college."""
+    cid = college.id
+    
+    # Fetch all students with CGPA data and their resume info
+    result = await db.execute(
+        select(
+            CollegeStudent.id,
+            CollegeStudent.email,
+            User.full_name,
+            CollegeStudent.cgpa,
+            Department.name.label("department"),
+            CollegeStudent.status,
+            CollegeStudent.placement_status,
+            func.count(Resume.id).label("resume_count"),
+        )
+        .outerjoin(User, CollegeStudent.user_id == User.id)
+        .outerjoin(Department, CollegeStudent.department_id == Department.id)
+        .outerjoin(Resume, Resume.user_id == User.id)
+        .where(CollegeStudent.college_id == cid)
+        .group_by(
+            CollegeStudent.id, CollegeStudent.email, User.full_name,
+            CollegeStudent.cgpa, Department.name, CollegeStudent.status,
+            CollegeStudent.placement_status
+        )
+    )
+    
+    students = result.all()
+    
+    # Segregate by CGPA tiers
+    segregation = {
+        "elite": [],
+        "excellent": [],
+        "very_good": [],
+        "good": [],
+        "average": [],
+        "no_cgpa": [],
+    }
+    
+    total_with_cgpa = 0
+    sum_cgpa = 0.0
+    
+    for student in students:
+        cgpa = student.cgpa
+        resume_count = student.resume_count or 0
+        
+        student_obj = StudentCGPATier(
+            id=student.id,
+            email=student.email,
+            name=student.full_name,
+            cgpa=cgpa,
+            department=student.department,
+            status=student.status,
+            placement_status=student.placement_status,
+            resume_uploaded=resume_count > 0,
+        )
+        
+        # Segregate
+        if cgpa is None:
+            segregation["no_cgpa"].append(student_obj)
+        elif cgpa >= 3.7:
+            segregation["elite"].append(student_obj)
+            total_with_cgpa += 1
+            sum_cgpa += cgpa
+        elif cgpa >= 3.4:
+            segregation["excellent"].append(student_obj)
+            total_with_cgpa += 1
+            sum_cgpa += cgpa
+        elif cgpa >= 3.0:
+            segregation["very_good"].append(student_obj)
+            total_with_cgpa += 1
+            sum_cgpa += cgpa
+        elif cgpa >= 2.5:
+            segregation["good"].append(student_obj)
+            total_with_cgpa += 1
+            sum_cgpa += cgpa
+        else:
+            segregation["average"].append(student_obj)
+            total_with_cgpa += 1
+            sum_cgpa += cgpa
+    
+    # Calculate statistics
+    avg_cgpa = (sum_cgpa / total_with_cgpa) if total_with_cgpa > 0 else None
+    total_count = len(students)
+    
+    return CGPASegregationResponse(
+        elite=segregation["elite"],
+        excellent=segregation["excellent"],
+        very_good=segregation["very_good"],
+        good=segregation["good"],
+        average=segregation["average"],
+        no_cgpa=segregation["no_cgpa"],
+        total_count=total_count,
+        avg_cgpa=round(avg_cgpa, 2) if avg_cgpa else None,
+        cgpa_provided_count=total_with_cgpa,
+    )
 
 @router.post("/share", response_model=ShareProfilesResponse)
 async def share_profiles(

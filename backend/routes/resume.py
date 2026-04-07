@@ -127,8 +127,9 @@ async def upload_resume(
             logger.warning(f"Failed to upload resume {new_resume.id} to GCS - storing locally only")
     
     # Update college student status: registered → ready (first resume uploaded)
+    # Also extract skills from resume text and store them
     try:
-        await college_service.update_student_status_on_resume_upload(db, current_user.id)
+        await college_service.update_student_status_on_resume_upload(db, current_user.id, raw_text=raw_text)
     except Exception as e:
         logger.warning(f"College student status update on resume upload failed: {e}")
     

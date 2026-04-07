@@ -6,6 +6,7 @@ import InlineResumeEditor from '../optimized-resume/components/InlineResumeEdito
 import { ResumeData } from '../optimized-resume/types';
 import { getVariantTemplates } from '../optimized-resume/components/themes';
 import { authFetch } from '../../services/authFetch';
+import { API_BASE_URL } from '../../config/api';
 
 interface DeprioritizeOption {
   id: string;
@@ -252,7 +253,7 @@ export default function ResumeComparisonPage() {
     setIsCompressing(true);
 
     try {
-      const res = await authFetch(`${import.meta.env.VITE_API_URL}/resume/compress-variant`, {
+      const res = await authFetch(`${API_BASE_URL}/resume/compress-variant`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
