@@ -226,7 +226,52 @@ async def startup_event():
             # Create all tables
             await conn.run_sync(Base.metadata.create_all)
             logger.info("Database tables created/verified successfully")
-            
+
+            # Auto-add missing columns (create_all only creates tables, not columns)
+            _migrations = [
+                # users table
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS graduation_year INTEGER",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS current_semester INTEGER",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMP WITH TIME ZONE",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS oauth_provider VARCHAR(50)",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_picture_url TEXT",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS target_role VARCHAR(255)",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS experience_level VARCHAR(50)",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS work_mode VARCHAR(50)",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS linkedin_url VARCHAR(500)",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS linkedin_sub VARCHAR(255)",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS linkedin_access_token TEXT",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS linkedin_profile_data TEXT",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS linkedin_data_fetched_at TIMESTAMP WITH TIME ZONE",
+                # college_students table
+                "ALTER TABLE college_students ADD COLUMN IF NOT EXISTS department_id INTEGER",
+                "ALTER TABLE college_students ADD COLUMN IF NOT EXISTS roll_number VARCHAR(50)",
+                "ALTER TABLE college_students ADD COLUMN IF NOT EXISTS degree_type VARCHAR(100)",
+                "ALTER TABLE college_students ADD COLUMN IF NOT EXISTS current_semester INTEGER DEFAULT 1",
+                "ALTER TABLE college_students ADD COLUMN IF NOT EXISTS cgpa FLOAT",
+                "ALTER TABLE college_students ADD COLUMN IF NOT EXISTS admission_year INTEGER",
+                "ALTER TABLE college_students ADD COLUMN IF NOT EXISTS phone VARCHAR(20)",
+                "ALTER TABLE college_students ADD COLUMN IF NOT EXISTS linkedin_url VARCHAR(500)",
+                "ALTER TABLE college_students ADD COLUMN IF NOT EXISTS github_url VARCHAR(500)",
+                "ALTER TABLE college_students ADD COLUMN IF NOT EXISTS portfolio_url VARCHAR(500)",
+                "ALTER TABLE college_students ADD COLUMN IF NOT EXISTS resume_score FLOAT",
+                "ALTER TABLE college_students ADD COLUMN IF NOT EXISTS resume_status VARCHAR(30) DEFAULT 'none'",
+                "ALTER TABLE college_students ADD COLUMN IF NOT EXISTS interview_readiness_score FLOAT DEFAULT 0",
+                "ALTER TABLE college_students ADD COLUMN IF NOT EXISTS placement_status VARCHAR(30) DEFAULT 'not_started'",
+                "ALTER TABLE college_students ADD COLUMN IF NOT EXISTS placed_company VARCHAR(255)",
+                "ALTER TABLE college_students ADD COLUMN IF NOT EXISTS placed_role VARCHAR(255)",
+                "ALTER TABLE college_students ADD COLUMN IF NOT EXISTS placed_salary_lpa FLOAT",
+                "ALTER TABLE college_students ADD COLUMN IF NOT EXISTS placed_at TIMESTAMP WITH TIME ZONE",
+                # shared_profiles table
+                "ALTER TABLE shared_profiles ADD COLUMN IF NOT EXISTS view_count INTEGER DEFAULT 0",
+            ]
+            try:
+                for stmt in _migrations:
+                    await conn.execute(text(stmt))
+                logger.info("Column migrations applied successfully")
+            except Exception as e:
+                logger.warning(f"Column migration warning: {e}")
+
             # Seed default admin if not exists
             try:
                 from services.auth_service import auth_service as _auth
