@@ -26,7 +26,7 @@ export default function InvitePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [view, setView] = useState<'form' | 'verification-sent' | 'already-registered'>('form');
+  const [view, setView] = useState<'form' | 'verification-sent' | 'already-registered' | 'auto-verified'>('form');
   const [googleLoading, setGoogleLoading] = useState(false);
   const [linkedinLoading, setLinkedinLoading] = useState(false);
 
@@ -77,7 +77,12 @@ export default function InvitePage() {
 
     const result = await apiService.register(formData.email, formData.password, formData.name);
     if (result.success) {
-      setView('verification-sent');
+      // If user was auto-verified (invited student), go straight to login
+      if (result.user?.is_verified) {
+        setView('auto-verified');
+      } else {
+        setView('verification-sent');
+      }
     } else {
       setFormError(result.error || 'Registration failed');
     }
@@ -142,6 +147,30 @@ export default function InvitePage() {
               Go to PickCV Home
             </button>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Auto-verified (invited student) — can login directly
+  if (view === 'auto-verified') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-emerald-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-8 text-center">
+          <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <i className="ri-check-line text-2xl text-emerald-600"></i>
+          </div>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Account Created!</h2>
+          <p className="text-gray-500 mb-2">
+            Your account has been verified automatically since you were invited by <strong>{inviteInfo?.college_name}</strong>.
+          </p>
+          <p className="text-sm text-gray-400 mb-6">
+            You can now sign in and start building your resume.
+          </p>
+          <button onClick={() => navigate('/')}
+            className="w-full py-3 bg-gradient-to-r from-teal-600 to-emerald-500 text-white rounded-xl font-semibold hover:from-teal-700 hover:to-emerald-600 transition-all">
+            Sign In
+          </button>
         </div>
       </div>
     );

@@ -7,6 +7,8 @@ interface BasicInfoData {
   phone: string;
   linkedin: string;
   location: string;
+  graduationYear: string;
+  currentSemester: string;
 }
 
 interface StepBasicInfoProps {
@@ -168,6 +170,54 @@ export default function StepBasicInfo({ data, onChange }: StepBasicInfoProps) {
                 <i className="ri-checkbox-circle-fill text-base" />
               </div>
             )}
+          </div>
+        </div>
+
+        {/* Graduation Year & Current Semester */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">
+              Graduation Year
+            </label>
+            <div className="relative">
+              <div className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-gray-300">
+                <i className="ri-calendar-line text-base" />
+              </div>
+              <select
+                value={data.graduationYear}
+                onChange={(e) => handleChange('graduationYear', e.target.value)}
+                onFocus={() => setFocused('graduationYear')}
+                onBlur={() => setFocused(null)}
+                className={fieldClass('graduationYear')}
+              >
+                <option value="">Select year</option>
+                {Array.from({ length: 8 }, (_, i) => new Date().getFullYear() + i - 3).map(y => (
+                  <option key={y} value={y.toString()}>{y}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">
+              Current Semester
+            </label>
+            <div className="relative">
+              <div className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-gray-300">
+                <i className="ri-book-open-line text-base" />
+              </div>
+              <select
+                value={data.currentSemester}
+                onChange={(e) => handleChange('currentSemester', e.target.value)}
+                onFocus={() => setFocused('currentSemester')}
+                onBlur={() => setFocused(null)}
+                className={fieldClass('currentSemester')}
+              >
+                <option value="">Select semester</option>
+                {Array.from({ length: 12 }, (_, i) => i + 1).map(s => (
+                  <option key={s} value={s.toString()}>Semester {s}</option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
       </div>

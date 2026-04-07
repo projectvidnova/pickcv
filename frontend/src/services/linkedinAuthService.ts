@@ -3,7 +3,9 @@
  * Handles LinkedIn authentication via OpenID Connect
  */
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+import { API_BASE_URL } from '../config/api';
+
+const API_URL = API_BASE_URL;
 const LINKEDIN_CLIENT_ID = import.meta.env.VITE_LINKEDIN_CLIENT_ID || '';
 
 /** Always use the current origin so the user stays on pickcv.com (or whatever domain they're on) */

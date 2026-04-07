@@ -139,7 +139,7 @@ export default function ApplyModal({ jobId, jobTitle, company, onClose, onApplie
               Cancel
             </button>
             <button
-              onClick={() => { onClose(); window.REACT_APP_NAVIGATE('/auth/login'); }}
+              onClick={() => { onClose(); window.REACT_APP_NAVIGATE('/'); }}
               className="flex-1 px-4 py-3 rounded-xl bg-teal-600 text-white font-semibold hover:bg-teal-700 transition-colors cursor-pointer"
             >
               Sign In

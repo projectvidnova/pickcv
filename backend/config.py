@@ -1,11 +1,12 @@
 """Application configuration using Pydantic Settings - Production Ready."""
 from pydantic_settings import BaseSettings
+from pathlib import Path
 from typing import List
 import os
 from dotenv import load_dotenv
 
-# Load .env file
-load_dotenv()
+# Load .env file relative to this file (works regardless of cwd)
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 
 class Settings(BaseSettings):
@@ -89,6 +90,9 @@ class Settings(BaseSettings):
     gcp_project_id: str = os.getenv("GCP_PROJECT_ID", "")
     storage_backend: str = os.getenv("STORAGE_BACKEND", "local")  # "gcs" or "local"
     
+    # ============= ADMIN NOTIFICATIONS =============
+    admin_notification_email: str = os.getenv("ADMIN_NOTIFICATION_EMAIL", "admin@pickcv.com")
+
     # ============= FRONTEND CONFIG =============
     frontend_url: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
     

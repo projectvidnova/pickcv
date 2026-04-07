@@ -5,6 +5,7 @@ import jsPDF from 'jspdf';
 import PaymentModal from '../../../components/PaymentModal';
 import paymentService, { PlanInfo, SubscriptionInfo } from '../../../services/paymentService';
 import { authFetch } from '../../../services/authFetch';
+import { API_BASE_URL } from '../../../config/api';
 
 interface ResumeEditorProps {
   data: ResumeData;
@@ -70,7 +71,7 @@ export default function ResumeEditor({ data, onDataChange, templateId, children 
       
       if (!resumeId) return;
 
-      const response = await authFetch(`${import.meta.env.VITE_API_URL}/resume/${resumeId}/save-edited`, {
+      const response = await authFetch(`${API_BASE_URL}/resume/${resumeId}/save-edited`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -1,7 +1,14 @@
 
 import { lazy } from 'react';
-import { RouteObject, Navigate } from 'react-router-dom';
+import { RouteObject, Navigate, useSearchParams } from 'react-router-dom';
 import { getSubdomain, type SubdomainType } from '../utils/subdomain';
+
+/** Redirect legacy /auth?register=true&invite=TOKEN → /invite?token=TOKEN */
+function AuthToInviteRedirect() {
+  const [params] = useSearchParams();
+  const inviteToken = params.get('invite') || '';
+  return <Navigate to={inviteToken ? `/invite?token=${encodeURIComponent(inviteToken)}` : '/invite'} replace />;
+}
 
 const Home = lazy(() => import('../pages/home/page'));
 const Jobs = lazy(() => import('../pages/jobs/page'));
@@ -278,6 +285,10 @@ const mainRoutes: RouteObject[] = [
   {
     path: '/profile',
     element: <Profile />,
+  },
+  {
+    path: '/auth',
+    element: <AuthToInviteRedirect />,
   },
   {
     path: '/auth/callback',

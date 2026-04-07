@@ -1,6 +1,7 @@
 import { useState, FormEvent } from 'react';
 import Navbar from '../../components/feature/Navbar';
 import Footer from '../../components/feature/Footer';
+import { API_BASE_URL } from '../../config/api';
 
 export default function ContactPage() {
   const [form, setForm] = useState({ name: '', email: '', subject: '', message: '' });
@@ -11,7 +12,7 @@ export default function ContactPage() {
     setStatus('sending');
     try {
       // Send to backend contact endpoint
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/contact`, {
+      const res = await fetch(`${API_BASE_URL}/contact`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),

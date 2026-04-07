@@ -136,25 +136,33 @@ class EmailService:
             return False
 
     def _send_email(self, to_email: str, subject: str, html: str, text: str) -> bool:
-        """Unified sender — tries providers in priority order."""
+        """Unified sender — tries providers in priority order with fallback."""
         # 1. SendGrid (primary)
         if self.sendgrid_api_key:
-            return self._send_via_sendgrid(to_email, subject, html, text)
-        # 2. Resend
+            if self._send_via_sendgrid(to_email, subject, html, text):
+                return True
+            logger.warning("SendGrid failed for %s — trying fallback providers", to_email)
+        # 2. Resend (fallback)
         if self.resend_api_key:
-            return self._send_via_resend(to_email, subject, html, text)
-        # 3. SMTP
+            if self._send_via_resend(to_email, subject, html, text):
+                return True
+            logger.warning("Resend failed for %s — trying next fallback", to_email)
+        # 3. SMTP (fallback)
         if self.sender_password:
-            return self._send_via_smtp(to_email, subject, html, text)
-        # 4. Dev mode — console log only
-        logger.warning(
-            "📧 EMAIL (Dev Mode — no provider configured)  To: %s  Subject: %s",
-            to_email, subject,
-        )
-        print(f"\n📧 DEV EMAIL → {to_email}")
-        print(f"   Subject: {subject}")
-        print("=" * 60)
-        return True  # Don't block the flow in dev
+            if self._send_via_smtp(to_email, subject, html, text):
+                return True
+            logger.warning("SMTP failed for %s — no more providers", to_email)
+        # 4. Dev mode — console log only (no provider configured or all failed)
+        if not (self.sendgrid_api_key or self.resend_api_key or self.sender_password):
+            logger.warning(
+                "📧 EMAIL (Dev Mode — no provider configured)  To: %s  Subject: %s",
+                to_email, subject,
+            )
+            print(f"\n📧 DEV EMAIL → {to_email}")
+            print(f"   Subject: {subject}")
+            print("=" * 60)
+            return True  # Don't block the flow in dev
+        return False
 
     # ── Public email methods ──────────────────────────────────
 
@@ -407,6 +415,210 @@ class EmailService:
             return self._send_email(recipient_email, subject, _wrap_html(body), text)
         except Exception as e:
             logger.error("Failed to send student invitation email: %s", e)
+            return False
+
+
+    def send_student_college_linked_email(
+        self,
+        recipient_email: str,
+        student_name: str,
+        college_name: str,
+        frontend_url: str = "",
+    ) -> bool:
+        """Notify an existing user that their college has added them to PickCV."""
+        try:
+            base = frontend_url or settings.frontend_url
+            name_display = student_name if student_name else "Student"
+            dashboard_link = f"{base}/profile"
+
+            subject = f"{college_name} has linked your PickCV profile"
+            body = f"""\
+<h2 style="color:#0d9488; margin:0 0 16px;">Hello {name_display}! 🎓</h2>
+<p style="color:#334155; font-size:15px; line-height:1.6;">
+  <strong>{college_name}</strong> has added you to their student network on
+  <strong>PickCV</strong>. Your college can now track your career readiness
+  and share your profile with top recruiters.
+</p>
+<p style="color:#334155; font-size:15px; line-height:1.6;">
+  Make sure your resume is up to date so you don't miss any opportunities!
+</p>
+<div style="text-align:center; margin:28px 0;">
+  <a href="{dashboard_link}"
+     style="background:linear-gradient(135deg,#0d9488,#10b981); color:white;
+            padding:14px 40px; text-decoration:none; border-radius:8px;
+            display:inline-block; font-weight:600; font-size:15px;">
+    Go to Dashboard
+  </a>
+</div>
+<p style="color:#94a3b8; font-size:12px; margin-top:24px;">
+  This notification was sent by {college_name} via PickCV.
+</p>"""
+
+            text = (
+                f"Hello {name_display},\n\n"
+                f"{college_name} has added you to their student network on PickCV.\n\n"
+                f"Visit your dashboard: {dashboard_link}\n\n"
+                f"The PickCV Team"
+            )
+            return self._send_email(recipient_email, subject, _wrap_html(body), text)
+        except Exception as e:
+            logger.error("Failed to send college-linked notification email: %s", e)
+            return False
+
+
+    def send_college_registration_confirmation(
+        self,
+        recipient_email: str,
+        institution_name: str,
+        contact_person_name: str,
+    ) -> bool:
+        """Send thank-you email to institution after registration."""
+        try:
+            name = contact_person_name or "there"
+            subject = "Thank you for registering with PickCV!"
+            body = f"""\
+<h2 style="color:#0d9488; margin:0 0 16px;">Thank You for Registering! \U0001f3eb</h2>
+<p style="color:#334155; font-size:15px; line-height:1.6;">
+  Hi {name},
+</p>
+<p style="color:#334155; font-size:15px; line-height:1.6;">
+  Thank you for registering <strong>{institution_name}</strong> on PickCV.
+  Your application has been received and is currently under review by our admin team.
+</p>
+<div style="background:#fffbeb; border-radius:8px; padding:16px; margin:20px 0; border-left:4px solid #f59e0b;">
+  <p style="color:#92400e; font-weight:600; margin:0 0 6px;">\u23f3 Under Review</p>
+  <p style="color:#78350f; font-size:14px; margin:0;">
+    Our admin team will review and approve your request within <strong>48 hours</strong>.
+    You will receive an email notification once your account has been approved.
+  </p>
+</div>
+<p style="color:#334155; font-size:15px; line-height:1.6;">
+  Once approved, you can log in to your institution dashboard and start inviting students,
+  managing placements, and more.
+</p>
+<p style="color:#94a3b8; font-size:12px; margin-top:24px;">
+  If you have any questions, contact us at support@pickcv.com
+</p>"""
+
+            text = (
+                f"Hi {name},\n\n"
+                f"Thank you for registering {institution_name} on PickCV.\n\n"
+                f"Your application is under review. Our admin team will review and approve "
+                f"your request within 48 hours. You will receive an email once approved.\n\n"
+                f"The PickCV Team"
+            )
+            return self._send_email(recipient_email, subject, _wrap_html(body), text)
+        except Exception as e:
+            logger.error("Failed to send college registration confirmation email: %s", e)
+            return False
+
+    def send_admin_new_registration_alert(
+        self,
+        admin_email: str,
+        institution_name: str,
+        official_email: str,
+        contact_person_name: str,
+        designation: str,
+        city: str,
+        state: str,
+    ) -> bool:
+        """Notify admin about a new college registration."""
+        try:
+            subject = f"New Institution Registration: {institution_name}"
+            body = f"""\
+<h2 style="color:#0d9488; margin:0 0 16px;">New Registration Alert \U0001f514</h2>
+<p style="color:#334155; font-size:15px; line-height:1.6;">
+  A new institution has registered on PickCV and is awaiting approval.
+</p>
+<table style="width:100%; margin:24px 0; border-collapse:collapse;">
+  <tr>
+    <td style="padding:10px 0; color:#64748b; font-size:14px; border-bottom:1px solid #f1f5f9;">Institution</td>
+    <td style="padding:10px 0; color:#334155; font-size:14px; font-weight:600; text-align:right; border-bottom:1px solid #f1f5f9;">{institution_name}</td>
+  </tr>
+  <tr>
+    <td style="padding:10px 0; color:#64748b; font-size:14px; border-bottom:1px solid #f1f5f9;">Email</td>
+    <td style="padding:10px 0; color:#334155; font-size:14px; text-align:right; border-bottom:1px solid #f1f5f9;">{official_email}</td>
+  </tr>
+  <tr>
+    <td style="padding:10px 0; color:#64748b; font-size:14px; border-bottom:1px solid #f1f5f9;">Contact Person</td>
+    <td style="padding:10px 0; color:#334155; font-size:14px; text-align:right; border-bottom:1px solid #f1f5f9;">{contact_person_name}</td>
+  </tr>
+  <tr>
+    <td style="padding:10px 0; color:#64748b; font-size:14px; border-bottom:1px solid #f1f5f9;">Designation</td>
+    <td style="padding:10px 0; color:#334155; font-size:14px; text-align:right; border-bottom:1px solid #f1f5f9;">{designation}</td>
+  </tr>
+  <tr>
+    <td style="padding:10px 0; color:#64748b; font-size:14px;">Location</td>
+    <td style="padding:10px 0; color:#334155; font-size:14px; text-align:right;">{city}, {state}</td>
+  </tr>
+</table>
+<p style="color:#334155; font-size:15px; line-height:1.6;">
+  Please review and approve or reject this registration from the admin dashboard.
+</p>"""
+
+            text = (
+                f"New Institution Registration\n\n"
+                f"Institution: {institution_name}\n"
+                f"Email: {official_email}\n"
+                f"Contact: {contact_person_name} ({designation})\n"
+                f"Location: {city}, {state}\n\n"
+                f"Please review this from the admin dashboard."
+            )
+            return self._send_email(admin_email, subject, _wrap_html(body), text)
+        except Exception as e:
+            logger.error("Failed to send admin registration alert: %s", e)
+            return False
+
+    def send_college_approval_email(
+        self,
+        recipient_email: str,
+        institution_name: str,
+        contact_person_name: str,
+        frontend_url: str = "",
+    ) -> bool:
+        """Notify institution that their registration has been approved."""
+        try:
+            base = frontend_url or settings.frontend_url
+            name = contact_person_name or "there"
+            login_link = f"{base}/college/login"
+
+            subject = "Your PickCV registration has been approved!"
+            body = f"""\
+<h2 style="color:#0d9488; margin:0 0 16px;">Registration Approved! \U0001f389</h2>
+<p style="color:#334155; font-size:15px; line-height:1.6;">
+  Hi {name},
+</p>
+<p style="color:#334155; font-size:15px; line-height:1.6;">
+  Great news! Your registration for <strong>{institution_name}</strong> on PickCV
+  has been reviewed and <strong>approved</strong> by our admin team.
+</p>
+<div style="background:#f0fdfa; border-radius:8px; padding:16px; margin:20px 0; border-left:4px solid #0d9488;">
+  <p style="color:#0d9488; font-weight:600; margin:0 0 6px;">\u2705 Account Active</p>
+  <p style="color:#334155; font-size:14px; margin:0;">
+    You can now sign in to your institution dashboard and start managing your students.
+  </p>
+</div>
+<div style="text-align:center; margin:28px 0;">
+  <a href="{login_link}"
+     style="background:linear-gradient(135deg,#0d9488,#10b981); color:white;
+            padding:14px 40px; text-decoration:none; border-radius:8px;
+            display:inline-block; font-weight:600; font-size:15px;">
+    Sign In Now
+  </a>
+</div>
+<p style="color:#94a3b8; font-size:12px; margin-top:24px;">
+  If you have any questions, contact us at support@pickcv.com
+</p>"""
+
+            text = (
+                f"Hi {name},\n\n"
+                f"Great news! Your registration for {institution_name} on PickCV has been approved.\n\n"
+                f"You can now sign in at: {login_link}\n\n"
+                f"The PickCV Team"
+            )
+            return self._send_email(recipient_email, subject, _wrap_html(body), text)
+        except Exception as e:
+            logger.error("Failed to send college approval email: %s", e)
             return False
 
 

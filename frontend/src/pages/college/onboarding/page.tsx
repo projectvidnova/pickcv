@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiService } from '../../../services/api';
 import { resolvePath } from '../../../utils/subdomain';
@@ -51,6 +51,33 @@ export default function CollegeOnboarding() {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [parsedStudents, setParsedStudents] = useState<StudentRow[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Pre-fill profile from registration data
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const res = await apiService.getCollegeProfile();
+        if (res.success && res.data) {
+          const d = res.data;
+          setProfile(prev => ({
+            ...prev,
+            name: d.institution_name || prev.name,
+            city: d.city || prev.city,
+            state: d.state || prev.state,
+            website: d.website || prev.website,
+            address: d.address || prev.address,
+            naacGrade: d.naac_grade || prev.naacGrade,
+            totalStudents: d.total_students ? String(d.total_students) : prev.totalStudents,
+            logo: d.logo_url || prev.logo,
+          }));
+          if (d.logo_url) setLogoPreview(d.logo_url);
+        }
+      } catch {
+        // Ignore — user will fill manually
+      }
+    };
+    fetchProfile();
+  }, []);
 
   // Handle logo upload
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -166,9 +193,12 @@ export default function CollegeOnboarding() {
     try {
       // Step 1: Update college profile
       await apiService.updateCollegeProfile({
+        institution_name: profile.name,
         logo_url: profile.logo,
         website: profile.website,
         address: profile.address,
+        city: profile.city,
+        state: profile.state,
         naac_grade: profile.naacGrade,
         total_students: profile.totalStudents ? parseInt(profile.totalStudents) : undefined,
       });

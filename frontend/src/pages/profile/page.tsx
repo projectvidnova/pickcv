@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import Navbar from '../../components/feature/Navbar';
+import AuthModal from '../../components/feature/AuthModal';
 import ProfileHeader from './components/ProfileHeader';
 import ProfileEditModal from './components/ProfileEditModal';
 import { apiService } from '../../services/api';
@@ -173,6 +174,7 @@ function ProfileSkeleton() {
 
 /* Auth Wall */
 function AuthWall() {
+  const [showAuth, setShowAuth] = useState(true);
   return (
     <div className="min-h-screen mesh-bg">
       <Navbar />
@@ -183,11 +185,12 @@ function AuthWall() {
           </div>
           <h2 className="text-xl font-extrabold text-slate-900 mb-2">Sign in to view your profile</h2>
           <p className="text-sm text-slate-400 mb-6">Log in or create an account to access your profile, resumes, and job applications.</p>
-          <Link to="/auth/login" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-500 text-white text-sm font-bold hover:from-teal-600 hover:to-emerald-600 transition-all shadow-sm shadow-teal-200">
+          <button onClick={() => setShowAuth(true)} className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-500 text-white text-sm font-bold hover:from-teal-600 hover:to-emerald-600 transition-all shadow-sm shadow-teal-200">
             <i className="ri-login-box-line text-base" />Sign In
-          </Link>
+          </button>
         </div>
       </div>
+      <AuthModal isOpen={showAuth} onClose={() => setShowAuth(false)} />
     </div>
   );
 }

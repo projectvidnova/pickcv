@@ -5,6 +5,7 @@ import Footer from '../../components/feature/Footer';
 import OptimizeModal from '../../components/feature/OptimizeModal';
 import { apiService } from '../../services/api';
 import { linkedinAuthService } from '../../services/linkedinAuthService';
+import { API_BASE_URL } from '../../config/api';
 
 interface WorkExperience {
   id: string;
@@ -139,8 +140,7 @@ export default function ResumeBuilder() {
 
         // Fetch AI-generated resume data from LinkedIn posts
         const token = localStorage.getItem('access_token');
-        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
-        const response = await fetch(`${API_URL}/resume/prefill-from-linkedin`, {
+        const response = await fetch(`${API_BASE_URL}/resume/prefill-from-linkedin`, {
           headers: { Authorization: `Bearer ${token}` },
         });
 

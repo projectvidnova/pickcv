@@ -67,7 +67,7 @@ interface Student {
   placed_company: string | null;
   placed_role: string | null;
   placed_salary_lpa: number | null;
-  skill_details: Array<{ skill_name: string; proficiency: number; category: string }>;
+  skill_details: Array<{ skill_name: string; proficiency: string; source: string }>;
   coe_groups: Array<{ id: number; name: string; code: string }>;
 }
 
@@ -126,6 +126,7 @@ export default function CollegeDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBranch, setSelectedBranch] = useState<string>('all');
   const [selectedYear, setSelectedYear] = useState<string>('all');
+  const [selectedSemester, setSelectedSemester] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [selectedPlacement, setSelectedPlacement] = useState<string>('all');
   const [showFilters, setShowFilters] = useState(false);
@@ -162,7 +163,13 @@ export default function CollegeDashboard() {
         apiService.getCollegeStudentStats(),
         apiService.getDepartments(),
       ]);
-      if (profileRes.success && profileRes.data) setCollegeProfile(profileRes.data);
+      // If profile fetch failed (likely expired token), redirect to login
+      if (!profileRes.success) {
+        apiService.clearCollegeToken();
+        navigate(resolvePath('/college/login'));
+        return;
+      }
+      if (profileRes.data) setCollegeProfile(profileRes.data);
       if (studentsRes.success && studentsRes.data) setStudents(studentsRes.data);
       if (statsRes.success && statsRes.data) setStats(statsRes.data);
       if (deptRes.success && deptRes.data) setDepartments(deptRes.data);
@@ -230,6 +237,11 @@ export default function CollegeDashboard() {
     return Array.from(yearSet).sort() as number[];
   }, [students]);
 
+  const semesters = useMemo(() => {
+    const semSet = new Set(students.map(s => s.current_semester).filter(Boolean));
+    return Array.from(semSet).sort((a, b) => (a as number) - (b as number)) as number[];
+  }, [students]);
+
   const filteredStudents = useMemo(() => {
     return students.filter(student => {
       const displayName = student.full_name || student.name || student.email;
@@ -240,22 +252,24 @@ export default function CollegeDashboard() {
         (student.roll_number || '').toLowerCase().includes(searchQuery.toLowerCase());
       const matchesBranch = selectedBranch === 'all' || student.branch === selectedBranch || student.department_name === selectedBranch;
       const matchesYear = selectedYear === 'all' || student.graduation_year?.toString() === selectedYear;
+      const matchesSemester = selectedSemester === 'all' || student.current_semester?.toString() === selectedSemester;
       const matchesStatus = selectedStatus === 'all' || student.status === selectedStatus;
       const matchesPlacement = selectedPlacement === 'all' || student.placement_status === selectedPlacement;
-      return matchesSearch && matchesBranch && matchesYear && matchesStatus && matchesPlacement;
+      return matchesSearch && matchesBranch && matchesYear && matchesSemester && matchesStatus && matchesPlacement;
     });
-  }, [students, searchQuery, selectedBranch, selectedYear, selectedStatus, selectedPlacement]);
+  }, [students, searchQuery, selectedBranch, selectedYear, selectedSemester, selectedStatus, selectedPlacement]);
 
   const clearAllFilters = () => {
     setSearchQuery('');
     setSelectedBranch('all');
     setSelectedYear('all');
+    setSelectedSemester('all');
     setSelectedStatus('all');
     setSelectedPlacement('all');
   };
 
   const hasActiveFilters = searchQuery !== '' || selectedBranch !== 'all' ||
-    selectedYear !== 'all' || selectedStatus !== 'all' || selectedPlacement !== 'all';
+    selectedYear !== 'all' || selectedSemester !== 'all' || selectedStatus !== 'all' || selectedPlacement !== 'all';
 
   const toggleStudentSelection = (studentId: number) => {
     setSelectedStudents(prev =>
@@ -562,6 +576,14 @@ export default function CollegeDashboard() {
                         </select>
                       </div>
                       <div>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1.5">Semester</label>
+                        <select value={selectedSemester} onChange={e => setSelectedSemester(e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 cursor-pointer">
+                          <option value="all">All Semesters</option>
+                          {semesters.map(s => <option key={s} value={s.toString()}>Semester {s}</option>)}
+                        </select>
+                      </div>
+                      <div>
                         <label className="block text-xs font-semibold text-gray-600 mb-1.5">Status</label>
                         <select value={selectedStatus} onChange={e => setSelectedStatus(e.target.value)}
                           className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 cursor-pointer">
@@ -593,10 +615,22 @@ export default function CollegeDashboard() {
                               <button onClick={() => setSelectedBranch('all')} className="cursor-pointer"><i className="ri-close-line text-xs"></i></button>
                             </span>
                           )}
+                          {selectedYear !== 'all' && (
+                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-indigo-100 text-indigo-700 text-xs font-medium">
+                              {selectedYear}
+                              <button onClick={() => setSelectedYear('all')} className="cursor-pointer"><i className="ri-close-line text-xs"></i></button>
+                            </span>
+                          )}
                           {selectedStatus !== 'all' && (
                             <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-teal-100 text-teal-700 text-xs font-medium">
                               {selectedStatus}
                               <button onClick={() => setSelectedStatus('all')} className="cursor-pointer"><i className="ri-close-line text-xs"></i></button>
+                            </span>
+                          )}
+                          {selectedSemester !== 'all' && (
+                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-medium">
+                              Sem {selectedSemester}
+                              <button onClick={() => setSelectedSemester('all')} className="cursor-pointer"><i className="ri-close-line text-xs"></i></button>
                             </span>
                           )}
                           {selectedPlacement !== 'all' && (

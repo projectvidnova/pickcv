@@ -9,7 +9,7 @@ import secrets
 import logging
 
 from database import get_db, async_session_maker
-from models import User, UserProfile, UserSkill, Recruiter
+from models import User, UserProfile, UserSkill, Recruiter, CollegeStudent
 from schemas import UserCreate, UserResponse, Token, UserProfileFullResponse, UserProfileUpdateRequest, SkillItem
 from services.auth_service import auth_service
 from services.email_service import email_service
@@ -79,17 +79,30 @@ async def register(user_data: UserCreate, request: Request, background_tasks: Ba
         is_verified=False  # Not verified yet
     )
     
+    # Check if this email was invited by a college (auto-verify invited students)
+    invited_result = await db.execute(
+        select(CollegeStudent).where(
+            CollegeStudent.email == user_data.email.lower(),
+            CollegeStudent.status == "invited",
+        )
+    )
+    invited_student = invited_result.scalars().first()
+    is_invited = invited_student is not None
+
+    if is_invited:
+        new_user.is_verified = True
+        new_user.email_verified_at = datetime.now(timezone.utc)
+
     db.add(new_user)
     await db.commit()
     await db.refresh(new_user)
     
-    # Generate verification token
-    verification_token = auth_service.create_verification_token(new_user.id)
-    
-    # Send verification email in the background (non-blocking)
-    background_tasks.add_task(
-        email_service.send_verification_email, new_user.email, verification_token, get_frontend_origin(request)
-    )
+    if not is_invited:
+        # Generate verification token and send email only for non-invited users
+        verification_token = auth_service.create_verification_token(new_user.id)
+        background_tasks.add_task(
+            email_service.send_verification_email, new_user.email, verification_token, get_frontend_origin(request)
+        )
     
     # Update college student status if this email was invited by a college
     try:
@@ -318,6 +331,10 @@ async def update_profile(
         current_user.experience_level = data.experience_level
     if data.work_mode is not None:
         current_user.work_mode = data.work_mode
+    if data.graduation_year is not None:
+        current_user.graduation_year = data.graduation_year
+    if data.current_semester is not None:
+        current_user.current_semester = data.current_semester
 
     # Update preferred_locations in UserProfile
     if data.preferred_locations is not None:
@@ -403,7 +420,14 @@ async def google_callback(code: str, state: str, request: Request, db: AsyncSess
         )
     
     # Exchange code for token
-    token_response = await google_oauth_service.exchange_code_for_token(code)
+    try:
+        token_response = await google_oauth_service.exchange_code_for_token(code)
+    except ValueError as exc:
+        logger.error(f"Token exchange failed: {exc}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc)
+        )
     if not token_response or "access_token" not in token_response:
         logger.error(f"Token exchange failed for code: {code}")
         raise HTTPException(
@@ -499,11 +523,18 @@ async def google_token(request: Request, db: AsyncSession = Depends(get_db)):
             )
         
         # Exchange code for token (use frontend's redirect_uri if provided to avoid mismatch)
-        token_response = await google_oauth_service.exchange_code_for_token(code, redirect_uri=redirect_uri)
+        token_response = None
+        exchange_error = None
+        try:
+            token_response = await google_oauth_service.exchange_code_for_token(code, redirect_uri=redirect_uri)
+        except Exception as exc:
+            exchange_error = str(exc)
+            logger.error(f"Token exchange raised: {exc}")
         if not token_response or "access_token" not in token_response:
+            detail = exchange_error or "Failed to get access token"
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Failed to get access token"
+                detail=detail
             )
         
         access_token = token_response.get("access_token")

@@ -4,8 +4,9 @@ import { authFetch } from '../../services/authFetch';
 import AuthModal from './AuthModal';
 import PaymentModal from '../PaymentModal';
 import paymentService, { PlanInfo } from '../../services/paymentService';
+import { API_BASE_URL } from '../../config/api';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+const API_URL = API_BASE_URL;
 
 interface OptimizeModalProps {
   isOpen: boolean;
@@ -206,7 +207,7 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
 
       // Use SSE streaming endpoint for real progress
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/resume/${resumeId}/optimize-for-job-stream`,
+        `${API_URL}/resume/${resumeId}/optimize-for-job-stream`,
         {
           method: 'POST',
           headers: {
@@ -304,6 +305,9 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
   };
 
   const startProcessing = async () => {
+    // Prevent double-click / duplicate uploads
+    if (processingStep > 0) return;
+
     // Check if user is authenticated
     const token = localStorage.getItem('access_token');
     if (!token) {
@@ -333,7 +337,7 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
       }
 
       console.log('Uploading resume...');
-      const uploadResponse = await authFetch(`${import.meta.env.VITE_API_URL}/resume/upload`, {
+      const uploadResponse = await authFetch(`${API_URL}/resume/upload`, {
         method: 'POST',
         body: formData
       });
