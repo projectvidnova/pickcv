@@ -94,13 +94,12 @@ export default function CollegeOnboarding() {
 
   // Download Excel Template
   const downloadTemplate = () => {
-    const headers = ['Name', 'Email', 'Branch', 'CGPA', 'Graduation Year', 'Phone', 'LinkedIn', 'Skills', 'Placement Status'];
-    const sampleRow = ['John Doe', 'john.doe@college.edu', 'Computer Science', '8.5', '2025', '+91 9876543210', 'https://linkedin.com/in/johndoe', 'Python, React, Machine Learning', 'open'];
+    const headers = ['name', 'email', 'branch', 'year', 'sem', 'cgpa'];
+    const sampleRow = ['John Doe', 'student@college.edu', 'Computer Science', '2025', '8', '8.5'];
     
     const csvContent = [
       headers.join(','),
       sampleRow.join(','),
-      Array(5).fill('').join(',')
     ].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv' });
