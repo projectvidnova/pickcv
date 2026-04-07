@@ -50,6 +50,21 @@ class ResumeCompressRequest(BaseModel):
     class Config:
         from_attributes = True
 
+
+class DynamicTemplateRequest(BaseModel):
+    variant_id: str = Field(..., min_length=1, max_length=5)
+    resume_data: Dict[str, Any]
+    persona_angle: str = Field(..., pattern=r'^(depth|impact|narrative|breadth)$')
+    slot_index: int = Field(..., ge=2, le=5)
+    role_dna: Dict[str, Any] = Field(default_factory=dict)
+    job_title: str = Field(default="")
+    job_description: str = Field(default="")
+    static_template_config: Optional[Dict[str, Any]] = None
+
+    class Config:
+        from_attributes = True
+
+
 # Resume Schemas
 class ResumeBase(BaseModel):
     title: str

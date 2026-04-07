@@ -657,7 +657,483 @@ Requirements:
                 "skills": [],
                 "education": []
             }
-    
+
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # 4-STEP FOCUSED PIPELINE  (replaces monolithic optimize_resume_for_job)
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    async def step1_analyze_jd(self, job_description: str, job_title: Optional[str] = None) -> Dict:
+        """Step 1: Deep JD analysis — extract structured requirements map."""
+        context = f"\nJob Title: {job_title}" if job_title else ""
+        prompt = f"""You are a job description analyst. Your ONLY task is to deeply analyze this job description
+and extract a structured requirements map.
+
+JOB DESCRIPTION:
+{job_description}
+{context}
+
+Extract EVERY requirement, skill, and qualifier. Categorize them precisely.
+
+Return VALID JSON:
+{{
+    "role_summary": "<1-2 sentence summary of what this role does>",
+    "must_have_requirements": [
+        {{
+            "requirement": "<specific requirement from JD>",
+            "category": "technical_skill|domain_knowledge|soft_skill|experience_level|certification|tool",
+            "keywords": ["<exact keywords/phrases from JD for this requirement>"],
+            "importance": "critical|high|medium"
+        }}
+    ],
+    "nice_to_have_requirements": [
+        {{
+            "requirement": "<nice-to-have from JD>",
+            "category": "technical_skill|domain_knowledge|soft_skill|experience_level|certification|tool",
+            "keywords": ["<exact keywords/phrases>"]
+        }}
+    ],
+    "technical_stack": ["<specific technologies, tools, frameworks mentioned>"],
+    "experience_expectations": {{
+        "years": "<X-Y years or inferred range>",
+        "level": "junior|mid|senior|lead|principal",
+        "scope_signals": ["<team size, budget, org scope language from JD>"]
+    }},
+    "key_action_language": ["<exact verbs/phrases used in JD: 'design and implement', 'collaborate with', etc.>"],
+    "outcome_expectations": ["<what success looks like per the JD: 'improve performance', 'reduce latency', etc.>"],
+    "culture_signals": ["<culture/environment hints: 'fast-paced', 'cross-functional', 'remote-first', etc.>"]
+}}
+
+Be exhaustive. Extract EVERYTHING. Miss nothing.
+"""
+        try:
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    temperature=0.3,
+                ),
+            )
+            return _robust_parse_json(response.text)
+        except Exception as e:
+            logger.error(f"Step 1 (JD analysis) failed: {e}")
+            return {"error": str(e), "must_have_requirements": [], "nice_to_have_requirements": [], "technical_stack": []}
+
+    async def step2_map_evidence(
+        self,
+        resume_text: str,
+        jd_analysis: Dict,
+        github_context: Optional[str] = None,
+    ) -> Dict:
+        """Step 2: Map each JD requirement to specific resume evidence."""
+        github_section = f"""
+GITHUB EVIDENCE (verified data — use to strengthen matches):
+{github_context}
+""" if github_context else ""
+
+        prompt = f"""You are a resume-to-job-description evidence mapper. Your ONLY task is to map EVERY requirement
+from the JD analysis to specific evidence in the candidate's resume.
+
+CANDIDATE RESUME:
+{resume_text}
+{github_section}
+
+JD REQUIREMENTS ANALYSIS:
+{json.dumps(jd_analysis, indent=2)}
+
+For EACH requirement (must-have AND nice-to-have), find the closest matching evidence in the resume.
+Rate match strength honestly. For gaps, note what's missing.
+
+Return VALID JSON:
+{{
+    "evidence_map": [
+        {{
+            "requirement": "<requirement text from JD>",
+            "importance": "critical|high|medium|low",
+            "match_strength": "strong|partial|weak|no_match",
+            "resume_evidence": "<exact text/bullet from resume that matches, or null>",
+            "evidence_section": "experience|skills|education|projects|summary|null",
+            "gap_description": "<what's missing or how evidence falls short — null if strong match>",
+            "reframe_suggestion": "<how to reframe the existing evidence to better match the JD requirement>"
+        }}
+    ],
+    "unmapped_resume_strengths": [
+        "<resume achievements/skills that don't map to any JD requirement but are impressive>"
+    ],
+    "overall_match_assessment": {{
+        "critical_match_pct": <0-100>,
+        "total_match_pct": <0-100>,
+        "biggest_gaps": ["<gap 1>", "<gap 2>", "<gap 3>"],
+        "strongest_matches": ["<match 1>", "<match 2>", "<match 3>"]
+    }}
+}}
+
+Rules:
+- Be HONEST about match strength. "partial" means some evidence but not exactly what JD wants.
+- "no_match" means resume has zero evidence for this requirement.
+- For reframe_suggestion: suggest how to reword EXISTING evidence to echo JD language. Do NOT fabricate new experience.
+- Include ALL requirements from the JD analysis.
+"""
+        try:
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    temperature=0.3,
+                ),
+            )
+            return _robust_parse_json(response.text)
+        except Exception as e:
+            logger.error(f"Step 2 (evidence mapping) failed: {e}")
+            return {"error": str(e), "evidence_map": [], "overall_match_assessment": {}}
+
+    async def step3_rewrite_content(
+        self,
+        resume_text: str,
+        jd_analysis: Dict,
+        evidence_map: Dict,
+        resume_os_context: Optional[str] = None,
+        github_context: Optional[str] = None,
+    ) -> Dict:
+        """Step 3: Rewrite resume content using evidence map. Directive: rewrite EVERY bullet."""
+        agent_context = f"""
+RESUME OS AGENT CONTEXT:
+{resume_os_context}
+""" if resume_os_context else ""
+
+        github_section = f"""
+GITHUB EVIDENCE (use to add verified technical depth):
+{github_context}
+""" if github_context else ""
+
+        prompt = f"""You are an expert resume rewriter. You have already analyzed the job description and mapped
+every JD requirement to the candidate's resume evidence. Now REWRITE the resume for maximum job alignment.
+
+ORIGINAL RESUME:
+{resume_text}
+{github_section}
+{agent_context}
+
+JD ANALYSIS (what the employer wants):
+{json.dumps(jd_analysis, indent=2)}
+
+EVIDENCE MAP (what the candidate has vs what's needed):
+{json.dumps(evidence_map, indent=2)}
+
+━━━ YOUR DIRECTIVE ━━━
+REWRITE EVERY BULLET to align with the target job. This is NOT optional.
+
+For each experience bullet:
+1. If evidence_map shows a "strong" or "partial" match → REFRAME the bullet using the JD's exact language,
+   keywords, and outcome expectations. Add context phrases that connect the work to the JD's world.
+   Example: "Built REST APIs" → "Designed and implemented RESTful APIs supporting large-scale data processing,
+   reducing response latency by 40%"
+2. If the bullet has no JD match but shows genuine skill → reframe to emphasize transferable value.
+3. Order bullets strongest-match-first within each role.
+
+For the professional summary:
+- Rewrite as 3-4 punchy lines directly addressing the JD's core needs.
+- Line 1: Who you are (function + years + specialization matching JD).
+- Line 2-3: Your strongest JD-aligned achievements with metrics.
+- Line 4: What you bring to THIS specific role.
+- MUST contain at least 2 keywords from JD's must-have requirements.
+
+For skills:
+- Include ONLY real technical skills, tools, frameworks, certifications (max 12).
+- Order by JD relevance (most-needed skills first).
+- Do NOT include soft skills or generic phrases in the skills list.
+- Weave soft skill keywords into experience bullets instead.
+
+━━━ REFRAMING RULES (NOT fabrication) ━━━
+You MUST reframe. Reframing means:
+✅ Adding context phrases: "to support secure application development" (if they did app dev)
+✅ Using JD's vocabulary: change "made APIs" to "designed and implemented RESTful microservices"
+✅ Adding scope: "across 3 teams" or "serving 10K+ users" (ONLY if evidence supports it)
+✅ Connecting to outcomes: "improving deployment frequency by 2x" (ONLY if evidence supports it)
+
+You must NOT:
+❌ Invent companies, roles, dates, degrees, metrics with no basis
+❌ Claim certifications not present in resume
+❌ Inflate a junior contributor to "Architected" unless evidence shows ownership
+
+━━━ OUTPUT FORMAT ━━━
+Return VALID JSON:
+{{
+    "name": "<EXTRACT from original — never change>",
+    "title": "<professional title aligned to target job>",
+    "email": "<EXTRACT from original>",
+    "phone": "<EXTRACT from original>",
+    "linkedin": "<EXTRACT from original>",
+    "location": "<EXTRACT from original>",
+    "professional_summary": "<rewritten summary per directive above>",
+    "experience": [
+        {{
+            "role": "<title from original — keep unchanged>",
+            "company": "<company from original — keep unchanged>",
+            "location": "<from original>",
+            "period": "<dates from original — keep unchanged>",
+            "bullets": ["<rewritten bullet 1>", "<rewritten bullet 2>"]
+        }}
+    ],
+    "skills": ["<JD-relevant technical skill>"],
+    "education": [
+        {{
+            "degree": "<from original>",
+            "school": "<from original>",
+            "period": "<from original>"
+        }}
+    ],
+    "changes_made": [
+        {{
+            "section": "<summary|experience|skills|education>",
+            "original": "<original text that was changed>",
+            "rewritten": "<new text>",
+            "why": "<which JD requirement this addresses>",
+            "requirement_matched": "<the specific JD requirement>"
+        }}
+    ],
+    "keywords_added": ["<keyword woven into content>"],
+    "keyword_coverage_pct": <0-100>,
+    "match_score": <0-100>,
+    "ats_optimized": true
+}}
+
+Requirements:
+- Max 3 most relevant roles. 3-5 bullets per role, each ≤ 30 words.
+- Each bullet: [Action Verb] + [Scope] + [Impact/Outcome] + [Metric if evidence exists].
+- Minimum 1 metric per 2 bullets. Use numerals always.
+- Cap any action verb to max 2 uses across entire resume.
+- Mix bullet lengths: some 12-15 words, some 20-30 words.
+- Skills: max 12, each a real tool/tech/framework/methodology.
+- Education: max 2 entries, concise.
+- NEVER use: "Results-driven", "motivated", "passionate", "dynamic", "seasoned", "team player".
+"""
+        max_retries = 2
+        last_error = None
+        for attempt in range(max_retries + 1):
+            try:
+                response = self.client.models.generate_content(
+                    model=self.model_name,
+                    contents=prompt,
+                    config=JSON_CONFIG,
+                )
+                return _robust_parse_json(response.text)
+            except (ValueError, json.JSONDecodeError) as e:
+                last_error = e
+                logger.warning(f"Step 3 (rewrite) JSON parse attempt {attempt + 1} failed: {e}")
+                if attempt < max_retries:
+                    continue
+            except Exception as e:
+                last_error = e
+                logger.error(f"Step 3 (rewrite) failed: {e}")
+                break
+        logger.error(f"Step 3 failed after retries: {last_error}")
+        return {"error": str(last_error)}
+
+    async def step4_assemble_and_score(
+        self,
+        rewrite_result: Dict,
+        jd_analysis: Dict,
+        evidence_map: Dict,
+        resume_os_context: Optional[str] = None,
+    ) -> Dict:
+        """Step 4: Final assembly — generate comparison, signal classification, engine log."""
+        prompt = f"""You are a resume quality auditor. Review this optimized resume and produce
+the final scoring, signal classification, and before/after comparison.
+
+OPTIMIZED RESUME DATA:
+{json.dumps(rewrite_result, indent=2)}
+
+JD ANALYSIS:
+{json.dumps(jd_analysis, indent=2)}
+
+EVIDENCE MAP:
+{json.dumps(evidence_map, indent=2)}
+
+{"RESUME OS CONTEXT: " + resume_os_context if resume_os_context else ""}
+
+Your tasks:
+1. Classify signals in the optimized resume (hard/cognitive/trust/structural).
+2. Log which optimization engines were effectively applied.
+3. Generate a concise comparison summary.
+4. Identify any remaining gaps.
+
+Return VALID JSON:
+{{
+    "signal_classification": {{
+        "hard_signals": ["<metric-containing elements>"],
+        "cognitive_signals": ["<problem-diagnosis-action-outcome elements>"],
+        "trust_signals": ["<third-party credibility markers>"],
+        "structural_signals": ["<architecture/layout signals>"]
+    }},
+    "engines_applied": [
+        {{
+            "engine": "<engine name>",
+            "changes_count": <int>,
+            "summary": "<what this engine did>"
+        }}
+    ],
+    "key_improvements": ["<improvement 1>", "<improvement 2>", "<improvement 3>"],
+    "comparison": {{
+        "summary": "<brief summary of all changes>",
+        "detailed_changes": [
+            {{
+                "before": "<original text>",
+                "after": "<optimized text>",
+                "reason": "<why better>",
+                "impact": "<JD alignment improvement>"
+            }}
+        ],
+        "improvement_areas": [
+            {{
+                "area": "<section>",
+                "improvements": "<list>"
+            }}
+        ],
+        "ats_improvements": ["<ATS improvement 1>", "<ATS improvement 2>"],
+        "overall_improvement": "<assessment>"
+    }},
+    "remaining_gaps": ["<gap that couldn't be addressed without fabrication>"],
+    "level_gaps_flagged": ["<any level inflation warnings>"],
+    "orphaned_keywords": ["<skills listed but unsupported by experience>"]
+}}
+
+Focus comparison.detailed_changes on the 5-7 MOST IMPACTFUL changes.
+"""
+        try:
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    temperature=0.4,
+                ),
+            )
+            return _robust_parse_json(response.text)
+        except Exception as e:
+            logger.error(f"Step 4 (assembly) failed: {e}")
+            return {
+                "error": str(e),
+                "signal_classification": {},
+                "engines_applied": [],
+                "key_improvements": [],
+                "comparison": {"summary": "Assessment unavailable", "detailed_changes": []},
+            }
+
+    async def run_multistep_optimization(
+        self,
+        *,
+        resume_text: str,
+        job_description: str,
+        job_title: Optional[str] = None,
+        github_context: Optional[str] = None,
+        resume_os_context: Optional[str] = None,
+        progress_callback=None,
+    ) -> Dict:
+        """Run the full 4-step optimization pipeline with optional progress callbacks.
+
+        Args:
+            progress_callback: async callable(step: int, total: int, message: str, detail: str)
+        """
+        async def _emit(step: int, message: str, detail: str = ""):
+            if progress_callback:
+                await progress_callback(step=step, total=4, message=message, detail=detail)
+
+        # ── Step 1: Deep JD Analysis ──
+        await _emit(1, "Analyzing job description", "Extracting requirements, skills, and qualifiers...")
+        jd_analysis = await self.step1_analyze_jd(job_description, job_title)
+        if jd_analysis.get("error"):
+            logger.warning(f"Step 1 returned error, continuing with degraded JD analysis")
+            jd_analysis = {"must_have_requirements": [], "nice_to_have_requirements": [], "technical_stack": []}
+
+        num_reqs = len(jd_analysis.get("must_have_requirements", []))
+        num_nice = len(jd_analysis.get("nice_to_have_requirements", []))
+        await _emit(1, "Job description analyzed",
+                    f"Found {num_reqs} must-have and {num_nice} nice-to-have requirements")
+
+        # ── Step 2: Evidence Mapping ──
+        await _emit(2, "Mapping your experience to job requirements",
+                    "Finding evidence for each requirement in your resume...")
+        evidence_map = await self.step2_map_evidence(resume_text, jd_analysis, github_context)
+        if evidence_map.get("error"):
+            logger.warning(f"Step 2 returned error, continuing with empty evidence map")
+            evidence_map = {"evidence_map": [], "overall_match_assessment": {}}
+
+        match_info = evidence_map.get("overall_match_assessment", {})
+        await _emit(2, "Evidence mapping complete",
+                    f"Critical match: {match_info.get('critical_match_pct', '?')}% · "
+                    f"Gaps found: {len(match_info.get('biggest_gaps', []))}")
+
+        # ── Step 3: Content Rewriting ──
+        await _emit(3, "Rewriting resume content",
+                    "Aligning every bullet to job requirements...")
+        rewrite_result = await self.step3_rewrite_content(
+            resume_text=resume_text,
+            jd_analysis=jd_analysis,
+            evidence_map=evidence_map,
+            resume_os_context=resume_os_context,
+            github_context=github_context,
+        )
+        if rewrite_result.get("error"):
+            return {
+                "error": rewrite_result["error"],
+                "optimized_resume": resume_text,
+                "changes_made": [],
+                "name": "", "title": "", "email": "", "phone": "",
+                "linkedin": "", "location": "",
+                "professional_summary": "",
+                "experience": [], "skills": [], "education": [],
+            }
+
+        num_changes = len(rewrite_result.get("changes_made", []))
+        await _emit(3, "Content rewriting complete",
+                    f"Made {num_changes} targeted changes · Match score: {rewrite_result.get('match_score', '?')}%")
+
+        # ── Step 4: Scoring & Comparison ──
+        await _emit(4, "Scoring and final assessment",
+                    "Generating comparison, signal analysis, and ATS check...")
+        assembly = await self.step4_assemble_and_score(
+            rewrite_result=rewrite_result,
+            jd_analysis=jd_analysis,
+            evidence_map=evidence_map,
+            resume_os_context=resume_os_context,
+        )
+
+        # ── Merge step 3 (content) + step 4 (scoring) into final result ──
+        optimized_text_parts = []
+        if rewrite_result.get("professional_summary"):
+            optimized_text_parts.append(rewrite_result["professional_summary"])
+        for exp in rewrite_result.get("experience", []):
+            if isinstance(exp, dict):
+                optimized_text_parts.append(f"{exp.get('role', '')} at {exp.get('company', '')}")
+                for b in exp.get("bullets", []):
+                    optimized_text_parts.append(f"  - {b}")
+        if rewrite_result.get("skills"):
+            optimized_text_parts.append("Skills: " + ", ".join(rewrite_result["skills"]))
+
+        final = {
+            **rewrite_result,
+            "optimized_resume": "\n".join(optimized_text_parts),
+            "signal_classification": assembly.get("signal_classification", {}),
+            "engines_applied": assembly.get("engines_applied", []),
+            "key_improvements": assembly.get("key_improvements", []),
+            "comparison": assembly.get("comparison", {}),
+            "level_gaps_flagged": assembly.get("level_gaps_flagged", []),
+            "orphaned_keywords": assembly.get("orphaned_keywords", []),
+            "remaining_gaps": assembly.get("remaining_gaps", []),
+            "jd_analysis": jd_analysis,
+            "evidence_map": evidence_map.get("evidence_map", []),
+            "overall_match_assessment": evidence_map.get("overall_match_assessment", {}),
+        }
+
+        await _emit(4, "Optimization complete",
+                    f"Score: {rewrite_result.get('match_score', 0)}% · "
+                    f"{num_changes} changes · "
+                    f"{len(rewrite_result.get('keywords_added', []))} keywords added")
+
+        return final
+
     async def generate_comparison_analysis(
         self,
         original_resume: str,

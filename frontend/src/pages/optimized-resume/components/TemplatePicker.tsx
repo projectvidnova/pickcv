@@ -1,4 +1,4 @@
-import { ColorTheme, TemplateId, ResumeTemplate, VariantId } from '../types';
+import { ColorTheme, TemplateId, ResumeTemplate, VariantId, DynamicTemplateConfig } from '../types';
 import { getVariantTemplates, getVariantMeta, RESUME_TEMPLATES } from './themes';
 import React from 'react';
 
@@ -243,6 +243,9 @@ export default function TemplatePicker({
   onSelectTheme,
   variantId,
   variantRationale,
+  dynamicConfigs,
+  dynamicLoading,
+  onDynamicTemplateSelect,
 }: {
   activeTemplateId: TemplateId;
   activeTheme: ColorTheme;
@@ -250,10 +253,22 @@ export default function TemplatePicker({
   onSelectTheme: (theme: ColorTheme) => void;
   variantId?: string;
   variantRationale?: string;
+  dynamicConfigs?: Record<string, DynamicTemplateConfig>;
+  dynamicLoading?: Record<string, boolean>;
+  onDynamicTemplateSelect?: (configKey: string | undefined) => void;
 }) {
   const variantMeta = variantId ? getVariantMeta(variantId) : null;
   const templates = variantId ? getVariantTemplates(variantId) : RESUME_TEMPLATES.slice(0, 5);
   const activeTemplate = templates.find((t) => t.id === activeTemplateId) || templates[0];
+
+  const [activeDynKey, setActiveDynKey] = React.useState<string | undefined>();
+  const dynSlots = ['dynamic-2', 'dynamic-3', 'dynamic-4', 'dynamic-5'];
+  const ANGLE_LABELS: Record<string, { icon: string; label: string }> = {
+    'dynamic-2': { icon: 'ri-microscope-line', label: 'Depth' },
+    'dynamic-3': { icon: 'ri-bar-chart-2-line', label: 'Impact' },
+    'dynamic-4': { icon: 'ri-quill-pen-line', label: 'Narrative' },
+    'dynamic-5': { icon: 'ri-global-line', label: 'Breadth' },
+  };
 
   return (
     <div className="w-full">
@@ -300,11 +315,11 @@ export default function TemplatePicker({
       {/* Template cards — horizontal scroll */}
       <div className="flex gap-3 overflow-x-auto pb-3 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-gray-200 scrollbar-track-transparent -mx-1 px-1">
         {templates.map((tpl) => {
-          const isActive = tpl.id === activeTemplateId;
+          const isActive = tpl.id === activeTemplateId && !activeDynKey;
           return (
             <button
               key={tpl.id}
-              onClick={() => onSelectTemplate(tpl.id)}
+              onClick={() => { setActiveDynKey(undefined); onDynamicTemplateSelect?.(undefined); onSelectTemplate(tpl.id); }}
               className={`group relative flex-shrink-0 snap-start rounded-xl transition-all duration-200 ${
                 isActive
                   ? 'ring-2 ring-blue-500 shadow-lg shadow-blue-100 scale-[1.02]'
@@ -347,6 +362,88 @@ export default function TemplatePicker({
               </div>
             </button>
           );
+        })}
+
+        {/* ── Dynamic (AI-generated) template cards ── */}
+        {dynSlots.map((slotKey) => {
+          const isLoading = dynamicLoading?.[slotKey];
+          const config = dynamicConfigs?.[slotKey];
+          const isActive = activeDynKey === slotKey;
+          const angle = ANGLE_LABELS[slotKey];
+
+          // Loading shimmer
+          if (isLoading && !config) {
+            return (
+              <div
+                key={slotKey}
+                className="relative flex-shrink-0 snap-start rounded-xl ring-1 ring-gray-200 overflow-hidden"
+                style={{ width: 130 }}
+              >
+                <div className="w-full aspect-[3/4] bg-gradient-to-br from-gray-100 to-gray-50 animate-pulse flex flex-col items-center justify-center gap-2">
+                  <i className={`${angle.icon} text-xl text-gray-300`} />
+                  <span className="text-[9px] text-gray-400 font-medium">Generating...</span>
+                </div>
+                <div className="px-2.5 py-2 bg-white">
+                  <div className="h-3 bg-gray-100 rounded animate-pulse mb-1.5" />
+                  <div className="h-2 bg-gray-50 rounded animate-pulse w-3/4" />
+                </div>
+              </div>
+            );
+          }
+
+          // Ready card
+          if (config) {
+            const color = config.colorScheme?.primary || '#6366f1';
+            return (
+              <button
+                key={slotKey}
+                onClick={() => {
+                  if (isActive) {
+                    setActiveDynKey(undefined);
+                    onDynamicTemplateSelect?.(undefined);
+                    onSelectTemplate(templates[0]?.id || activeTemplateId);
+                  } else {
+                    setActiveDynKey(slotKey);
+                    onDynamicTemplateSelect?.(slotKey);
+                  }
+                }}
+                className={`group relative flex-shrink-0 snap-start rounded-xl transition-all duration-200 ${
+                  isActive
+                    ? 'ring-2 ring-purple-500 shadow-lg shadow-purple-100 scale-[1.02]'
+                    : 'ring-1 ring-gray-200 hover:ring-purple-300 hover:shadow-md hover:scale-[1.01]'
+                }`}
+                style={{ width: 130 }}
+              >
+                {/* Thumbnail uses dynamic layout */}
+                <div className={`relative w-full rounded-t-xl overflow-hidden p-1.5 ${isActive ? 'bg-purple-50/50' : 'bg-gray-50'}`}>
+                  <div className="w-full aspect-[3/4] rounded-md overflow-hidden shadow-sm border border-gray-100">
+                    <TemplateThumbnail templateId={`${config.layout}-dynamic`} color={color} />
+                  </div>
+                  {isActive && (
+                    <div className="absolute top-2.5 right-2.5 w-5 h-5 rounded-full bg-purple-500 flex items-center justify-center shadow-md">
+                      <i className="ri-check-line text-white text-[10px]" />
+                    </div>
+                  )}
+                  <div className="absolute top-2.5 left-2.5 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-purple-600/90 backdrop-blur-sm">
+                    <i className="ri-magic-line text-white text-[8px]" />
+                    <span className="text-[7px] text-white font-bold uppercase tracking-wide">AI</span>
+                  </div>
+                </div>
+                <div className={`px-2.5 py-2 rounded-b-xl text-left ${isActive ? 'bg-purple-50/80' : 'bg-white'}`}>
+                  <p className={`text-[11px] font-bold truncate ${isActive ? 'text-purple-700' : 'text-gray-700'}`}>
+                    {config.templateName}
+                  </p>
+                  <p className="text-[9px] text-gray-400 mt-0.5 line-clamp-2 leading-tight">{config.templateTagline}</p>
+                  <div className="flex items-center gap-1 mt-1">
+                    <i className={`${angle.icon} text-[9px] text-purple-400`} />
+                    <span className="text-[8px] text-purple-400 font-medium">{angle.label}</span>
+                  </div>
+                </div>
+              </button>
+            );
+          }
+
+          return null;
         })}
       </div>
 

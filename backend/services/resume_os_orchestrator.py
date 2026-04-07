@@ -266,6 +266,83 @@ CLUSTER_EXPERTISE: Dict[str, Dict] = {
 }
 
 
+# ── Variant-Level Verb Registry (Spec: Authenticity Engine Integration) ──
+# Maps each variant to preferred "voice" verbs and suppressed verbs.
+# Used to detect dissonance between template visual level and language level.
+VARIANT_VERB_REGISTRY: Dict[str, Dict] = {
+    "V1": {
+        "name": "Signal Stack",
+        "voice_level": "technical",
+        "preferred_verbs": ["architected", "deployed", "instrumented", "built", "shipped", "optimized", "refactored", "migrated", "integrated", "automated"],
+        "suppressed_verbs": ["strategic", "collaborative", "mentored", "oversaw", "managed stakeholders", "aligned teams"],
+        "max_verb_repeats": 2,
+    },
+    "V2": {
+        "name": "Outcome Ledger",
+        "voice_level": "business",
+        "preferred_verbs": ["drove", "generated", "exceeded", "grew", "delivered", "closed", "expanded", "negotiated", "launched", "increased"],
+        "suppressed_verbs": ["helped", "worked on", "collaborated", "participated"],
+        "max_verb_repeats": 2,
+    },
+    "V3": {
+        "name": "Authority Frame",
+        "voice_level": "executive_institutional",
+        "preferred_verbs": ["led", "managed", "directed", "established", "governed", "implemented", "consolidated", "standardized", "oversaw", "championed"],
+        "suppressed_verbs": ["coded", "built", "hacked", "prototyped", "debugged"],
+        "max_verb_repeats": 2,
+    },
+    "V4": {
+        "name": "Leadership Thesis",
+        "voice_level": "executive_visionary",
+        "preferred_verbs": ["orchestrated", "galvanized", "transformed", "pioneered", "envisioned", "spearheaded", "shaped", "influenced", "repositioned", "accelerated"],
+        "suppressed_verbs": ["built", "coded", "designed", "fixed", "debugged", "tested", "wrote"],
+        "max_verb_repeats": 1,
+    },
+    "V5": {
+        "name": "Proof Sheet",
+        "voice_level": "research",
+        "preferred_verbs": ["researched", "published", "validated", "evaluated", "hypothesized", "developed", "analyzed", "demonstrated", "quantified", "modeled"],
+        "suppressed_verbs": ["managed", "led team", "closed deal", "sold"],
+        "max_verb_repeats": 2,
+    },
+    "V6": {
+        "name": "Problem-Solver",
+        "voice_level": "operational",
+        "preferred_verbs": ["optimized", "streamlined", "reduced", "implemented", "redesigned", "eliminated", "automated", "standardized", "resolved", "mitigated"],
+        "suppressed_verbs": ["envisioned", "pioneered", "galvanized"],
+        "max_verb_repeats": 2,
+    },
+    "V7": {
+        "name": "Portfolio Lead",
+        "voice_level": "creative",
+        "preferred_verbs": ["designed", "prototyped", "crafted", "created", "iterated", "researched", "validated", "shipped", "conceptualized", "tested"],
+        "suppressed_verbs": ["managed stakeholders", "governed", "consolidated"],
+        "max_verb_repeats": 2,
+    },
+    "V8": {
+        "name": "Versatility Map",
+        "voice_level": "generalist",
+        "preferred_verbs": ["owned", "led", "built", "managed", "launched", "drove", "scaled", "operated", "delivered", "established"],
+        "suppressed_verbs": [],
+        "max_verb_repeats": 2,
+    },
+    "V9": {
+        "name": "Domain Expert",
+        "voice_level": "specialist",
+        "preferred_verbs": ["specialized", "developed", "architected", "implemented", "designed", "scaled", "optimized", "mentored", "standardized", "led"],
+        "suppressed_verbs": ["helped", "assisted", "participated"],
+        "max_verb_repeats": 2,
+    },
+    "V10": {
+        "name": "Transition Narrative",
+        "voice_level": "adaptive",
+        "preferred_verbs": ["transitioned", "adapted", "applied", "leveraged", "translated", "pivoted", "transferred", "reframed", "demonstrated", "developed"],
+        "suppressed_verbs": [],
+        "max_verb_repeats": 2,
+    },
+}
+
+
 class ResumeOSOrchestrator:
     """Coordinates multi-agent resume optimization flow."""
 
@@ -510,12 +587,12 @@ class ResumeOSOrchestrator:
 
         # ── Step 8: Authenticity Engine (score each variant, cluster-aware) ──
         for variant in resume_variants:
-            auth_result = self._authenticity_engine(variant.get("optimized_resume_text", ""), role_dna=role_dna)
+            auth_result = self._authenticity_engine(variant.get("optimized_resume_text", ""), role_dna=role_dna, variant_id=variant.get("id", "V1"))
             variant["authenticity"] = auth_result
 
         # ── Step 11: Simulation Layer (score each variant) ──
         for variant in resume_variants:
-            sim_result = self._simulation_layer(variant.get("optimized_resume_text", ""), role_dna)
+            sim_result = self._simulation_layer(variant.get("optimized_resume_text", ""), role_dna, variant_id=variant.get("id", "V1"))
             variant["simulation"] = sim_result
 
         # ── Compute per-variant composite scores ──
@@ -594,6 +671,245 @@ class ResumeOSOrchestrator:
                     "GapAgent",
                     "ATSScoringAgent",
                     "OptimizationSwarm (9 sub-engines via Gemini)",
+                    "TradeOffEngine",
+                    "VariantScoringAgent",
+                    "VariantDistanceControl",
+                    "AuthenticityEngine",
+                    "SimulationLayer",
+                    "OutputValidation",
+                    "StrategyLogAgent",
+                ],
+                "role_dna": role_dna,
+                "recommended_variant": {
+                    "id": default_recommendation.get("variant_id", ""),
+                    "name": default_recommendation.get("variant_name", ""),
+                    "score": default_recommendation.get("composite_score", 0),
+                    "rationale": default_recommendation.get("rationale", ""),
+                },
+                "ats_intelligence": ats_intel,
+                "ats_score": ats_score_result,
+                "recruiter_scan": recruiter_scan,
+                "gap_scorecard": gap_scorecard,
+                "constraint_result": constraint_result,
+                "tradeoff_log": tradeoff_log,
+                "variant_scores": variant_scores,
+                "default_recommendation": default_recommendation,
+                "strategy_log": strategy_log,
+                "gap_notification": gap_notification,
+                "ats_advisory": ats_advisory,
+                "validation": validation,
+                "signal_classification": optimization_result.get("signal_classification", {}),
+                "deprioritize_options": self.DEPRIORITIZE_OPTIONS,
+            },
+        }
+
+    async def optimize_multistep(
+        self,
+        *,
+        resume_text: str,
+        job_title: str,
+        job_description: str,
+        job_link: Optional[str] = None,
+        github_context: Optional[str] = None,
+        progress_callback=None,
+    ) -> Dict:
+        """Run the multi-step optimization pipeline with 4 focused LLM calls.
+
+        This replaces the monolithic single-call approach with:
+          Step 1: Deep JD analysis
+          Step 2: Resume↔JD evidence mapping
+          Step 3: Directive content rewriting (every bullet aligned to JD)
+          Step 4: Scoring, comparison, signal classification
+
+        Args:
+            progress_callback: async callable(step, total, message, detail)
+                               for SSE progress streaming.
+        """
+
+        total_steps = 8  # 4 LLM steps + 4 post-processing steps
+
+        async def _emit(step: int, message: str, detail: str = ""):
+            if progress_callback:
+                await progress_callback(step=step, total=total_steps, message=message, detail=detail)
+
+        # ── Pre-processing (parallel deterministic agents) ──
+        await _emit(1, "Preparing optimization context", "Running role classification and ATS detection...")
+
+        fallback_modes = self._detect_fallback_modes(
+            resume_text=resume_text,
+            job_description=job_description,
+            job_link=job_link,
+        )
+        role_dna = await self._role_intelligence_agent(job_title=job_title, job_description=job_description)
+        constraint_result = self._constraint_engine(
+            resume_text=resume_text,
+            job_description=job_description,
+            role_dna=role_dna,
+        )
+        ats_intel = self._ats_intelligence_agent(job_link)
+        recruiter_scan = self._recruiter_decision_agent(resume_text)
+        gap_scorecard = self._gap_analysis_agent(
+            resume_text=resume_text,
+            job_description=job_description,
+            role_dna=role_dna,
+            recruiter_scan=recruiter_scan,
+        )
+        ats_score_result = self._compute_ats_score(
+            resume_text=resume_text,
+            job_description=job_description,
+            ats_intel=ats_intel,
+            keyword_coverage=gap_scorecard.get("keyword_coverage", 0),
+            title_alignment=gap_scorecard.get("title_alignment", 0),
+        )
+        optimization_input_context = self._build_optimization_context(
+            role_dna=role_dna,
+            ats_intel=ats_intel,
+            recruiter_scan=recruiter_scan,
+            gap_scorecard=gap_scorecard,
+            fallback_modes=fallback_modes,
+            constraint_result=constraint_result,
+            ats_score_result=ats_score_result,
+        )
+
+        await _emit(1, "Context ready",
+                    f"Role: {role_dna.get('cluster_name', 'General')} · Level: {role_dna.get('level', '?')} · ATS: {ats_score_result.get('ats_score', '?')}%")
+
+        # ── 4-Step LLM Pipeline via progress_callback forwarding ──
+        async def _llm_progress(step: int, total: int, message: str, detail: str = ""):
+            # Remap LLM steps 1-4 → overall steps 2-5
+            await _emit(step + 1, message, detail)
+
+        optimization_result = await gemini_service.run_multistep_optimization(
+            resume_text=resume_text,
+            job_description=job_description,
+            job_title=job_title,
+            github_context=github_context or None,
+            resume_os_context=optimization_input_context,
+            progress_callback=_llm_progress,
+        )
+
+        if "error" in optimization_result:
+            return optimization_result
+
+        # ── Post-processing: Variants, Scoring, Validation ──
+        await _emit(6, "Building resume variants", "Creating specialized versions for different angles...")
+
+        tradeoff_log = self._trade_off_engine(
+            role_dna=role_dna,
+            ats_score=ats_score_result.get("ats_score", 0),
+            recruiter_score=recruiter_scan.get("scan_score", 0),
+            authenticity_score=70,
+        )
+        variant_scores, recommended_variant = self._output_engine_variant_scoring(
+            role_dna=role_dna,
+            ats_intel=ats_intel,
+            gap_scorecard=gap_scorecard,
+            match_score=float(optimization_result.get("match_score", 0) or 0),
+        )
+        variant_scores = self._variant_distance_control(variant_scores)
+
+        strategy_log = self._strategy_log_agent(
+            role_dna=role_dna,
+            ats_intel=ats_intel,
+            gap_scorecard=gap_scorecard,
+            changes_made=optimization_result.get("changes_made", []),
+            recommended_variant=recommended_variant,
+            variant_scores=variant_scores,
+            fallback_modes=fallback_modes,
+            constraint_result=constraint_result,
+            tradeoff_log=tradeoff_log,
+        )
+
+        resume_variants = self._build_resume_variants(
+            optimization_result=optimization_result,
+            role_dna=role_dna,
+            ats_intel=ats_intel,
+            variant_scores=variant_scores,
+        )
+
+        await _emit(7, "Scoring and validation", "Running authenticity checks and simulations...")
+
+        for variant in resume_variants:
+            auth_result = self._authenticity_engine(variant.get("optimized_resume_text", ""), role_dna=role_dna, variant_id=variant.get("id", "V1"))
+            variant["authenticity"] = auth_result
+        for variant in resume_variants:
+            sim_result = self._simulation_layer(variant.get("optimized_resume_text", ""), role_dna, variant_id=variant.get("id", "V1"))
+            variant["simulation"] = sim_result
+
+        for variant in resume_variants:
+            ats = ats_score_result.get("ats_score", 0)
+            recruiter = recruiter_scan.get("scan_score", 0)
+            composite = int(round(ats * 0.60 + recruiter * 0.40))
+            variant["scores"] = {
+                "ats_compatibility": ats,
+                "ats_platform": ats_intel.get("platform_name", "Unknown"),
+                "recruiter_scan": recruiter,
+                "signal_density": variant.get("score", 0),
+                "cognitive_load": variant.get("simulation", {}).get("cognitive_load_score", 0),
+                "role_match": gap_scorecard.get("role_match", 0),
+                "simulation": variant.get("simulation", {}).get("simulation_score", 0),
+                "authenticity": variant.get("authenticity", {}).get("authenticity_score", 0),
+                "composite": composite,
+            }
+
+        validation = self._output_validation(
+            variants=resume_variants,
+            strategy_log=strategy_log,
+            constraint_result=constraint_result,
+            role_dna=role_dna,
+        )
+
+        viable = [v for v in resume_variants if ats_score_result.get("ats_score", 0) >= 55]
+        if not viable:
+            viable = resume_variants
+        if viable:
+            best = max(viable, key=lambda v: v.get("scores", {}).get("composite", 0))
+            default_recommendation = {
+                "variant_id": best.get("id"),
+                "variant_name": best.get("name"),
+                "composite_score": best.get("scores", {}).get("composite", 0),
+                "rationale": best.get("rationale", "Highest composite score"),
+            }
+        else:
+            default_recommendation = recommended_variant
+
+        gap_notification = {
+            "missing_required_keywords": gap_scorecard.get("missing_required_keywords", []),
+            "missing_preferred_keywords": [],
+            "development_signals": [
+                f"To strengthen your application, consider developing evidence for: {kw}"
+                for kw in gap_scorecard.get("missing_required_keywords", [])[:5]
+            ],
+        }
+        ats_advisory = {
+            "platform": ats_intel.get("platform_name", "Unknown"),
+            "rules_applied": ats_intel.get("rules", []),
+            "file_format_recommendation": ats_intel.get("preferred_format", "pdf"),
+            "posting_age_warning": None,
+        }
+
+        await _emit(8, "Optimization complete",
+                    f"Match: {optimization_result.get('match_score', 0)}% · "
+                    f"{len(resume_variants)} variants generated")
+
+        return {
+            **optimization_result,
+            "resume_variants": resume_variants,
+            "resume_os": {
+                "run_valid": validation.get("valid", True),
+                "fallback_modes": fallback_modes,
+                "agents_executed": [
+                    "FallbackDetection",
+                    "RoleDNAAgent",
+                    "ConstraintEngine",
+                    "ATSAgent",
+                    "RecruiterScanAgent",
+                    "GapAgent",
+                    "ATSScoringAgent",
+                    "Step1_JDAnalysis",
+                    "Step2_EvidenceMapping",
+                    "Step3_ContentRewriting",
+                    "Step4_ScoringAssembly",
                     "TradeOffEngine",
                     "VariantScoringAgent",
                     "VariantDistanceControl",
@@ -1028,6 +1344,345 @@ class ResumeOSOrchestrator:
         {"id": "reduce_bullets", "label": "Fewer bullets per role", "description": "Keep only the top 2-3 highest-impact bullets per role"},
         {"id": "trim_certifications", "label": "Remove certifications / projects", "description": "Drop certifications and projects sections"},
     ]
+
+    # ── Dynamic Template Generation ──
+    # Per-person LLM-designed template configs that adapt to the individual's content
+
+    PERSONA_ANGLES = {
+        "depth": {
+            "instruction": "Focus on the person's deepest expertise. Lead with technical skills. Dense layout, tight spacing. Prioritize depth over breadth.",
+            "preferred_layouts": ["sidebar-left", "two-col", "minimal"],
+            "preferred_sections_first": ["skills", "experience"],
+        },
+        "impact": {
+            "instruction": "Focus on measurable business outcomes. Lead with biggest numbers and achievements. Bold metrics. Business-friendly layout.",
+            "preferred_layouts": ["header-single", "bold-bars", "centered"],
+            "preferred_sections_first": ["experience", "summary"],
+        },
+        "narrative": {
+            "instruction": "Tell a career story. Lead with a compelling summary. Generous spacing, elegant typography. Emphasize progression and growth.",
+            "preferred_layouts": ["centered", "timeline", "header-single"],
+            "preferred_sections_first": ["summary", "experience"],
+        },
+        "breadth": {
+            "instruction": "Show versatility and range. Balanced sections. Group skills by domain. Use layout that gives equal weight to all sections.",
+            "preferred_layouts": ["two-col", "sidebar-right", "bold-bars"],
+            "preferred_sections_first": ["summary", "skills"],
+        },
+    }
+
+    VARIANT_VOICE_MAP = {
+        "V1": "technical — use precise engineering language, emphasize systems and tools",
+        "V2": "business-outcome — focus on ROI, revenue, growth metrics",
+        "V3": "enterprise-institutional — formal, process-oriented, governance language",
+        "V4": "executive-visionary — strategic, leadership, organizational transformation",
+        "V5": "research-analytical — evidence-based, methodological, data-driven",
+        "V6": "operational-consulting — problem-diagnosis, optimization, efficiency",
+        "V7": "creative-design — portfolio-oriented, user-centered, craft-focused",
+        "V8": "generalist-versatile — balanced, adaptable, cross-functional",
+        "V9": "specialist-expert — domain authority, deep knowledge, mentorship",
+        "V10": "transition-adaptive — transferable skills, learning agility, pivoting",
+    }
+
+    async def generate_dynamic_template(
+        self,
+        *,
+        resume_data: Dict,
+        variant_id: str,
+        persona_angle: str,
+        slot_index: int,
+        role_dna: Dict,
+        job_title: str = "",
+        job_description: str = "",
+        static_template_config: Optional[Dict] = None,
+    ) -> Dict:
+        """Generate a unique, person-specific template configuration using LLM.
+
+        Each call produces a DynamicTemplateConfig tailored to the individual's
+        resume content, variant voice, and persona angle. No two calls produce
+        the same result.
+        """
+        from services.gemini_service import gemini_service, _robust_parse_json, JSON_CONFIG
+
+        angle_info = self.PERSONA_ANGLES.get(persona_angle, self.PERSONA_ANGLES["impact"])
+        voice = self.VARIANT_VOICE_MAP.get(variant_id, self.VARIANT_VOICE_MAP["V1"])
+
+        # ── Analyze the person's content for the prompt ──
+        experience = resume_data.get("experience", [])
+        skills = resume_data.get("skills", [])
+        education = resume_data.get("education", [])
+        summary = resume_data.get("summary", "")
+
+        n_roles = len(experience)
+        total_bullets = sum(len(exp.get("bullets", [])) for exp in experience)
+        n_skills = len(skills)
+
+        # Extract metrics from bullets for LLM context
+        import re as _re
+        all_bullets = []
+        bullet_index_map = []  # (role_idx, bullet_idx, text)
+        for ri, exp in enumerate(experience):
+            for bi, bullet in enumerate(exp.get("bullets", [])):
+                all_bullets.append(bullet)
+                bullet_index_map.append({"role": ri, "bullet": bi, "text": bullet[:120]})
+
+        metric_bullets = [b for b in all_bullets if _re.search(r'\d+[%xX$+]|\$[\d,]+', b)]
+        density = "dense" if total_bullets > 15 else "moderate" if total_bullets > 8 else "sparse"
+
+        # ── Build job description context ──
+        jd_context_parts = []
+        if job_title:
+            jd_context_parts.append(f"Target Job Title: {job_title}")
+        if isinstance(role_dna, dict):
+            if role_dna.get("function"):
+                jd_context_parts.append(f"Role Function: {role_dna['function']}")
+            if role_dna.get("level"):
+                jd_context_parts.append(f"Seniority Level: {role_dna['level']}")
+            if role_dna.get("environment"):
+                jd_context_parts.append(f"Work Environment: {role_dna['environment']}")
+            if role_dna.get("cluster_name"):
+                jd_context_parts.append(f"Industry Cluster: {role_dna['cluster_name']}")
+        # Include truncated JD text for rich context (max 800 chars to stay within prompt budget)
+        if job_description:
+            jd_summary = job_description[:800].strip()
+            if len(job_description) > 800:
+                jd_summary += "..."
+            jd_context_parts.append(f"Job Description (excerpt):\n{jd_summary}")
+
+        jd_block = ""
+        if jd_context_parts:
+            jd_block = "\nTARGET JOB CONTEXT:\n" + "\n".join(f"- {p}" for p in jd_context_parts)
+
+        # Build role summaries for LLM
+        role_summaries = []
+        for i, exp in enumerate(experience):
+            role_summaries.append(
+                f"Role {i}: {exp.get('role', '')} at {exp.get('company', '')} "
+                f"({exp.get('period', '')}) — {len(exp.get('bullets', []))} bullets"
+            )
+
+        # Static template context (what to differ from)
+        static_ctx = ""
+        if static_template_config:
+            static_ctx = (
+                f"The STATIC template (slot 1) already uses: "
+                f"layout={static_template_config.get('layout', 'header-single')}, "
+                f"font={static_template_config.get('fontFamily', 'sans-modern')}, "
+                f"rhythm={static_template_config.get('verticalRhythm', 'standard')}, "
+                f"headingStyle={static_template_config.get('headingStyle', 'underline')}, "
+                f"boldTarget={static_template_config.get('boldTarget', 'metrics')}. "
+                f"You MUST pick DIFFERENT values for at least layout and fontFamily."
+            )
+
+        # ── Build the prompt ──
+        prompt = f"""You are a professional resume template designer. Given a person's actual resume data and a design brief, create a unique visual template configuration that best presents THIS specific person.
+
+PERSON'S PROFILE:
+- Current role: {experience[0].get('role', 'Professional') if experience else 'Professional'} at {experience[0].get('company', '') if experience else ''}
+- Experience: {n_roles} roles, {total_bullets} achievement bullets
+- Skills: {n_skills} skills listed{' — ' + ', '.join(skills[:10]) if skills else ''}
+- Education: {len(education)} entries
+- Summary length: {len(summary)} chars
+- Content density: {density}
+- Top metric-containing bullets ({len(metric_bullets)}): {'; '.join(b[:80] for b in metric_bullets[:5])}
+
+ROLES:
+{chr(10).join(role_summaries)}
+
+ALL BULLETS (with indices for selection):
+{chr(10).join(f'[{m["role"]},{m["bullet"]}] {m["text"]}' for m in bullet_index_map[:30])}
+
+SKILLS LIST:
+{', '.join(skills[:30])}
+
+{jd_block}
+
+DESIGN BRIEF:
+- Variant voice: {voice}
+- Narrative angle: {persona_angle.upper()} — {angle_info['instruction']}
+- This is template slot {slot_index} of 5 — must be VISUALLY DISTINCT from slot 1
+{static_ctx}
+
+AVAILABLE OPTIONS:
+- layouts: ["header-single", "sidebar-left", "sidebar-right", "centered", "minimal", "bold-bars", "timeline", "two-col"]
+- fontFamilies: ["sans-modern", "sans-clean", "serif-prestigious", "serif-executive", "tech-mono", "sans-display"]
+- verticalRhythms: ["tight", "standard", "generous", "very-generous"]
+- headingStyles: ["underline", "pill", "side", "caps"]
+- boldTargets: ["stack", "metrics", "company", "scale", "skills", "none"]
+- Preferred layouts for this angle: {angle_info['preferred_layouts']}
+
+RULES:
+1. Pick a layout that best serves this person's content shape and the narrative angle
+2. Choose typography that matches the variant voice
+3. Set sectionOrder to put the person's STRONGEST content first based on the angle AND the target job requirements. If targeting a technical role, lead with skills/experience. If targeting a leadership role, lead with impact/summary.
+4. Tailor sectionTitles, bullet selection, and skill grouping to EMPHASIZE alignment with the target job. For example, if the target is "Senior Data Engineer", title the skills section "Data Engineering Stack" and prioritize data-related bullets.
+5. Write creative sectionTitles that match the narrative AND target role (e.g. "Engineering Impact at Scale" not just "Experience")
+6. Select 2-3 most compelling metrics for achievementBarMetrics
+7. For bulletStrategy: pick the strongest bullets per role for this angle (max 4 per role). Use actual [role,bullet] indices from the bullet list above. If the angle is "impact", prioritize metric-heavy bullets. If "depth", prioritize technical detail bullets.
+8. If the person has 8+ skills, group them into 2-4 meaningful categories
+9. Optionally rewrite the summary (2-3 sentences) to match this template's narrative angle. Keep ALL facts true — only change the framing/emphasis. If the existing summary is good for this angle, set summaryRewrite to null.
+10. Choose colors that feel professional. primary must be a dark, muted hex color. accent is a complementary color.
+11. NEVER fabricate data. Only reorder, select, or rephrase what exists.
+
+Return a JSON object with this exact schema:
+{{
+  "templateName": "string — creative name for this template",
+  "templateTagline": "string — 5-8 word tagline",
+  "layout": "one of the layout options",
+  "headingStyle": "one of the heading style options",
+  "fontFamily": "one of the font family options",
+  "verticalRhythm": "one of the rhythm options",
+  "boldTarget": "one of the bold target options",
+  "colorScheme": {{
+    "primary": "#hex — dark professional color",
+    "accent": "#hex — complementary accent",
+    "headerBg": "#hex — header background (same or near primary for dark headers, #ffffff for light)",
+    "headerText": "#hex — text on header (#ffffff for dark headers, primary for light)",
+    "sectionLine": "#hex — section divider color",
+    "bulletColor": "#hex — bullet point color",
+    "skillBg": "#hex15 — skill tag background (light tint)",
+    "skillText": "#hex — skill tag text color"
+  }},
+  "sectionOrder": ["summary", "experience", "skills", "education"],
+  "sectionTitles": {{
+    "summary": "string — creative title",
+    "experience": "string — creative title",
+    "skills": "string — creative title",
+    "education": "string — creative title"
+  }},
+  "highlightedMetrics": ["metric1", "metric2"] ,
+  "bulletStrategy": [
+    {{"roleIndex": 0, "selectedBullets": [0, 2, 4], "maxBullets": 4}},
+    {{"roleIndex": 1, "selectedBullets": [0, 1], "maxBullets": 3}}
+  ],
+  "summaryRewrite": "string or null",
+  "skillsLayout": "tags or list or grouped",
+  "skillGroups": [{{"label": "Category", "skills": ["skill1", "skill2"]}}],
+  "showAchievementBar": true,
+  "achievementBarMetrics": [{{"value": "$2M", "label": "Revenue Growth"}}]
+}}"""
+
+        try:
+            response = gemini_service.client.models.generate_content(
+                model=gemini_service.model_name,
+                contents=prompt,
+                config=JSON_CONFIG,
+            )
+            config = _robust_parse_json(response.text)
+
+            # ── Validate and sanitize the LLM output ──
+            valid_layouts = {"header-single", "sidebar-left", "sidebar-right", "centered", "minimal", "bold-bars", "timeline", "two-col"}
+            valid_fonts = {"sans-modern", "sans-clean", "serif-prestigious", "serif-executive", "tech-mono", "sans-display"}
+            valid_rhythms = {"tight", "standard", "generous", "very-generous"}
+            valid_headings = {"underline", "pill", "side", "caps"}
+            valid_bolds = {"stack", "metrics", "company", "scale", "skills", "none"}
+            valid_sections = {"summary", "experience", "skills", "education"}
+
+            config["layout"] = config.get("layout", "header-single") if config.get("layout") in valid_layouts else "header-single"
+            config["fontFamily"] = config.get("fontFamily", "sans-modern") if config.get("fontFamily") in valid_fonts else "sans-modern"
+            config["verticalRhythm"] = config.get("verticalRhythm", "standard") if config.get("verticalRhythm") in valid_rhythms else "standard"
+            config["headingStyle"] = config.get("headingStyle", "underline") if config.get("headingStyle") in valid_headings else "underline"
+            config["boldTarget"] = config.get("boldTarget", "metrics") if config.get("boldTarget") in valid_bolds else "metrics"
+
+            # Validate sectionOrder
+            order = config.get("sectionOrder", [])
+            if not isinstance(order, list) or set(order) != valid_sections:
+                config["sectionOrder"] = list(angle_info.get("preferred_sections_first", ["summary", "experience"])) + [
+                    s for s in ["summary", "experience", "skills", "education"]
+                    if s not in angle_info.get("preferred_sections_first", [])
+                ]
+
+            # Validate bulletStrategy indices
+            bullet_strategy = config.get("bulletStrategy", [])
+            if isinstance(bullet_strategy, list):
+                validated_bs = []
+                for bs in bullet_strategy:
+                    ri = bs.get("roleIndex", 0)
+                    if ri < len(experience):
+                        role_bullet_count = len(experience[ri].get("bullets", []))
+                        selected = [b for b in bs.get("selectedBullets", []) if isinstance(b, int) and 0 <= b < role_bullet_count]
+                        if selected:
+                            validated_bs.append({
+                                "roleIndex": ri,
+                                "selectedBullets": selected,
+                                "maxBullets": bs.get("maxBullets", 4),
+                            })
+                config["bulletStrategy"] = validated_bs
+
+            # Validate skillGroups reference real skills
+            skill_groups = config.get("skillGroups")
+            if isinstance(skill_groups, list) and skills:
+                skills_lower = {s.lower() for s in skills}
+                validated_groups = []
+                for grp in skill_groups:
+                    if isinstance(grp, dict) and grp.get("label") and isinstance(grp.get("skills"), list):
+                        valid_skills = [s for s in grp["skills"] if s.lower() in skills_lower]
+                        if valid_skills:
+                            validated_groups.append({"label": grp["label"], "skills": valid_skills})
+                config["skillGroups"] = validated_groups if validated_groups else None
+
+            # Validate color scheme has all required fields
+            color_defaults = {
+                "primary": "#1e3a5f", "accent": "#2563eb",
+                "headerBg": "#1e3a5f", "headerText": "#ffffff",
+                "sectionLine": "#1e3a5f", "bulletColor": "#1e3a5f",
+                "skillBg": "#1e3a5f15", "skillText": "#1e3a5f",
+            }
+            cs = config.get("colorScheme", {})
+            if not isinstance(cs, dict):
+                cs = {}
+            for key, default in color_defaults.items():
+                if key not in cs or not isinstance(cs[key], str):
+                    cs[key] = default
+            config["colorScheme"] = cs
+
+            # Ensure required string fields
+            config.setdefault("templateName", f"Dynamic {persona_angle.title()}")
+            config.setdefault("templateTagline", f"{persona_angle.title()}-focused template")
+            config.setdefault("skillsLayout", "tags")
+            config.setdefault("showAchievementBar", True)
+
+            config["_meta"] = {
+                "slot": slot_index,
+                "persona": persona_angle,
+                "variant": variant_id,
+                "dynamic": True,
+            }
+
+            return config
+
+        except Exception as e:
+            logger.error(f"Dynamic template generation failed for slot {slot_index}: {e}")
+            # Fallback: return a reasonable static config based on angle
+            fallback_layout = angle_info["preferred_layouts"][0] if angle_info.get("preferred_layouts") else "header-single"
+            return {
+                "templateName": f"{persona_angle.title()} Focus",
+                "templateTagline": f"{persona_angle.title()}-optimized layout",
+                "layout": fallback_layout,
+                "headingStyle": "underline",
+                "fontFamily": "sans-modern",
+                "verticalRhythm": "standard",
+                "boldTarget": "metrics",
+                "colorScheme": {
+                    "primary": "#1e3a5f", "accent": "#2563eb",
+                    "headerBg": "#1e3a5f", "headerText": "#ffffff",
+                    "sectionLine": "#1e3a5f", "bulletColor": "#1e3a5f",
+                    "skillBg": "#1e3a5f15", "skillText": "#1e3a5f",
+                },
+                "sectionOrder": angle_info.get("preferred_sections_first", ["summary", "experience"]) + [
+                    s for s in ["summary", "experience", "skills", "education"]
+                    if s not in angle_info.get("preferred_sections_first", [])
+                ],
+                "sectionTitles": {"summary": "Summary", "experience": "Experience", "skills": "Skills", "education": "Education"},
+                "bulletStrategy": [],
+                "summaryRewrite": None,
+                "skillsLayout": "tags",
+                "skillGroups": None,
+                "showAchievementBar": True,
+                "achievementBarMetrics": [],
+                "highlightedMetrics": [],
+                "_meta": {"slot": slot_index, "persona": persona_angle, "variant": variant_id, "dynamic": True, "fallback": True},
+            }
 
     def compress_variant(
         self,
@@ -1623,10 +2278,17 @@ class ResumeOSOrchestrator:
         recruiter_score: int,
         authenticity_score: int,
     ) -> Dict:
-        """Apply deterministic trade-off rules per Resume OS spec."""
+        """Apply deterministic trade-off rules per Resume OS spec.
+
+        Enhanced with readability scoring and template selection feedback
+        per the Signal Diversity specification (Flavor Engine).
+        """
         rules_fired: List[str] = []
         adjustments: List[str] = []
+        template_hints: List[str] = []
         level = str(role_dna.get("level", "L3")).upper()
+        env = str(role_dna.get("environment", "")).lower()
+        cluster_id = str(role_dna.get("cluster_id", "C0")).upper()
 
         # RULE: ATS_PRIORITY_GATE
         if ats_score < 70:
@@ -1642,25 +2304,54 @@ class ResumeOSOrchestrator:
         if level in ["L4", "L5", "L5+"]:
             rules_fired.append("SENIOR_ROLE_ADJUSTMENT")
             adjustments.append("Trust+Cognitive signals prioritized over Hard Signal density; metric density relaxed to 1 per 3 bullets")
+            template_hints.append("PREFER_V3_V4: Senior role → prefer Authority Frame or Leadership Thesis variants")
 
         # RULE: FRESHER_ADJUSTMENT
         if level in ["L1", "L2"] and not re.search(r"experience|work history", (role_dna.get("function") or "").lower()):
             rules_fired.append("FRESHER_ADJUSTMENT")
             adjustments.append("Trust+Structural signals prioritized; proxy metrics accepted at same weight")
 
-        # RULE: METRIC_STUFFING_BLOCK
-        # (would need full bullet analysis — simplified check)
+        # RULE: AUTHENTICITY_FLOOR
+        if authenticity_score < 55:
+            rules_fired.append("AUTHENTICITY_FLOOR")
+            adjustments.append("Authenticity below 55 — reduce bullet uniformity, vary sentence structure")
+            template_hints.append("AVOID_DENSE_TEMPLATES: Low authenticity → avoid high-density templates that amplify AI texture")
+
+        # RULE: ENVIRONMENT_TEMPLATE_ALIGNMENT (Spec: Trade-Off → Template Selection)
+        if env == "startup" and cluster_id in ("C1", "C5"):
+            rules_fired.append("STARTUP_TECH_TEMPLATE")
+            template_hints.append("PREFER_V1_MONOSPACED: Startup + Tech cluster → default to Signal Stack with tech-mono font")
+        elif env == "mnc" and level in ("L4", "L5", "L5+"):
+            rules_fired.append("MNC_EXECUTIVE_TEMPLATE")
+            template_hints.append("PREFER_V3_SERIF: MNC + Executive level → default to Authority Frame with serif-prestigious")
+        elif cluster_id == "C6":
+            rules_fired.append("SALES_OUTCOME_TEMPLATE")
+            template_hints.append("PREFER_V2_KPI: Sales cluster → default to Outcome Ledger with KPI ribbon")
+
+        # RULE: READABILITY_DENSITY_BALANCE
+        # Estimate readability from recruiter_score vs ats_score gap
+        readability_gap = recruiter_score - ats_score
+        if readability_gap < -20:
+            rules_fired.append("OVER_OPTIMIZED_FOR_ATS")
+            adjustments.append("ATS optimization creating dense text blocks — increase whitespace, reduce keyword density")
+            template_hints.append("USE_GENEROUS_RHYTHM: Over-optimized → switch to generous/very-generous vertical rhythm")
+        elif readability_gap > 20:
+            rules_fired.append("UNDER_OPTIMIZED_FOR_ATS")
+            adjustments.append("High readability but low ATS score — weave more keywords into experience context")
 
         return {
             "rules_fired": rules_fired,
             "adjustments": adjustments,
+            "template_hints": template_hints,
             "ats_priority_mode": ats_score < 70,
             "human_priority_mode": ats_score >= 80,
+            "authenticity_risk": authenticity_score < 55,
+            "readability_gap": readability_gap,
         }
 
     # ── Step 8: Authenticity Engine ──────────────────────────────────
 
-    def _authenticity_engine(self, resume_text: str, role_dna: Optional[Dict] = None) -> Dict:
+    def _authenticity_engine(self, resume_text: str, role_dna: Optional[Dict] = None, variant_id: str = "V1") -> Dict:
         """Score authenticity of optimized resume text per Resume OS spec.
 
         Cluster-aware scoring:
@@ -1677,6 +2368,7 @@ class ResumeOSOrchestrator:
         expertise = CLUSTER_EXPERTISE.get(cluster_id, CLUSTER_EXPERTISE["C0"])
 
         text = (resume_text or "").strip()
+        text_lower = text.lower()
         lines = [l.strip() for l in text.split("\n") if l.strip()]
         bullets = [l for l in lines if l.startswith(("•", "-", "–"))]
 
@@ -1688,6 +2380,25 @@ class ResumeOSOrchestrator:
             verb_counts[vl] = verb_counts.get(vl, 0) + 1
 
         verb_penalty = sum(5 for count in verb_counts.values() if count > 2)
+
+        # ── Variant-level verb registry checks (Spec: Engine 3.9) ──
+        variant_verbs = VARIANT_VERB_REGISTRY.get(variant_id.upper(), {})
+        max_repeats = variant_verbs.get("max_verb_repeats", 2)
+        verb_cap_penalty = sum(3 for count in verb_counts.values() if count > max_repeats)
+        verb_penalty += verb_cap_penalty
+
+        # Check for suppressed verbs (dissonance detection)
+        suppressed = [v.lower() for v in variant_verbs.get("suppressed_verbs", [])]
+        dissonance_hits = []
+        for sv in suppressed:
+            if sv in text_lower:
+                dissonance_hits.append(sv)
+        dissonance_penalty = len(dissonance_hits) * 4
+
+        # Check preferred verb usage (reward)
+        preferred = [v.lower() for v in variant_verbs.get("preferred_verbs", [])]
+        preferred_used = sum(1 for pv in preferred if pv in text_lower)
+        preferred_bonus = min(5, preferred_used)  # up to 5 bonus points
 
         # Syntactic repetition penalty
         syntactic_penalty = 0
@@ -1706,7 +2417,7 @@ class ResumeOSOrchestrator:
         else:
             length_score = 15
 
-        language_variation = max(0, 30 - verb_penalty - syntactic_penalty)
+        language_variation = max(0, min(30, 30 - verb_penalty - syntactic_penalty - dissonance_penalty + preferred_bonus))
 
         # ── Voice Consistency (30 pts) — Cluster-aware ──
         has_first_person = bool(re.search(r"\bI\b", text))
@@ -1716,7 +2427,6 @@ class ResumeOSOrchestrator:
 
         # Cluster voice anti-pattern detection
         anti_patterns = expertise.get("voice_anti_patterns", [])
-        text_lower = text.lower()
         anti_hits = sum(1 for p in anti_patterns if p in text_lower)
         if anti_hits > 0:
             voice_consistency = max(0, voice_consistency - (anti_hits * 5))
@@ -1782,11 +2492,16 @@ class ResumeOSOrchestrator:
             "cluster_voice_profile": expertise.get("voice_profile", "neutral"),
             "cluster_density_notes": cluster_density_notes,
             "anti_pattern_hits": anti_hits,
+            "variant_voice_level": variant_verbs.get("voice_level", "neutral"),
+            "dissonance_verbs": dissonance_hits,
+            "dissonance_penalty": dissonance_penalty,
+            "preferred_verbs_used": preferred_used,
+            "verb_cap_violations": sum(1 for count in verb_counts.values() if count > max_repeats),
         }
 
     # ── Step 11: Simulation Layer ────────────────────────────────────
 
-    def _simulation_layer(self, resume_text: str, role_dna: Dict) -> Dict:
+    def _simulation_layer(self, resume_text: str, role_dna: Dict, variant_id: str = "V1") -> Dict:
         """Simulate recruiter scan per Resume OS spec.
 
         Five dimensions:
@@ -1908,6 +2623,18 @@ class ResumeOSOrchestrator:
         else:
             sim_interpretation = "Low probability of Commitment; review Pedigree Score + Anchor"
 
+        # ── Design Pivot Recommendations (Spec: Table 3) ──
+        design_pivots: List[str] = []
+        if triage_pass < 70:
+            design_pivots.append("COMPRESSED_HEADER: Triage anchors not in top 40%. Switch to compressed header template.")
+        if pedigree_score < 40 and variant_id.upper() in ("V3", "V4"):
+            design_pivots.append("INSTITUTIONALIST: Pedigree signals weak for Authority/Leadership variant. Bold company names more aggressively.")
+        bold_count = len(re.findall(r"\*\*[^*]+\*\*|<b>[^<]+</b>|<strong>[^<]+</strong>", text))
+        if bold_count > len(bullets) * 3:
+            design_pivots.append("MINIMALIST: Bold density too high (>3 per bullet). Switch to minimalist template; reduce secondary bolding.")
+        if anchor_type == "NEUTRAL" and variant_id.upper() in ("V2", "V6"):
+            design_pivots.append("HARD_SIGNAL_LEAD: First element is not a metric. Re-order to lead with Hard Signal bullet for Outcome/Ops variant.")
+
         return {
             "simulation_score": simulation_score,
             "interpretation": sim_interpretation,
@@ -1922,6 +2649,7 @@ class ResumeOSOrchestrator:
                 "soft_risks": soft_risks,
             },
             "triage_anchors": anchors,
+            "design_pivots": design_pivots,
         }
 
     # ── Step 10: Variant Distance Control ────────────────────────────

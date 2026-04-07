@@ -3,10 +3,23 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import Navbar from '../../components/feature/Navbar';
 import Footer from '../../components/feature/Footer';
 import InlineResumeEditor from '../optimized-resume/components/InlineResumeEditor';
-import { ResumeData } from '../optimized-resume/types';
+import { ResumeData, DynamicTemplateConfig, PersonaAngle } from '../optimized-resume/types';
 import { getVariantTemplates } from '../optimized-resume/components/themes';
 import { authFetch } from '../../services/authFetch';
 import { API_BASE_URL } from '../../config/api';
+
+/** Build a set of rewritten bullet strings for quick lookup */
+function buildChangeLookup(changes: OptimizationData['changes_made']) {
+  const rewrittenSet = new Set<string>();
+  const changeMap = new Map<string, { original?: string; why: string; section: string; requirement_matched?: string }>();
+  for (const c of (changes || [])) {
+    if (c.rewritten) {
+      rewrittenSet.add(c.rewritten.trim());
+      changeMap.set(c.rewritten.trim(), { original: c.original, why: c.why, section: c.section, requirement_matched: c.requirement_matched });
+    }
+  }
+  return { rewrittenSet, changeMap };
+}
 
 interface DeprioritizeOption {
   id: string;
@@ -17,8 +30,10 @@ interface DeprioritizeOption {
 interface OptimizationData {
   resumeId: number;
   job_title: string;
+  job_description?: string;
+  original_resume_text?: string;
   optimized_resume: string;
-  changes_made: Array<{ section: string; what_changed: string; why: string }>;
+  changes_made: Array<{ section: string; what_changed?: string; original?: string; rewritten?: string; why: string; requirement_matched?: string }>;
   key_improvements: string[];
   keywords_added: string[];
   match_score: number;
@@ -66,6 +81,9 @@ interface OptimizationData {
     };
     deprioritize_options?: DeprioritizeOption[];
   };
+  jd_analysis?: any;
+  evidence_map?: any[];
+  overall_match_assessment?: any;
 }
 
 export default function ResumeComparisonPage() {
@@ -73,7 +91,7 @@ export default function ResumeComparisonPage() {
   const location = useLocation();
   const [optimizationData, setOptimizationData] = useState<OptimizationData | null>(null);
   const [resumeData, setResumeData] = useState<ResumeData | null>(null);
-  const [activeTab, setActiveTab] = useState<'editor' | 'changes'>('editor');
+
 
   // Page optimization state
   const [selectedVariant, setSelectedVariant] = useState<any>(null);
@@ -92,12 +110,29 @@ export default function ResumeComparisonPage() {
   const [variantId, setVariantId] = useState<string | undefined>();
   const [variantRationale, setVariantRationale] = useState<string | undefined>();
 
+  // Dynamic template configs (LLM-generated per-person templates)
+  const [dynamicConfigs, setDynamicConfigs] = useState<Record<string, DynamicTemplateConfig>>({});
+  const [dynamicLoading, setDynamicLoading] = useState<Record<string, boolean>>({});
+  const [activeDynamicConfig, setActiveDynamicConfig] = useState<DynamicTemplateConfig | undefined>();
+
+  // Side-by-side comparison view
+  const [showComparison, setShowComparison] = useState(true);
+
   // Full (original) data preserved for switching between views
   const [fullResumeData, setFullResumeData] = useState<ResumeData | null>(null);
 
   // Actual rendered page count from InlineResumeEditor
   const [actualPageCount, setActualPageCount] = useState(1);
   const handlePageCountChange = useCallback((pages: number) => setActualPageCount(pages), []);
+
+  // Callback for when TemplatePicker (inside editor) selects a dynamic template
+  const handleDynamicTemplateSelect = useCallback((configKey: string | undefined) => {
+    if (!configKey) {
+      setActiveDynamicConfig(undefined);
+    } else {
+      setActiveDynamicConfig(dynamicConfigs[configKey]);
+    }
+  }, [dynamicConfigs]);
 
   // Smart deprioritize options derived from actual resume data
   const smartDeprioritizeOptions = useMemo(() => {
@@ -173,6 +208,48 @@ export default function ResumeComparisonPage() {
     }
   }, [navigate, location.state]);
 
+  /* ─── Fire 4 parallel dynamic template generation calls ─── */
+  useEffect(() => {
+    if (!fullResumeData || !variantId || !selectedVariant?.resume_data) return;
+
+    const PERSONA_ANGLES: PersonaAngle[] = ['depth', 'impact', 'narrative', 'breadth'];
+    const staticConfig = getVariantTemplates(variantId as any)[0];
+
+    PERSONA_ANGLES.forEach((angle, idx) => {
+      const slotIndex = idx + 2; // slots 2-5
+      const configKey = `dynamic-${slotIndex}`;
+
+      setDynamicLoading(prev => ({ ...prev, [configKey]: true }));
+
+      authFetch(`${import.meta.env.VITE_API_URL}/resume/generate-dynamic-template`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          variant_id: variantId,
+          resume_data: selectedVariant.resume_data,
+          persona_angle: angle,
+          slot_index: slotIndex,
+          role_dna: optimizationData?.resume_os?.role_dna || {},
+          job_title: optimizationData?.job_title || '',
+          job_description: optimizationData?.job_description || '',
+          static_template_config: staticConfig ? { id: staticConfig.id, name: staticConfig.name, atsScore: staticConfig.atsScore } : {},
+        }),
+      })
+        .then(res => res.json())
+        .then(json => {
+          // Backend returns config as top-level OR nested under .config
+          const cfg = json.config || (json.layout ? json : null);
+          if (cfg) {
+            setDynamicConfigs(prev => ({ ...prev, [configKey]: cfg as DynamicTemplateConfig }));
+          }
+        })
+        .catch(() => { /* silently fail — static templates remain */ })
+        .finally(() => {
+          setDynamicLoading(prev => ({ ...prev, [configKey]: false }));
+        });
+    });
+  }, [fullResumeData, variantId, selectedVariant]);
+
   const hydrateOptimizationData = (data: OptimizationData) => {
     setOptimizationData(data);
 
@@ -206,26 +283,26 @@ export default function ResumeComparisonPage() {
   const transformToResumeData = (apiData: any): ResumeData | null => {
     if (!apiData) return null;
     const transformed: ResumeData = {
-      name: apiData.name || 'Your Name',
-      title: apiData.title || 'Professional',
-      email: apiData.email || 'your.email@example.com',
-      phone: apiData.phone || '(555) 123-4567',
-      linkedin: apiData.linkedin || 'linkedin.com/in/yourname',
-      location: apiData.location || 'City, State',
-      summary: apiData.professional_summary || apiData.summary || 'Professional summary',
+      name: apiData.name || '',
+      title: apiData.title || '',
+      email: apiData.email || '',
+      phone: apiData.phone || '',
+      linkedin: apiData.linkedin || '',
+      location: apiData.location || '',
+      summary: apiData.professional_summary || apiData.summary || '',
       experience: Array.isArray(apiData.experience)
         ? apiData.experience.map((exp: any) => ({
-            role: exp.role || exp.title || 'Position',
-            company: exp.company || 'Company',
-            location: exp.location || 'Location',
-            period: exp.period || exp.dates || '2020 - Present',
+            role: exp.role || exp.title || '',
+            company: exp.company || '',
+            location: exp.location || '',
+            period: exp.period || exp.dates || '',
             bullets: Array.isArray(exp.bullets)
               ? exp.bullets
               : Array.isArray(exp.achievements)
               ? exp.achievements
               : Array.isArray(exp.responsibilities)
               ? exp.responsibilities
-              : ['Responsibility description'],
+              : [],
           }))
         : [],
       skills: Array.isArray(apiData.skills)
@@ -234,12 +311,12 @@ export default function ResumeComparisonPage() {
         ? apiData.skills.technical
         : typeof apiData.skills === 'string'
         ? apiData.skills.split(',').map((s: string) => s.trim())
-        : ['Skill 1', 'Skill 2', 'Skill 3'],
+        : [],
       education: Array.isArray(apiData.education)
         ? apiData.education.map((edu: any) => ({
-            degree: edu.degree || 'Degree',
-            school: edu.school || edu.institution || 'University',
-            period: edu.period || edu.year || '2020',
+            degree: edu.degree || '',
+            school: edu.school || edu.institution || '',
+            period: edu.period || edu.year || '',
           }))
         : [],
     };
@@ -601,126 +678,302 @@ export default function ResumeComparisonPage() {
             )}
           </div>
 
-          {/* Tabs */}
-          <div className="flex gap-1 mb-6 justify-center">
-            <button
-              onClick={() => setActiveTab('editor')}
-              className={`px-5 py-2.5 rounded-xl font-semibold text-sm transition-all ${
-                activeTab === 'editor'
-                  ? 'bg-gray-900 text-white shadow-lg'
-                  : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
-              }`}
-            >
-              <i className="ri-edit-2-line mr-1.5"></i>Edit Resume
-            </button>
-            <button
-              onClick={() => setActiveTab('changes')}
-              className={`px-5 py-2.5 rounded-xl font-semibold text-sm transition-all ${
-                activeTab === 'changes'
-                  ? 'bg-gray-900 text-white shadow-lg'
-                  : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
-              }`}
-            >
-              <i className="ri-git-commit-line mr-1.5"></i>What Changed
-            </button>
-          </div>
-
-          {/* Editor Tab */}
-          {activeTab === 'editor' && resumeData && (
-            <InlineResumeEditor data={resumeData} onDataChange={setResumeData} initialTemplateId={recommendedTemplate} variantId={variantId} variantRationale={variantRationale} onPageCountChange={handlePageCountChange} />
-          )}
-
-          {activeTab === 'editor' && !resumeData && (
-            <div className="text-center py-20">
-              <i className="ri-file-warning-line text-5xl text-gray-300 mb-4 block"></i>
-              <p className="text-gray-500">Unable to load resume data. Please try optimizing again.</p>
+          {/* View Mode Toggle */}
+          {!showComparison && (
+            <div className="flex items-center justify-center mb-6">
+              <button
+                onClick={() => setShowComparison(true)}
+                className="px-5 py-2.5 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 bg-white text-gray-700 border border-gray-200 shadow-sm hover:shadow-md hover:border-gray-300"
+              >
+                <i className="ri-arrow-left-line text-gray-400"></i>
+                Back to Before & After
+              </button>
             </div>
           )}
 
-          {/* Changes Tab */}
-          {activeTab === 'changes' && (
-            <div className="max-w-3xl mx-auto space-y-8">
-              {optimizationData.changes_made && optimizationData.changes_made.length > 0 && (
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                    <i className="ri-git-commit-line text-teal-600"></i>
-                    Changes Made
-                  </h2>
-                  <div className="space-y-3">
-                    {optimizationData.changes_made.map((change, idx) => (
-                      <div
-                        key={idx}
-                        className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 hover:border-teal-200 transition-all"
-                      >
-                        <div className="flex items-start gap-3">
-                          <div className="w-7 h-7 rounded-lg bg-teal-100 flex items-center justify-center flex-shrink-0">
-                            <span className="text-xs font-bold text-teal-600">{idx + 1}</span>
+          {/* ═══ Side-by-Side Comparison View ═══ */}
+          {showComparison && resumeData && (
+            <div className="mb-10">
+              {/* Comparison Summary Banner */}
+              {optimizationData.comparison?.summary && (
+                <div className="max-w-6xl mx-auto mb-6 p-4 rounded-2xl bg-gradient-to-r from-teal-50 to-emerald-50 border border-teal-200/60">
+                  <p className="text-sm text-teal-800 leading-relaxed">
+                    <i className="ri-sparkling-2-fill text-teal-500 mr-2"></i>
+                    <span className="font-semibold">AI Summary:</span> {optimizationData.comparison.summary}
+                  </p>
+                </div>
+              )}
+
+              {(() => {
+                const { rewrittenSet, changeMap } = buildChangeLookup(optimizationData.changes_made);
+                const keywordSet = new Set((optimizationData.keywords_added || []).map(k => k.toLowerCase()));
+
+                /* Parse original_resume_text into rough sections for a structured left panel */
+                const parseOriginalText = (text: string) => {
+                  const sectionRegex = /^(PROFESSIONAL SUMMARY|SUMMARY|EXPERIENCE|WORK EXPERIENCE|EDUCATION|SKILLS|TECHNICAL SKILLS|CERTIFICATIONS|PROJECTS|AWARDS|PUBLICATIONS|LANGUAGES|INTERESTS|OBJECTIVE|PROFILE)\s*$/im;
+                  const lines = text.split('\n');
+                  const sections: { heading: string; content: string[] }[] = [];
+                  let current: { heading: string; content: string[] } = { heading: '', content: [] };
+
+                  for (const line of lines) {
+                    const trimmed = line.trim();
+                    if (!trimmed) continue;
+                    if (sectionRegex.test(trimmed)) {
+                      if (current.heading || current.content.length) sections.push(current);
+                      current = { heading: trimmed, content: [] };
+                    } else {
+                      current.content.push(trimmed);
+                    }
+                  }
+                  if (current.heading || current.content.length) sections.push(current);
+                  return sections;
+                };
+
+                /* Check if a bullet text was changed */
+                const isChanged = (text: string) => rewrittenSet.has(text.trim());
+                const getChangeInfo = (text: string) => changeMap.get(text.trim());
+
+                /* Highlight keywords in a text string */
+                const highlightText = (text: string, highlight: boolean) => {
+                  if (!highlight) return <>{text}</>;
+                  // Split words, highlight the ones that match added keywords
+                  const words = text.split(/(\s+)/);
+                  return <>{words.map((word, i) => {
+                    if (!word.trim()) return word;
+                    if (keywordSet.has(word.toLowerCase().replace(/[.,;:!?]/g, ''))) {
+                      return <span key={i} className="bg-amber-100 text-amber-800 px-0.5 rounded font-medium">{word}</span>;
+                    }
+                    return word;
+                  })}</>;
+                };
+
+                return (
+                  <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* LEFT: Original Resume — Structured */}
+                    <div>
+                      <div className="flex items-center gap-2 mb-3 px-1">
+                        <div className="w-3 h-3 rounded-full bg-gray-400"></div>
+                        <h3 className="text-sm font-bold text-gray-600 uppercase tracking-wider">Original Resume</h3>
+                      </div>
+                      <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6 sm:p-8 text-sm leading-relaxed text-gray-700 max-h-[800px] overflow-y-auto">
+                        {optimizationData.original_resume_text ? (() => {
+                          const sections = parseOriginalText(optimizationData.original_resume_text);
+                          return sections.length > 1 ? (
+                            <div className="space-y-4">
+                              {sections.map((sec, idx) => (
+                                <div key={idx}>
+                                  {sec.heading && (
+                                    <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 border-b border-gray-100 pb-1">{sec.heading}</h4>
+                                  )}
+                                  {sec.content.map((line, lIdx) => {
+                                    const isBullet = /^[-•·▪]/.test(line) || /^\d+[.)]\s/.test(line);
+                                    const cleanLine = line.replace(/^[-•·▪]\s*/, '').replace(/^\d+[.)]\s*/, '');
+                                    return isBullet ? (
+                                      <div key={lIdx} className="text-gray-600 pl-4 relative mb-1 before:content-['•'] before:absolute before:left-0 before:text-gray-400">
+                                        {cleanLine}
+                                      </div>
+                                    ) : (
+                                      <p key={lIdx} className="text-gray-600 mb-1">{line}</p>
+                                    );
+                                  })}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            /* Fallback: no clear sections found — show with cleaned whitespace */
+                            <div className="space-y-2 text-gray-600">
+                              {optimizationData.original_resume_text.split('\n').filter(l => l.trim()).map((line, idx) => (
+                                <p key={idx} className="leading-relaxed">{line.trim()}</p>
+                              ))}
+                            </div>
+                          );
+                        })() : (
+                          <div className="space-y-3 text-gray-500">
+                            {(() => {
+                              const originals = (optimizationData.changes_made || []).filter(c => c.original).map(c => ({ section: c.section, text: c.original! }));
+                              return originals.length > 0 ? (
+                                <>
+                                  <p className="text-xs text-gray-400 italic mb-2">Reconstructed from change history</p>
+                                  {originals.map((item, idx) => (
+                                    <div key={idx} className="mb-2 pb-2 border-b border-gray-100 last:border-0">
+                                      <span className="text-[10px] font-bold text-gray-400 uppercase">{item.section}</span>
+                                      <p className="text-gray-600 mt-0.5">{item.text}</p>
+                                    </div>
+                                  ))}
+                                </>
+                              ) : (
+                                <p className="text-gray-400 italic">Original resume text not available. Use "Preview & Edit" to see your optimized version.</p>
+                              );
+                            })()}
                           </div>
-                          <div className="flex-1">
-                            <h3 className="text-sm font-bold text-gray-900 capitalize mb-1">
-                              {change.section}
-                            </h3>
-                            <p className="text-sm text-gray-600 mb-2">{change.what_changed}</p>
-                            <div className="text-xs text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg inline-flex items-center gap-1">
-                              <i className="ri-lightbulb-line"></i>
-                              {change.why}
+                        )}
+                      </div>
+                    </div>
+
+                    {/* RIGHT: Optimized Resume — With Inline Change Highlighting */}
+                    <div>
+                      <div className="flex items-center justify-between mb-3 px-1">
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
+                          <h3 className="text-sm font-bold text-emerald-700 uppercase tracking-wider">Optimized Resume</h3>
+                        </div>
+                        {(rewrittenSet.size > 0 || keywordSet.size > 0) && (
+                          <div className="flex items-center gap-3 text-[10px]">
+                            {rewrittenSet.size > 0 && (
+                              <span className="flex items-center gap-1">
+                                <span className="w-2.5 h-2.5 rounded-sm bg-emerald-200 border border-emerald-300"></span>
+                                <span className="text-gray-500">{rewrittenSet.size} changed</span>
+                              </span>
+                            )}
+                            {keywordSet.size > 0 && (
+                              <span className="flex items-center gap-1">
+                                <span className="w-2.5 h-2.5 rounded-sm bg-amber-200 border border-amber-300"></span>
+                                <span className="text-gray-500">{keywordSet.size} keywords</span>
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <div className="bg-white rounded-2xl shadow-lg border border-emerald-200 p-6 sm:p-8 text-sm leading-relaxed max-h-[800px] overflow-y-auto">
+                        {/* Summary */}
+                        {resumeData.summary && (
+                          <div className="mb-4">
+                            <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Professional Summary</h4>
+                            <p className="text-gray-800 leading-relaxed">{highlightText(resumeData.summary, true)}</p>
+                          </div>
+                        )}
+                        {/* Experience */}
+                        {resumeData.experience?.map((exp, idx) => (
+                          <div key={idx} className="mb-4">
+                            <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+                              {exp.role} {exp.company ? `at ${exp.company}` : ''} {exp.period ? `· ${exp.period}` : ''}
+                            </h4>
+                            <ul className="space-y-1.5">
+                              {exp.bullets?.map((bullet: string, bIdx: number) => {
+                                const changed = isChanged(bullet);
+                                const info = changed ? getChangeInfo(bullet) : null;
+                                return (
+                                  <li
+                                    key={bIdx}
+                                    className={`pl-4 relative before:content-['•'] before:absolute before:left-0 before:font-bold group ${
+                                      changed
+                                        ? 'bg-emerald-50 border-l-2 border-emerald-400 pl-5 py-1 rounded-r-lg before:text-emerald-600'
+                                        : 'text-gray-700 before:text-emerald-500'
+                                    }`}
+                                  >
+                                    <span className={changed ? 'text-gray-800' : 'text-gray-700'}>
+                                      {highlightText(bullet, true)}
+                                    </span>
+                                    {changed && (
+                                      <span className="ml-1.5 inline-flex items-center text-[10px] text-emerald-600 font-medium">
+                                        <i className="ri-edit-circle-line mr-0.5"></i>improved
+                                      </span>
+                                    )}
+                                    {/* Tooltip on hover showing original + why */}
+                                    {info && (
+                                      <div className="hidden group-hover:block absolute left-0 right-0 top-full z-20 mt-1 p-3 bg-white rounded-xl shadow-xl border border-gray-200 text-xs">
+                                        {info.original && (
+                                          <div className="mb-2">
+                                            <span className="font-bold text-red-400 uppercase text-[10px]">Before: </span>
+                                            <span className="text-gray-500 line-through">{info.original}</span>
+                                          </div>
+                                        )}
+                                        <div>
+                                          <span className="font-bold text-teal-600 uppercase text-[10px]">Why: </span>
+                                          <span className="text-gray-600">{info.why}</span>
+                                        </div>
+                                        {info.requirement_matched && (
+                                          <div className="mt-1.5">
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-600 border border-violet-100">
+                                              JD Match: {info.requirement_matched}
+                                            </span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          </div>
+                        ))}
+                        {/* Skills — highlight added keywords */}
+                        {resumeData.skills?.length > 0 && (
+                          <div className="mb-4">
+                            <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Skills</h4>
+                            <div className="flex flex-wrap gap-1.5">
+                              {resumeData.skills.map((skill: string, idx: number) => {
+                                const isNewKeyword = keywordSet.has(skill.toLowerCase());
+                                return (
+                                  <span
+                                    key={idx}
+                                    className={`text-xs px-2.5 py-1 rounded-full border ${
+                                      isNewKeyword
+                                        ? 'bg-amber-50 text-amber-700 border-amber-200 font-semibold ring-1 ring-amber-200'
+                                        : 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                                    }`}
+                                  >
+                                    {skill}
+                                    {isNewKeyword && <i className="ri-add-line ml-0.5 text-amber-500 text-[10px]"></i>}
+                                  </span>
+                                );
+                              })}
                             </div>
                           </div>
-                        </div>
+                        )}
+                        {/* Education */}
+                        {resumeData.education?.map((edu, idx) => (
+                          <div key={idx} className="mb-2">
+                            <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Education</h4>
+                            <p className="text-gray-700">{edu.degree} — {edu.school} {edu.period ? `(${edu.period})` : ''}</p>
+                          </div>
+                        ))}
+
+                        {/* Inline Keywords Summary */}
+                        {optimizationData.keywords_added?.length > 0 && (
+                          <div className="mt-4 pt-3 border-t border-gray-100">
+                            <div className="flex items-center gap-2 mb-2">
+                              <i className="ri-key-2-line text-amber-500 text-xs"></i>
+                              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Keywords Added</span>
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {optimizationData.keywords_added.map((kw, idx) => (
+                                <span key={idx} className="text-[11px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-medium">
+                                  {kw}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
-              {optimizationData.key_improvements && optimizationData.key_improvements.length > 0 && (
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                    <i className="ri-rocket-line text-emerald-600"></i>
-                    Key Improvements
-                  </h2>
-                  <div className="grid gap-2">
-                    {optimizationData.key_improvements.map((imp, idx) => (
-                      <div
-                        key={idx}
-                        className="flex items-start gap-2.5 px-4 py-3 bg-emerald-50 rounded-xl border border-emerald-100"
-                      >
-                        <i className="ri-check-double-line text-emerald-600 mt-0.5 flex-shrink-0"></i>
-                        <span className="text-sm text-emerald-900">{imp}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {optimizationData.keywords_added && optimizationData.keywords_added.length > 0 && (
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                    <i className="ri-hashtag text-blue-600"></i>
-                    Keywords Added
-                  </h2>
-                  <div className="flex flex-wrap gap-2">
-                    {optimizationData.keywords_added.map((kw, idx) => (
-                      <span
-                        key={idx}
-                        className="px-3 py-1.5 rounded-full bg-blue-50 text-blue-700 text-sm font-medium border border-blue-100"
-                      >
-                        {kw}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="text-center pt-4">
+              {/* CTA: Preview & Edit Button */}
+              <div className="max-w-6xl mx-auto mt-8 flex justify-center">
                 <button
-                  onClick={() => setActiveTab('editor')}
-                  className="px-6 py-3 rounded-xl bg-gray-900 text-white font-semibold hover:bg-gray-800 transition-all shadow-lg"
+                  onClick={() => setShowComparison(false)}
+                  className="group px-8 py-4 rounded-2xl text-base font-bold transition-all bg-gradient-to-r from-teal-600 to-emerald-500 text-white shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] flex items-center gap-3"
                 >
-                  <i className="ri-edit-2-line mr-2"></i>
-                  Edit Your Resume
+                  <i className="ri-eye-line text-lg"></i>
+                  Preview & Edit Your Resume
+                  <i className="ri-arrow-right-line text-lg opacity-60 group-hover:opacity-100 transition-opacity"></i>
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* ═══ Editor View (existing) ═══ */}
+          {!showComparison && resumeData && (
+            <InlineResumeEditor data={resumeData} onDataChange={setResumeData} initialTemplateId={recommendedTemplate} variantId={variantId} variantRationale={variantRationale} onPageCountChange={handlePageCountChange} activeDynamicConfig={activeDynamicConfig} dynamicConfigs={dynamicConfigs} dynamicLoading={dynamicLoading} onDynamicTemplateSelect={handleDynamicTemplateSelect} changesMade={optimizationData?.changes_made} keywordsAdded={optimizationData?.keywords_added} />
+          )}
+
+          {!showComparison && !resumeData && (
+            <div className="text-center py-20">
+              <i className="ri-file-warning-line text-5xl text-gray-300 mb-4 block"></i>
+              <p className="text-gray-500">Unable to load resume data. Please try optimizing again.</p>
             </div>
           )}
         </div>
