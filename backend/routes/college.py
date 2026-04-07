@@ -1,4 +1,5 @@
 """College module routes — registration, login, student management, sharing."""
+from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Request, status, UploadFile, File, Form, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, distinct
@@ -233,6 +234,91 @@ async def upload_students(
         already_exists=result["already_exists"],
         students=student_responses,
     )
+
+
+@router.post("/students/add")
+async def add_students_manual(
+    students: List[StudentUploadItem],
+    college: College = Depends(get_current_college_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """Add students via JSON (manual form entry). Each item has full student fields."""
+    students_data = [s.model_dump() for s in students]
+    if not students_data:
+        raise HTTPException(status_code=400, detail="No students provided")
+
+    result = await college_service.process_student_emails(db, college.id, students_data)
+
+    student_responses = []
+    for s in result["students"]:
+        student_responses.append(
+            CollegeStudentResponse(
+                id=s.id,
+                email=s.email,
+                name=s.name,
+                branch=s.branch,
+                graduation_year=s.graduation_year,
+                user_id=s.user_id,
+                status=s.status,
+                invited_at=s.invited_at,
+                registered_at=s.registered_at,
+                ready_at=s.ready_at,
+                created_at=s.created_at,
+            )
+        )
+
+    return StudentUploadResponse(
+        total=result["total"],
+        invited=result["invited"],
+        registered=result["registered"],
+        ready=result["ready"],
+        already_exists=result["already_exists"],
+        students=student_responses,
+    )
+
+
+@router.get("/students/template")
+async def download_student_template():
+    """Download a CSV template for bulk student upload."""
+    from fastapi.responses import StreamingResponse
+    headers_row = "email,name,roll_number,branch,degree_type,graduation_year,admission_year,current_semester,cgpa,phone\n"
+    sample_row = "student@college.edu,John Doe,CS2024001,Computer Science,B.Tech,2025,2021,8,8.5,9876543210\n"
+    csv_content = headers_row + sample_row
+    return StreamingResponse(
+        iter([csv_content]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=student_upload_template.csv"},
+    )
+
+
+# ─── Public invite verification (no auth required) ──────────
+@router.get("/invite/verify")
+async def verify_invite_token(
+    token: str = Query(..., min_length=1),
+    db: AsyncSession = Depends(get_db),
+):
+    """Public: validate an invitation token and return college + student info."""
+    result = await db.execute(
+        select(CollegeStudent).where(CollegeStudent.invitation_token == token)
+    )
+    student = result.scalar_one_or_none()
+    if not student:
+        raise HTTPException(status_code=404, detail="Invalid or expired invitation")
+
+    college_result = await db.execute(
+        select(College).where(College.id == student.college_id)
+    )
+    college = college_result.scalar_one_or_none()
+    if not college:
+        raise HTTPException(status_code=404, detail="College not found")
+
+    return {
+        "college_name": college.institution_name,
+        "college_logo": college.logo_url,
+        "student_email": student.email,
+        "student_name": student.name,
+        "status": student.status,
+    }
 
 
 @router.post("/students/invite")
@@ -687,6 +773,40 @@ async def share_profiles(
         expires_at=expires_at,
         student_count=len(data.student_ids),
     )
+
+
+# ─── Delete Student ───────────────────────────────────────────
+
+@router.delete("/students/{student_id}")
+async def delete_student(
+    student_id: int,
+    college: College = Depends(get_current_college_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a student from this college."""
+    student = await db.get(CollegeStudent, student_id)
+    if not student or student.college_id != college.id:
+        raise HTTPException(status_code=404, detail="Student not found")
+    await db.delete(student)
+    await db.commit()
+    return {"success": True, "message": "Student removed"}
+
+
+@router.delete("/students/bulk")
+async def bulk_delete_students(
+    student_ids: List[int],
+    college: College = Depends(get_current_college_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete multiple students from this college."""
+    deleted = 0
+    for sid in student_ids:
+        student = await db.get(CollegeStudent, sid)
+        if student and student.college_id == college.id:
+            await db.delete(student)
+            deleted += 1
+    await db.commit()
+    return {"success": True, "deleted": deleted}
 
 
 # ─── Phase 1: Student Profile Update ─────────────────────────

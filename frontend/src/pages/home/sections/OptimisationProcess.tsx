@@ -51,12 +51,12 @@ const steps = [
   },
   {
     number: '03',
-    icon: 'ri-cpu-line',
-    title: 'Keyword Injection',
-    description: '6–12 high-impact keywords are woven naturally into your resume content — no stuffing, just smart placement.',
+    icon: 'ri-bar-chart-grouped-line',
+    title: 'Data → Talent Signals',
+    description: 'Your raw experience is transformed into structured talent signals that recruiters and ATS systems actually search for.',
     color: 'from-cyan-500 to-cyan-600',
     accent: 'cyan',
-    detail: 'Deep semantic keyword matching',
+    detail: 'Structured for hiring systems',
     visual: (
       <div className="flex flex-col gap-2.5 w-full max-w-[160px]">
         {[
@@ -125,12 +125,12 @@ const steps = [
   },
   {
     number: '06',
-    icon: 'ri-download-2-line',
-    title: 'Download Optimized Resume',
-    description: 'Get your ATS-ready resume in seconds — formatted, optimized, and interview-ready. Start applying with confidence.',
+    icon: 'ri-send-plane-fill',
+    title: 'Download & Apply',
+    description: 'Download your optimized resume and start applying immediately — ATS-ready, recruiter-approved, and interview-worthy.',
     color: 'from-amber-500 to-orange-500',
     accent: 'amber',
-    detail: 'PDF ready in seconds',
+    detail: 'Apply with confidence',
     visual: (
       <div className="flex flex-col items-center gap-3">
         <div className="relative">
@@ -184,11 +184,11 @@ export default function OptimisationProcess() {
             How It Works
           </div>
           <h2 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 mb-5 tracking-tight leading-[1.1]">
-            6 AI Steps That
+            Steps To
             <span className="bg-gradient-to-r from-teal-600 to-emerald-500 bg-clip-text text-transparent"> Transform Your Resume</span>
           </h2>
           <p className="text-xl text-gray-600 leading-relaxed">
-            From upload to optimized — our AI handles everything in under 30 seconds.
+            From upload to apply — our AI handles everything in under 60 seconds.
           </p>
         </div>
 
@@ -266,9 +266,9 @@ export default function OptimisationProcess() {
           <div className="glass-card rounded-3xl p-8">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-8 text-center">
               {[
-                { icon: 'ri-timer-line', value: '< 30s', label: 'Optimisation time', color: 'text-teal-600' },
+                { icon: 'ri-timer-line', value: '< 60s', label: 'Optimisation time', color: 'text-teal-600' },
                 { icon: 'ri-bar-chart-fill', value: '94%', label: 'Avg. ATS match score', color: 'text-emerald-600' },
-                { icon: 'ri-key-2-line', value: '6–12', label: 'Keywords injected', color: 'text-cyan-600' },
+                { icon: 'ri-bar-chart-grouped-line', value: '100%', label: 'Data → Talent Signals', color: 'text-cyan-600' },
                 { icon: 'ri-briefcase-4-line', value: '3×', label: 'More interview callbacks', color: 'text-amber-600' },
               ].map((stat) => (
                 <div key={stat.label} className="flex flex-col items-center gap-2">
@@ -294,7 +294,7 @@ export default function OptimisationProcess() {
             Upload Your Resume Now
             <i className="ri-arrow-right-line"></i>
           </button>
-          <p className="text-sm text-gray-500 mt-3">No sign-up required · Results in under 30 seconds</p>
+          <p className="text-sm text-gray-500 mt-3">No sign-up required · Results in under 60 seconds</p>
         </div>
 
       </div>

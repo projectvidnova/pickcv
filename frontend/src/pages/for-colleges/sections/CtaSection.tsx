@@ -1,6 +1,11 @@
-import { getPortalUrl } from '../../../utils/subdomain';
 
-export default function CtaSection() {
+interface CtaSectionProps {
+  onRegister: () => void;
+  onSignIn: () => void;
+}
+
+
+export default function CtaSection({ onRegister, onSignIn }: CtaSectionProps) {
   return (
     <section className="py-20 lg:py-28 relative overflow-hidden mesh-bg-subtle">
       <div className="orb orb-teal absolute top-10 right-20 w-80 h-80 pointer-events-none" />
@@ -14,7 +19,7 @@ export default function CtaSection() {
             </div>
 
             <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-900 mb-5 tracking-tight">
-              Ready to digitize your
+              Are you ready foran AI Native
               <br />
               <span className="bg-gradient-to-r from-teal-600 to-emerald-500 bg-clip-text text-transparent">
                 placement cell?
@@ -26,20 +31,20 @@ export default function CtaSection() {
             </p>
 
             <div className="flex flex-wrap gap-4 justify-center mb-10">
-              <a
-                href={getPortalUrl('institution', '/register')}
+              <button
+                onClick={onRegister}
                 className="flex items-center gap-2 px-8 py-4 rounded-xl text-white font-semibold whitespace-nowrap cursor-pointer transition-all hover:scale-[1.02] bg-gradient-to-r from-teal-600 to-emerald-500 shadow-lg shadow-teal-500/25 hover:shadow-teal-500/40 text-base"
               >
                 <i className="ri-school-line"></i>
                 Register Your Institution
-              </a>
-              <a
-                href={getPortalUrl('institution', '/login')}
+              </button>
+              <button
+                onClick={onSignIn}
                 className="flex items-center gap-2 px-8 py-4 rounded-xl font-semibold whitespace-nowrap cursor-pointer transition-all glass hover:bg-white/80 text-gray-700 text-base"
               >
                 Sign In
                 <i className="ri-arrow-right-line text-sm"></i>
-              </a>
+              </button>
             </div>
 
             <div className="flex items-center justify-center flex-wrap gap-8">

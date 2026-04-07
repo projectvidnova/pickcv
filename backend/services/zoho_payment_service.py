@@ -172,8 +172,14 @@ class ZohoPaymentService:
             logger.warning("No signing key configured — skipping signature verification")
             return True  # If no key, skip (for dev/sandbox)
 
+        # Zoho provides the signing key as a hex string; decode to raw bytes
+        try:
+            key_bytes = bytes.fromhex(settings.zoho_payments_signing_key)
+        except ValueError:
+            key_bytes = settings.zoho_payments_signing_key.encode()
+
         expected = hmac.new(
-            settings.zoho_payments_signing_key.encode(),
+            key_bytes,
             payment_id.encode(),
             hashlib.sha256,
         ).hexdigest()

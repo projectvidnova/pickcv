@@ -1,17 +1,21 @@
 """Resume management routes."""
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List
+import asyncio
 import logging
+import json as _json
 
 from database import get_db
 from models import User, Resume
-from schemas import ResumeResponse, ResumeDetail, ResumeOptimizationRequest
+from schemas import ResumeResponse, ResumeDetail, ResumeOptimizationRequest, ResumeCompressRequest, DynamicTemplateRequest
 from routes.auth import get_current_user
 from services.resume_processor import resume_processor
 from services.gemini_service import gemini_service
 from services.scraper_service import scraper_service
+from services.resume_os_orchestrator import resume_os_orchestrator
 from services.gcs_service import gcs_service
 from services.college_service import college_service
 from config import settings
@@ -75,8 +79,14 @@ async def upload_resume(
     if file.content_type not in allowed_types:
         raise HTTPException(status_code=400, detail="Invalid file type. Only PDF and DOCX allowed.")
     
-    # Read file
+    # Read file with size limit enforcement
+    max_bytes = settings.max_upload_size_mb * 1024 * 1024
     file_data = await file.read()
+    if len(file_data) > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Maximum size is {settings.max_upload_size_mb} MB."
+        )
     
     # Extract text
     try:
@@ -287,11 +297,44 @@ async def optimize_resume_for_job(
         # ── Mode 3: Pasted JD — use it directly ──
         logger.info(f"Optimize mode: PASTE — using provided JD ({len(job_description)} chars)")
     
-    # Optimize resume for the specific job (includes comparison in single call)
-    optimization_result = await gemini_service.optimize_resume_for_job(
+    # Resume OS agentic orchestration + optimization
+    github_url = None
+    github_context = None
+    try:
+        github_url = scraper_service.extract_github_profile_url(resume.raw_text or "")
+
+        # Secondary fallback: check known contact/link fields if present
+        if not github_url and isinstance(resume.contact_info, dict):
+            for key in ("github", "github_url", "portfolio", "website", "links"):
+                value = resume.contact_info.get(key)
+                if isinstance(value, str):
+                    github_url = scraper_service.extract_github_profile_url(value)
+                    if github_url:
+                        break
+                elif isinstance(value, list):
+                    for item in value:
+                        if isinstance(item, str):
+                            github_url = scraper_service.extract_github_profile_url(item)
+                            if github_url:
+                                break
+                    if github_url:
+                        break
+
+        if github_url:
+            github_context = scraper_service.build_github_resume_context(github_url)
+            if github_context:
+                logger.info(f"GitHub enrichment enabled for resume {resume_id}: {github_url}")
+            else:
+                logger.info(f"GitHub URL found but enrichment unavailable for resume {resume_id}: {github_url}")
+    except Exception as e:
+        logger.warning(f"GitHub enrichment skipped for resume {resume_id}: {e}")
+
+    optimization_result = await resume_os_orchestrator.optimize(
         resume_text=resume.raw_text,
+        job_title=job_title,
         job_description=job_description,
-        job_title=job_title
+        job_link=job_link,
+        github_context=github_context,
     )
     
     if "error" in optimization_result:
@@ -303,6 +346,7 @@ async def optimize_resume_for_job(
     return {
         "resume_id": resume_id,
         "job_title": job_title,
+        "job_description": job_description,
         "optimized_resume": optimization_result.get("optimized_resume", ""),
         "name": optimization_result.get("name", ""),
         "title": optimization_result.get("title", ""),
@@ -320,8 +364,233 @@ async def optimize_resume_for_job(
         "match_score": optimization_result.get("match_score", 0),
         "ats_optimized": optimization_result.get("ats_optimized", False),
         "comparison": comparison,
-        "job_link": job_link
+        "resume_variants": optimization_result.get("resume_variants", []),
+        "job_link": job_link,
+        "github_profile_url": github_url,
+        "github_enrichment_used": bool(github_context),
+        "resume_os": optimization_result.get("resume_os", {}),
     }
+
+
+@router.post("/{resume_id}/optimize-for-job-stream")
+async def optimize_resume_for_job_stream(
+    resume_id: int,
+    request: ResumeOptimizationRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """SSE streaming endpoint for multi-step resume optimization.
+
+    Streams progress events during the 4-step pipeline, then sends the final result.
+    Event types: progress, result, error.
+    """
+    result = await db.execute(
+        select(Resume).where(Resume.id == resume_id, Resume.user_id == current_user.id)
+    )
+    resume = result.scalar_one_or_none()
+
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+
+    # Capture request params — all slow work moves inside the generator
+    _job_title = request.job_title
+    _job_description = request.job_description
+    _job_link = request.job_link
+    _raw_text = resume.raw_text or ""
+    _contact_info = resume.contact_info
+
+    # ── SSE stream generator ──
+    async def event_stream():
+        progress_queue: asyncio.Queue = asyncio.Queue()
+
+        async def emit(step: int, total: int, message: str, detail: str = ""):
+            event_data = _json.dumps({
+                "type": "progress",
+                "step": step,
+                "total": total,
+                "message": message,
+                "detail": detail,
+                "percent": int(round(step / total * 100)),
+            })
+            await progress_queue.put(f"data: {event_data}\n\n")
+
+        async def run_full_pipeline():
+            job_title = _job_title
+            job_description = _job_description
+            job_link = _job_link
+
+            try:
+                # ── Step 0: Resolve JD (inside stream so events flow) ──
+                await emit(1, 10, "Resolving job description", "Preparing job context...")
+                if job_link:
+                    logger.info(f"Stream optimize: LINK — scraping {job_link}")
+                    job_description = scraper_service.scrape_job_description(job_link)
+                    if not job_description:
+                        error_event = _json.dumps({"type": "error", "message": "Failed to scrape job description from link. Please try pasting the description instead."})
+                        await progress_queue.put(f"data: {error_event}\n\n")
+                        return
+                elif not job_description or job_description.strip() == "":
+                    logger.info(f"Stream optimize: TITLE ONLY — generating JD for '{job_title}'")
+                    job_description = await gemini_service.generate_job_description_from_title(job_title)
+                    if not job_description:
+                        error_event = _json.dumps({"type": "error", "message": "Failed to generate job description from title."})
+                        await progress_queue.put(f"data: {error_event}\n\n")
+                        return
+                else:
+                    logger.info(f"Stream optimize: PASTE — {len(job_description)} chars")
+
+                # ── Step 1: GitHub enrichment ──
+                await emit(1, 10, "Enriching profile", "Checking GitHub and portfolio links...")
+                github_url = None
+                github_context = None
+                try:
+                    github_url = scraper_service.extract_github_profile_url(_raw_text)
+                    if not github_url and isinstance(_contact_info, dict):
+                        for key in ("github", "github_url", "portfolio", "website", "links"):
+                            value = _contact_info.get(key)
+                            if isinstance(value, str):
+                                github_url = scraper_service.extract_github_profile_url(value)
+                                if github_url:
+                                    break
+                            elif isinstance(value, list):
+                                for item in value:
+                                    if isinstance(item, str):
+                                        github_url = scraper_service.extract_github_profile_url(item)
+                                        if github_url:
+                                            break
+                                if github_url:
+                                    break
+                    if github_url:
+                        github_context = scraper_service.build_github_resume_context(github_url)
+                except Exception as e:
+                    logger.warning(f"GitHub enrichment skipped: {e}")
+
+                # ── Steps 2-9: Multi-step optimization (remapped to 2/10 → 9/10) ──
+                async def on_progress(step: int, total: int, message: str, detail: str = ""):
+                    # Remap orchestrator steps (1-8) to overall steps (2-9 of 10)
+                    await emit(step + 1, 10, message, detail)
+
+                optimization_result = await resume_os_orchestrator.optimize_multistep(
+                    resume_text=_raw_text,
+                    job_title=job_title,
+                    job_description=job_description,
+                    job_link=job_link,
+                    github_context=github_context,
+                    progress_callback=on_progress,
+                )
+
+                # ── Step 10: Send result ──
+                await emit(10, 10, "Complete", "Your optimized resume is ready!")
+
+                if "error" in optimization_result:
+                    error_event = _json.dumps({"type": "error", "message": optimization_result["error"]})
+                    await progress_queue.put(f"data: {error_event}\n\n")
+                else:
+                    comparison = optimization_result.get("comparison", {})
+                    result_payload = {
+                        "type": "result",
+                        "data": {
+                            "resume_id": resume_id,
+                            "job_title": job_title,
+                            "job_description": job_description,
+                            "original_resume_text": _raw_text,
+                            "optimized_resume": optimization_result.get("optimized_resume", ""),
+                            "name": optimization_result.get("name", ""),
+                            "title": optimization_result.get("title", ""),
+                            "email": optimization_result.get("email", ""),
+                            "phone": optimization_result.get("phone", ""),
+                            "linkedin": optimization_result.get("linkedin", ""),
+                            "location": optimization_result.get("location", ""),
+                            "professional_summary": optimization_result.get("professional_summary", ""),
+                            "experience": optimization_result.get("experience", []),
+                            "skills": optimization_result.get("skills", []),
+                            "education": optimization_result.get("education", []),
+                            "changes_made": optimization_result.get("changes_made", []),
+                            "key_improvements": optimization_result.get("key_improvements", []),
+                            "keywords_added": optimization_result.get("keywords_added", []),
+                            "match_score": optimization_result.get("match_score", 0),
+                            "ats_optimized": optimization_result.get("ats_optimized", False),
+                            "comparison": comparison,
+                            "resume_variants": optimization_result.get("resume_variants", []),
+                            "job_link": job_link,
+                            "github_profile_url": github_url,
+                            "github_enrichment_used": bool(github_context),
+                            "resume_os": optimization_result.get("resume_os", {}),
+                            "jd_analysis": optimization_result.get("jd_analysis", {}),
+                            "evidence_map": optimization_result.get("evidence_map", []),
+                            "overall_match_assessment": optimization_result.get("overall_match_assessment", {}),
+                        },
+                    }
+                    await progress_queue.put(f"data: {_json.dumps(result_payload)}\n\n")
+            except Exception as exc:
+                logger.exception(f"Stream optimization failed: {exc}")
+                error_event = _json.dumps({"type": "error", "message": str(exc)})
+                await progress_queue.put(f"data: {error_event}\n\n")
+            finally:
+                await progress_queue.put(None)  # sentinel
+
+        # Start pipeline as a background task
+        task = asyncio.create_task(run_full_pipeline())
+
+        while True:
+            msg = await progress_queue.get()
+            if msg is None:
+                break
+            yield msg
+
+        # Ensure task is finished
+        await task
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.post("/compress-variant")
+async def compress_resume_variant(
+    request: ResumeCompressRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """Compress a resume variant to a target page count with user-controlled deprioritization.
+
+    Accepts the full variant data from a prior optimization, and returns a compressed
+    version fitting within `target_pages` (1 or 2). Users can select predefined
+    deprioritization categories and/or provide free-text instructions.
+
+    Request body:
+        variant_id: "V1" - "V10"
+        variant_data: { name, summary, experience[], skills[], education[], ... }
+        target_pages: 1 or 2
+        role_dna: { cluster, level, environment, ... }
+        deprioritize: {
+            categories: ["older_experience", "reduce_bullets", ...],
+            custom_text: "Remove my internship from 2018"
+        }
+
+    Returns compressed variant data + rendered text + compression notes.
+    """
+    try:
+        result = resume_os_orchestrator.compress_variant(
+            variant_data=request.variant_data,
+            target_pages=request.target_pages,
+            role_dna=request.role_dna,
+            variant_id=request.variant_id,
+            deprioritize=request.deprioritize,
+        )
+        return {
+            "variant_id": request.variant_id,
+            "target_pages": request.target_pages,
+            **result,
+        }
+    except Exception as e:
+        logger.error(f"Variant compression failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Compression failed: {str(e)}")
 
 
 @router.delete("/{resume_id}")
@@ -551,4 +820,32 @@ async def get_stored_linkedin_data(
         "posts": current_user.linkedin_profile_data.get("posts", []),
         "fetched_at": current_user.linkedin_profile_data.get("fetched_at"),
     }
+
+
+@router.post("/generate-dynamic-template")
+async def generate_dynamic_template(
+    request: DynamicTemplateRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """Generate a unique LLM-designed template configuration for a specific person.
+
+    Called for template slots 2-5 after the initial optimization loads.
+    Each slot gets a different persona_angle (depth/impact/narrative/breadth)
+    producing a truly unique template tailored to the individual.
+    """
+    try:
+        config = await resume_os_orchestrator.generate_dynamic_template(
+            resume_data=request.resume_data,
+            variant_id=request.variant_id,
+            persona_angle=request.persona_angle,
+            slot_index=request.slot_index,
+            role_dna=request.role_dna,
+            job_title=request.job_title,
+            job_description=request.job_description,
+            static_template_config=request.static_template_config,
+        )
+        return config
+    except Exception as e:
+        logger.error(f"Dynamic template generation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Template generation failed: {str(e)}")
 

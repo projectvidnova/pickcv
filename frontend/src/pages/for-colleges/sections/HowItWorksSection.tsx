@@ -55,7 +55,7 @@ export default function HowItWorksSection() {
             How It Works
           </div>
           <h2 className="text-4xl sm:text-5xl font-bold text-white mb-5 tracking-tight">
-            Your digital placement cell
+            Your AI native placement cell
             <br />
             <span className="bg-gradient-to-r from-teal-400 to-emerald-400 bg-clip-text text-transparent">
               in 4 simple steps

@@ -8,11 +8,12 @@ import { getPortalUrl } from '../../utils/subdomain';
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onSuccess?: () => void;
 }
 
 type ModalView = 'form' | 'verification-sent';
 
-export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
+export default function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
   const navigate = useNavigate();
   const [isLogin, setIsLogin] = useState(true);
   const [formData, setFormData] = useState({ name: '', email: '', password: '' });
@@ -104,14 +105,9 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         const result = await apiService.login(formData.email, formData.password);
         if (result.success) {
           onClose();
-          navigate('/onboarding', {
-            state: {
-              prefill: {
-                email: formData.email,
-                phone: '',
-              },
-            },
-          });
+          if (onSuccess) {
+            onSuccess();
+          }
         } else {
           const msg = result.error || 'Login failed';
           // Detect recruiter account trying to log in through user portal

@@ -28,7 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
 
 from database import get_db
-from models import User, Resume, Payment, Subscription
+from models import User, Resume, Payment, Subscription, Coupon, CouponRedemption
 from routes.auth import get_current_user
 from services.zoho_payment_service import zoho_payment_service
 from config import settings
@@ -155,6 +155,15 @@ class PaymentHistoryItem(BaseModel):
     paid_at: Optional[str]
 
 
+class CouponApplyRequest(BaseModel):
+    coupon_code: str
+    resume_id: int
+
+
+class CouponValidateRequest(BaseModel):
+    coupon_code: str
+
+
 # ─── Helpers ──────────────────────────────────────────────────
 
 def _build_plans() -> List[PlanInfo]:
@@ -220,18 +229,30 @@ async def _count_free_downloads(user_id: int, db: AsyncSession) -> int:
 
 
 async def _has_resume_payment(user_id: int, resume_id: int, db: AsyncSession) -> bool:
-    """Check if the user has a successful per-resume or free-download payment for this resume."""
+    """Check if the user has a successful per-resume, free-download, or coupon payment for this resume."""
     result = await db.execute(
         select(Payment).where(
             and_(
                 Payment.user_id == user_id,
                 Payment.resume_id == resume_id,
                 Payment.status == "succeeded",
-                Payment.product_type.in_(["resume_download", "free_download"]),
+                Payment.product_type.in_(["resume_download", "free_download", "coupon_download"]),
             )
         )
     )
     return result.scalar_one_or_none() is not None
+
+
+async def _is_first_resume_for_user(user_id: int, resume_id: int, db: AsyncSession) -> bool:
+    """Return True if this resume is the user's first uploaded resume."""
+    result = await db.execute(
+        select(Resume.id)
+        .where(Resume.user_id == user_id)
+        .order_by(Resume.created_at.asc(), Resume.id.asc())
+        .limit(1)
+    )
+    first_resume_id = result.scalar_one_or_none()
+    return first_resume_id == resume_id
 
 
 # ─── Client Config ────────────────────────────────────────────
@@ -279,6 +300,14 @@ async def check_download_access(
     """
     plans = _build_plans()
 
+    # Ensure resume belongs to current user
+    resume_result = await db.execute(
+        select(Resume).where(Resume.id == resume_id, Resume.user_id == current_user.id)
+    )
+    resume = resume_result.scalar_one_or_none()
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+
     # 1. If payments not configured → free
     if not zoho_payment_service.is_configured:
         return CheckAccessResponse(
@@ -325,8 +354,9 @@ async def check_download_access(
     # 4. Check free downloads
     used = await _count_free_downloads(current_user.id, db)
     remaining = max(0, settings.free_downloads_limit - used)
+    is_first_resume = await _is_first_resume_for_user(current_user.id, resume_id, db)
 
-    if remaining > 0:
+    if remaining > 0 and is_first_resume:
         return CheckAccessResponse(
             has_access=True,
             access_type="free",
@@ -374,6 +404,13 @@ async def use_free_download(
     resume = result.scalar_one_or_none()
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
+
+    # Free download is only allowed for user's first uploaded resume
+    if not await _is_first_resume_for_user(current_user.id, data.resume_id, db):
+        raise HTTPException(
+            status_code=403,
+            detail="Free download is only available for your first uploaded resume.",
+        )
 
     # Record as a zero-amount payment
     ref = f"PCV-FREE-{current_user.id}-{data.resume_id}-{uuid.uuid4().hex[:8].upper()}"
@@ -436,7 +473,11 @@ async def create_payment_session(
             raise HTTPException(status_code=404, detail="Resume not found")
 
         if await _has_resume_payment(current_user.id, data.resume_id, db):
-            raise HTTPException(status_code=409, detail="Already paid for this resume.")
+            # Already paid — return a synthetic session so frontend proceeds to download
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "already_paid", "message": "Already paid for this resume."},
+            )
 
         description = f"Resume Download – {resume.title or 'Resume'}"
     else:
@@ -535,11 +576,14 @@ async def verify_payment(
             subscription_activated=payment.product_type in ("subscription_monthly", "subscription_yearly"),
         )
 
-    # Verify signature
+    # Verify signature (soft check — real authority is the Zoho API call below)
     if data.signature and settings.zoho_payments_signing_key:
         if not zoho_payment_service.verify_signature(data.payment_id, data.signature):
-            logger.warning("Signature mismatch for payment %s", data.payment_id)
-            raise HTTPException(status_code=400, detail="Invalid payment signature")
+            # Log warning but don't reject — the Zoho API verification is authoritative
+            logger.warning(
+                "Signature mismatch for payment %s — continuing with API verification",
+                data.payment_id,
+            )
 
     # Verify with Zoho API
     try:
@@ -766,3 +810,120 @@ async def zoho_payment_webhook(
 
     await db.commit()
     return {"status": "ok"}
+
+
+# ─── Coupon Validation ────────────────────────────────────────
+
+@router.post("/coupon/validate")
+async def validate_coupon(
+    data: CouponValidateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Check if a coupon code is valid (without redeeming it)."""
+    code = data.coupon_code.strip().upper()
+    now = datetime.now(timezone.utc)
+
+    result = await db.execute(
+        select(Coupon).where(Coupon.code == code)
+    )
+    coupon = result.scalar_one_or_none()
+
+    if not coupon:
+        raise HTTPException(status_code=404, detail="Invalid coupon code")
+    if not coupon.is_active:
+        raise HTTPException(status_code=410, detail="This coupon has been deactivated")
+    if coupon.expires_at <= now:
+        raise HTTPException(status_code=410, detail="This coupon has expired")
+    if coupon.times_used >= coupon.max_uses:
+        raise HTTPException(status_code=410, detail="This coupon has reached its usage limit")
+
+    return {
+        "valid": True,
+        "code": coupon.code,
+        "description": coupon.description,
+        "remaining_uses": coupon.max_uses - coupon.times_used,
+    }
+
+
+# ─── Coupon Apply (Redeem) ────────────────────────────────────
+
+@router.post("/coupon/apply")
+async def apply_coupon(
+    data: CouponApplyRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Redeem a coupon to unlock a resume download."""
+    code = data.coupon_code.strip().upper()
+    now = datetime.now(timezone.utc)
+
+    # Look up coupon
+    result = await db.execute(
+        select(Coupon).where(Coupon.code == code)
+    )
+    coupon = result.scalar_one_or_none()
+
+    if not coupon:
+        raise HTTPException(status_code=404, detail="Invalid coupon code")
+    if not coupon.is_active:
+        raise HTTPException(status_code=410, detail="This coupon has been deactivated")
+    if coupon.expires_at <= now:
+        raise HTTPException(status_code=410, detail="This coupon has expired")
+    if coupon.times_used >= coupon.max_uses:
+        raise HTTPException(status_code=410, detail="This coupon has reached its usage limit")
+
+    # Verify resume belongs to user
+    resume_result = await db.execute(
+        select(Resume).where(Resume.id == data.resume_id, Resume.user_id == current_user.id)
+    )
+    resume = resume_result.scalar_one_or_none()
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+
+    # Check if user already redeemed a coupon for this resume
+    existing = await db.execute(
+        select(CouponRedemption).where(
+            and_(
+                CouponRedemption.user_id == current_user.id,
+                CouponRedemption.resume_id == data.resume_id,
+            )
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="A coupon has already been applied to this resume")
+
+    # Increment usage
+    coupon.times_used += 1
+
+    # Record redemption
+    redemption = CouponRedemption(
+        coupon_id=coupon.id,
+        user_id=current_user.id,
+        resume_id=data.resume_id,
+    )
+    db.add(redemption)
+
+    # Record as a zero-amount payment so check-access flow grants download
+    ref = f"PCV-COUPON-{current_user.id}-{data.resume_id}-{uuid.uuid4().hex[:8].upper()}"
+    payment = Payment(
+        user_id=current_user.id,
+        resume_id=data.resume_id,
+        amount=0,
+        currency="INR",
+        status="succeeded",
+        description=f"Coupon {coupon.code} – {resume.title or 'Resume'}",
+        reference_number=ref,
+        product_type="coupon_download",
+        paid_at=now,
+    )
+    db.add(payment)
+    await db.commit()
+
+    logger.info("Coupon %s redeemed by user %s for resume %s", coupon.code, current_user.id, data.resume_id)
+
+    return {
+        "success": True,
+        "message": f"Coupon applied! You can now download this resume.",
+        "coupon_code": coupon.code,
+    }

@@ -1,6 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authFetch } from '../../services/authFetch';
+import AuthModal from './AuthModal';
+import PaymentModal from '../PaymentModal';
+import paymentService, { PlanInfo } from '../../services/paymentService';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
 interface OptimizeModalProps {
   isOpen: boolean;
@@ -52,28 +57,46 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
   const [processingStep, setProcessingStep] = useState(0);
   const [smoothProgress, setSmoothProgress] = useState(0);
   const [aiMessageIndex, setAiMessageIndex] = useState(0);
+  const [serverMessage, setServerMessage] = useState('');
+  const [serverDetail, setServerDetail] = useState('');
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showPaywall, setShowPaywall] = useState(false);
+  const [paywallResumeId, setPaywallResumeId] = useState<number | null>(null);
+  const [paywallPlans, setPaywallPlans] = useState<PlanInfo[]>([]);
+  const [pendingOptimization, setPendingOptimization] = useState<{
+    resumeId: number;
+    jobTitle: string;
+    jobDescription?: string;
+    jobLink?: string;
+  } | null>(null);
   const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const messageTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   const processingSteps = [
-    { icon: 'ri-upload-cloud-2-line', label: 'Uploading resume', detail: 'Sending your file securely' },
-    { icon: 'ri-file-search-line', label: 'Analyzing content', detail: 'Parsing resume structure & job requirements' },
-    { icon: 'ri-brain-line', label: 'Matching keywords', detail: 'Identifying skills gaps & keyword opportunities' },
-    { icon: 'ri-sparkling-2-fill', label: 'AI optimization', detail: 'Rewriting bullets for maximum impact' },
-    { icon: 'ri-bar-chart-box-line', label: 'Scoring ATS compatibility', detail: 'Evaluating format & keyword density' },
-    { icon: 'ri-shield-check-line', label: 'Finalizing results', detail: 'Preparing your optimized resume' },
+    { icon: 'ri-upload-cloud-2-line', label: 'Uploading resume', detail: 'Securely processing your document' },
+    { icon: 'ri-file-search-line', label: 'Resolving job description', detail: 'Scraping & preparing job context' },
+    { icon: 'ri-github-fill', label: 'Enriching profile', detail: 'Checking GitHub and portfolio links' },
+    { icon: 'ri-settings-4-line', label: 'Preparing context', detail: 'Classifying role, ATS platform & gap analysis' },
+    { icon: 'ri-file-search-line', label: 'Analyzing job description', detail: 'Extracting requirements, skills & qualifiers' },
+    { icon: 'ri-links-line', label: 'Mapping evidence', detail: 'Matching your experience to each JD requirement' },
+    { icon: 'ri-sparkling-2-fill', label: 'Rewriting content', detail: 'Aligning every bullet point to the target job' },
+    { icon: 'ri-bar-chart-box-line', label: 'Scoring & comparison', detail: 'Generating ATS scores and change analysis' },
+    { icon: 'ri-stack-line', label: 'Building variants', detail: 'Creating specialized resume versions' },
+    { icon: 'ri-shield-check-line', label: 'Final validation', detail: 'Authenticity checks and quality assurance' },
   ];
 
   const aiInsightMessages = [
-    { icon: 'ri-lightbulb-flash-line', text: 'Identifying action verbs that recruiters love...' },
-    { icon: 'ri-search-eye-line', text: 'Scanning for ATS-friendly formatting...' },
-    { icon: 'ri-focus-3-line', text: 'Matching your skills to job requirements...' },
-    { icon: 'ri-bar-chart-grouped-line', text: 'Adding quantifiable achievements...' },
-    { icon: 'ri-trophy-line', text: 'Highlighting your strongest experiences...' },
-    { icon: 'ri-file-text-line', text: 'Optimizing section headings for ATS...' },
-    { icon: 'ri-magic-line', text: 'Rewriting bullet points with impact metrics...' },
-    { icon: 'ri-shield-star-line', text: 'Ensuring keyword density is optimal...' },
+    { icon: 'ri-lightbulb-flash-line', text: 'Extracting key qualifications from the job posting...' },
+    { icon: 'ri-search-eye-line', text: 'Mapping your experience to required competencies...' },
+    { icon: 'ri-focus-3-line', text: 'Identifying missing keywords and skills gaps...' },
+    { icon: 'ri-bar-chart-grouped-line', text: 'Quantifying achievements with impact metrics...' },
+    { icon: 'ri-trophy-line', text: 'Selecting the strongest bullet points for this role...' },
+    { icon: 'ri-file-text-line', text: 'Restructuring sections for maximum recruiter impact...' },
+    { icon: 'ri-magic-line', text: 'Applying domain-specific optimization rules...' },
+    { icon: 'ri-shield-star-line', text: 'Running final ATS compatibility checks...' },
   ];
 
   // Smooth progress animation during AI processing
@@ -104,11 +127,25 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
     return () => { if (messageTimerRef.current) clearInterval(messageTimerRef.current); };
   }, [processingStep, aiInsightMessages.length]);
 
+  // Start elapsed timer when processing begins
+  useEffect(() => {
+    if (currentStep === 3 && processingStep >= 1 && smoothProgress < 100) {
+      setElapsedSeconds(0);
+      elapsedTimerRef.current = setInterval(() => {
+        setElapsedSeconds(prev => prev + 1);
+      }, 1000);
+    } else {
+      if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
+    }
+    return () => { if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current); };
+  }, [currentStep, processingStep >= 1, smoothProgress >= 100]);
+
   // Cleanup timers on unmount
   useEffect(() => {
     return () => {
       if (progressTimerRef.current) clearInterval(progressTimerRef.current);
       if (messageTimerRef.current) clearInterval(messageTimerRef.current);
+      if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
     };
   }, []);
 
@@ -124,10 +161,17 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
     if (file && file.size <= 5 * 1024 * 1024) setUploadedFile(file);
   };
 
-  const handleNext = () => {
-    if (currentStep === 1 && uploadedFile) setCurrentStep(2);
+  const handleNext = async () => {
+    if (currentStep === 1 && uploadedFile) {
+      // Check auth before proceeding to step 2
+      const token = localStorage.getItem('access_token');
+      if (!token) {
+        setShowAuthModal(true);
+        return;
+      }
+      setCurrentStep(2);
+    }
     else if (currentStep === 2 && isJDValid()) {
-      setCurrentStep(3);
       startProcessing();
     }
   };
@@ -143,21 +187,144 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
     return false;
   };
 
+  const runOptimization = async (
+    resumeId: number,
+    jobTitle: string,
+    jobDescription?: string,
+    jobLink?: string,
+  ) => {
+    try {
+      // Upload is already done — now we're connecting to the streaming pipeline
+      setProcessingStep(2);
+      setSmoothProgress(8);
+      setServerMessage('Connecting to optimization pipeline');
+      setServerDetail('Starting real-time optimization stream...');
+      // Start a slow crawl so user sees motion while waiting for first SSE event
+      startSmoothProgress(8, 18, 15000);
+
+      const token = localStorage.getItem('access_token');
+
+      // Use SSE streaming endpoint for real progress
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/resume/${resumeId}/optimize-for-job-stream`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            job_title: jobTitle,
+            job_description: jobDescription,
+            job_link: jobLink,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Optimization failed (${response.status}): ${errorText}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('Streaming not supported');
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let finalData: Record<string, unknown> | null = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || '';
+
+        for (const chunk of lines) {
+          const dataLine = chunk.trim();
+          if (!dataLine.startsWith('data: ')) continue;
+          try {
+            const event = JSON.parse(dataLine.slice(6));
+
+            if (event.type === 'progress') {
+              // Kill any crawl animation and snap to real server progress
+              if (progressTimerRef.current) clearInterval(progressTimerRef.current);
+              // Server sends step/total (1-10 of 10). Step 1 = upload (already done client-side),
+              // so offset by 1 for the frontend display steps (upload = step 1 stays)
+              setProcessingStep(event.step);
+              setSmoothProgress(Math.max(event.percent, 10)); // never go below 10% once streaming
+              setServerMessage(event.message);
+              setServerDetail(event.detail || '');
+              setAiMessageIndex(prev => (prev + 1) % aiInsightMessages.length);
+            } else if (event.type === 'result') {
+              finalData = event.data;
+            } else if (event.type === 'error') {
+              throw new Error(event.message);
+            }
+          } catch (parseErr) {
+            // Non-JSON line, skip
+            if (parseErr instanceof SyntaxError) continue;
+            throw parseErr;
+          }
+        }
+      }
+
+      if (!finalData) {
+        throw new Error('No optimization result received');
+      }
+
+      // Show completion
+      setProcessingStep(processingSteps.length);
+      setSmoothProgress(100);
+      setServerMessage('Optimization complete!');
+      setServerDetail('Redirecting to your optimized resume...');
+
+      // Store optimization data for the comparison page
+      sessionStorage.setItem('optimizationData', JSON.stringify({
+        ...finalData,
+        resumeId,
+      }));
+
+      // Brief completion moment
+      await new Promise(resolve => setTimeout(resolve, 600));
+
+      navigate('/resume-comparison', {
+        state: { optimizedResume: { ...finalData, resumeId } }
+      });
+      handleClose();
+    } catch (error) {
+      console.error('Optimization error:', error);
+      if (progressTimerRef.current) clearInterval(progressTimerRef.current);
+      alert('Failed to optimize resume. Please try again.');
+      setProcessingStep(0);
+      setSmoothProgress(0);
+      setCurrentStep(2);
+    }
+  };
+
   const startProcessing = async () => {
     // Check if user is authenticated
     const token = localStorage.getItem('access_token');
     if (!token) {
-      alert('Please sign in first to optimize your resume.');
-      setCurrentStep(1);
-      onClose();
+      setShowAuthModal(true);
       return;
     }
 
     try {
-      // ── Step 1: Uploading resume (0% → 15%) ──
+      // Ask for payment BEFORE optimization:
+      // 1) Upload resume
+      // 2) Check access/paywall
+      // 3) Only then run optimize-for-job
+
+      // ── Uploading resume (show processing screen immediately) ──
+      setCurrentStep(3);
       setProcessingStep(1);
-      setSmoothProgress(0);
-      startSmoothProgress(0, 15, 1500);
+      setSmoothProgress(2);
+      setServerMessage('Uploading resume');
+      setServerDetail('Securely processing your document...');
+      // Start slow crawl so user sees motion during upload
+      startSmoothProgress(2, 8, 10000);
 
       const formData = new FormData();
       if (uploadedFile) {
@@ -165,7 +332,7 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
         formData.append('title', uploadedFile.name.replace(/\.[^/.]+$/, ""));
       }
 
-      console.log('Uploading resume with token:', token.substring(0, 20) + '...');
+      console.log('Uploading resume...');
       const uploadResponse = await authFetch(`${import.meta.env.VITE_API_URL}/resume/upload`, {
         method: 'POST',
         body: formData
@@ -179,10 +346,6 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
 
       const uploadedResume = await uploadResponse.json();
       const resumeId = uploadedResume.id;
-
-      // ── Step 2: Analyzing content (15% → 30%) ──
-      setProcessingStep(2);
-      startSmoothProgress(15, 30, 800);
 
       let jobTitle = 'Target Role';
       let jobDescription: string | undefined;
@@ -200,62 +363,17 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
         jobLink = jdLink;
       }
 
-      await new Promise(resolve => setTimeout(resolve, 600));
-
-      // ── Step 3: Matching keywords (30% → 40%) ──
-      setProcessingStep(3);
-      startSmoothProgress(30, 40, 600);
-      await new Promise(resolve => setTimeout(resolve, 600));
-
-      // ── Step 4: AI optimization — the API call (40% → 88%, slow crawl) ──
-      setProcessingStep(4);
-      setAiMessageIndex(0);
-      startSmoothProgress(40, 88, 30000);
-
-      const optimizeResponse = await authFetch(
-        `${import.meta.env.VITE_API_URL}/resume/${resumeId}/optimize-for-job`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            job_title: jobTitle,
-            job_description: jobDescription,
-            job_link: jobLink
-          })
-        }
-      );
-
-      if (!optimizeResponse.ok) {
-        const errorText = await optimizeResponse.text();
-        console.error('Optimization failed:', optimizeResponse.status, errorText);
-        throw new Error(`Failed to optimize resume (${optimizeResponse.status}): ${errorText}`);
+      // Check payment access before optimization starts
+      const access = await paymentService.checkAccess(resumeId);
+      if (!access.has_access) {
+        setPaywallResumeId(resumeId);
+        setPaywallPlans(access.plans || []);
+        setPendingOptimization({ resumeId, jobTitle, jobDescription, jobLink });
+        setShowPaywall(true);
+        return;
       }
 
-      const optimizationData = await optimizeResponse.json();
-
-      // ── Step 5: Scoring ATS compatibility (→ 95%) ──
-      if (progressTimerRef.current) clearInterval(progressTimerRef.current);
-      setProcessingStep(5);
-      startSmoothProgress(Math.max(smoothProgress, 88), 95, 500);
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      // ── Step 6: Finalizing (95% → 100%) ──
-      setProcessingStep(6);
-      startSmoothProgress(95, 100, 400);
-
-      // Store optimization data for the comparison page
-      sessionStorage.setItem('optimizationData', JSON.stringify({
-        resumeId,
-        ...optimizationData
-      }));
-
-      // Brief completion moment
-      await new Promise(resolve => setTimeout(resolve, 600));
-
-      navigate('/resume-comparison', {
-        state: { optimizedResume: { resumeId, ...optimizationData } }
-      });
-      handleClose();
+      await runOptimization(resumeId, jobTitle, jobDescription, jobLink);
     } catch (error) {
       console.error('Optimization error:', error);
       if (progressTimerRef.current) clearInterval(progressTimerRef.current);
@@ -269,6 +387,7 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
   const handleClose = () => {
     if (progressTimerRef.current) clearInterval(progressTimerRef.current);
     if (messageTimerRef.current) clearInterval(messageTimerRef.current);
+    if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
     setCurrentStep(1);
     setUploadedFile(null);
     setJDPaste('');
@@ -277,6 +396,11 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
     setProcessingStep(0);
     setSmoothProgress(0);
     setAiMessageIndex(0);
+    setElapsedSeconds(0);
+    setShowPaywall(false);
+    setPaywallResumeId(null);
+    setPaywallPlans([]);
+    setPendingOptimization(null);
     onClose();
   };
 
@@ -771,8 +895,8 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
                     {smoothProgress >= 100
                       ? 'Your tailored resume is ready'
                       : smoothProgress < 30
-                        ? 'Preparing your resume for AI analysis...'
-                        : 'Our AI is tailoring your resume to the job...'}
+                        ? 'Preparing your resume for optimization...'
+                        : 'Using the best possible models to tailor your resume...'}
                   </p>
                 </div>
 
@@ -780,7 +904,15 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
                 <div className="mb-5">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Progress</span>
-                    <span className="text-sm font-black text-teal-600 tabular-nums">{smoothProgress}%</span>
+                    <div className="flex items-center gap-3">
+                      {smoothProgress < 100 && (
+                        <span className="text-xs text-gray-400 tabular-nums">
+                          {Math.floor(elapsedSeconds / 60)}:{String(elapsedSeconds % 60).padStart(2, '0')}
+                          <span className="text-gray-300 ml-1">/ ~1:30</span>
+                        </span>
+                      )}
+                      <span className="text-sm font-black text-teal-600 tabular-nums">{smoothProgress}%</span>
+                    </div>
                   </div>
                   <div className="h-3 bg-gray-100 rounded-full overflow-hidden shadow-inner">
                     <div
@@ -841,16 +973,16 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
                   })}
                 </div>
 
-                {/* AI insight message — shows during the long AI step */}
-                {(processingStep === 3 || processingStep === 4) && smoothProgress < 90 && (
-                  <div className="mt-4 px-4 py-3 rounded-xl bg-gradient-to-r from-slate-50 to-teal-50/50 border border-teal-100/60 fade-slide-up" key={aiMessageIndex}>
+                {/* AI insight message — shows real-time server progress */}
+                {processingStep >= 1 && smoothProgress < 100 && serverMessage && (
+                  <div className="mt-4 px-4 py-3 rounded-xl bg-gradient-to-r from-slate-50 to-teal-50/50 border border-teal-100/60 fade-slide-up" key={serverMessage}>
                     <div className="flex items-start gap-3">
                       <div className="w-7 h-7 rounded-lg bg-teal-100 flex items-center justify-center shrink-0 mt-0.5">
-                        <i className={`${aiInsightMessages[aiMessageIndex]?.icon || 'ri-lightbulb-flash-line'} text-teal-600 text-sm`}></i>
+                        <i className={`${processingSteps[Math.max(0, processingStep - 1)]?.icon || 'ri-lightbulb-flash-line'} text-teal-600 text-sm`}></i>
                       </div>
                       <div>
-                        <p className="text-xs font-bold text-teal-700 uppercase tracking-wider mb-0.5">AI Working</p>
-                        <p className="text-sm text-gray-600 leading-snug">{aiInsightMessages[aiMessageIndex]?.text || 'Processing...'}</p>
+                        <p className="text-xs font-bold text-teal-700 uppercase tracking-wider mb-0.5">{serverMessage}</p>
+                        <p className="text-sm text-gray-600 leading-snug">{serverDetail || 'Processing...'}</p>
                       </div>
                     </div>
                   </div>
@@ -880,6 +1012,42 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
           )}
         </div>
       </div>
+
+      {/* Auth Modal – shown when user tries to optimize without being logged in */}
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        onSuccess={() => {
+          setShowAuthModal(false);
+          // After successful login, continue where the user left off
+          if (currentStep === 1 && uploadedFile) {
+            setCurrentStep(2);
+          } else if (currentStep === 2 && isJDValid()) {
+            startProcessing();
+          }
+        }}
+      />
+
+      {/* Paywall – reuse the site's PaymentModal with pricing plans */}
+      {paywallResumeId && (
+        <PaymentModal
+          isOpen={showPaywall}
+          resumeId={paywallResumeId}
+          plans={paywallPlans}
+          onClose={() => setShowPaywall(false)}
+          onPaymentSuccess={async () => {
+            setShowPaywall(false);
+            if (pendingOptimization) {
+              await runOptimization(
+                pendingOptimization.resumeId,
+                pendingOptimization.jobTitle,
+                pendingOptimization.jobDescription,
+                pendingOptimization.jobLink,
+              );
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

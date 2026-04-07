@@ -148,22 +148,44 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
+# ============= PRODUCTION SAFETY CHECKS =============
+_WEAK_SECRET_KEYS = {
+    "CHANGE_ME_USE_SECRET_MANAGER",
+    "secret",
+    "changeme",
+}
+
+if settings.is_production:
+    import logging as _logging
+    _key = settings.secret_key.strip()
+    if _key in _WEAK_SECRET_KEYS or len(_key) < 16:
+        _logging.getLogger(__name__).critical(
+            "SECRET_KEY is weak or a known default — rotate immediately!"
+        )
+
 
 def get_frontend_origin(request) -> str:
     """Extract the frontend origin from the incoming request.
 
-    Checks the Origin header first, then falls back to the Referer header,
-    and finally to settings.frontend_url.  This ensures email verification
-    links always point back to wherever the user actually came from.
+    Validates the origin against the allowed origins list to prevent
+    open-redirect attacks. Falls back to settings.frontend_url if the
+    origin is not in the allow-list.
     """
+    allowed = settings.origins_list
+
     origin = request.headers.get("origin")
     if origin:
-        return origin.rstrip("/")
+        origin = origin.rstrip("/")
+        if origin in allowed:
+            return origin
+        # Origin not in allow-list — fall through to default
 
     referer = request.headers.get("referer")
     if referer:
         from urllib.parse import urlparse
         parsed = urlparse(referer)
-        return f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
+        referer_origin = f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
+        if referer_origin in allowed:
+            return referer_origin
 
     return settings.frontend_url

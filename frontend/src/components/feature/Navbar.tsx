@@ -4,6 +4,7 @@ import AuthModal from './AuthModal';
 import OptimizeModal from './OptimizeModal';
 import UserProfileDropdown from './UserProfileDropdown';
 import { googleAuthService } from '../../services/googleAuthService';
+import { getPortalUrl } from '../../utils/subdomain';
 
 export default function Navbar() {
   const navigate = useNavigate();
@@ -68,13 +69,13 @@ export default function Navbar() {
   const handleCollegesClick = () => {
     setIsToolsOpen(false);
     setIsMobileMenuOpen(false);
-    navigate('/for-colleges');
+    window.open(getPortalUrl('institution'), '_blank');
   };
 
   const handleRecruitersClick = () => {
     setIsToolsOpen(false);
     setIsMobileMenuOpen(false);
-    navigate('/for-recruiters');
+    window.open(getPortalUrl('recruiter'), '_blank');
   };
 
   return (

@@ -776,6 +776,39 @@ class Subscription(Base):
     payment = relationship("Payment", backref="subscription")
 
 
+# ============= COUPON MODELS =============
+
+class Coupon(Base):
+    """Discount coupons that grant free resume downloads."""
+    __tablename__ = "coupons"
+
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String(50), unique=True, nullable=False, index=True)
+    max_uses = Column(Integer, nullable=False, default=10)
+    times_used = Column(Integer, nullable=False, default=0)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    is_active = Column(Boolean, default=True, index=True)
+    description = Column(String(255))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    redemptions = relationship("CouponRedemption", back_populates="coupon")
+
+
+class CouponRedemption(Base):
+    """Tracks each coupon use per user+resume."""
+    __tablename__ = "coupon_redemptions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    coupon_id = Column(Integer, ForeignKey("coupons.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    resume_id = Column(Integer, ForeignKey("resumes.id", ondelete="SET NULL"), index=True)
+    redeemed_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    coupon = relationship("Coupon", back_populates="redemptions")
+    user = relationship("User", backref="coupon_redemptions")
+    resume = relationship("Resume", backref="coupon_redemptions")
+
+
 # ============= RECRUITER MODULE MODELS =============
 
 class Recruiter(Base):

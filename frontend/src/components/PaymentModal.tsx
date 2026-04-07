@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react';
-import paymentService, { PaymentConfig, PaymentSession, PlanInfo } from '../services/paymentService';
+import { useState, useCallback, useEffect } from 'react';
+import paymentService, { PaymentConfig, PaymentSession, PlanInfo, CouponValidateResult } from '../services/paymentService';
 
 // Zoho widget types
 declare global {
@@ -10,7 +10,7 @@ declare global {
       otherOptions: { api_key: string };
     }) => {
       requestPaymentMethod: (options: {
-        amount: number;
+        amount: string;
         currency_code: string;
         payments_session_id: string;
         description?: string;
@@ -19,6 +19,7 @@ declare global {
         signature: string;
         message: string;
       }>;
+      close: () => Promise<void>;
     };
   }
 }
@@ -42,10 +43,52 @@ export default function PaymentModal({
   const [status, setStatus] = useState<'idle' | 'loading' | 'processing' | 'verifying' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
   const [pendingResult, setPendingResult] = useState<{ subscriptionActivated: boolean } | null>(null);
+  const [successHandled, setSuccessHandled] = useState(false);
+
+  // Coupon state
+  const [showCouponInput, setShowCouponInput] = useState(false);
+  const [couponCode, setCouponCode] = useState('');
+  const [couponStatus, setCouponStatus] = useState<'idle' | 'validating' | 'valid' | 'applying' | 'applied' | 'error'>('idle');
+  const [couponError, setCouponError] = useState('');
+  const [couponInfo, setCouponInfo] = useState<CouponValidateResult | null>(null);
 
   const selectedPlanInfo = plans.find((p) => p.plan_type === selectedPlan) || plans[0];
 
+  const handleValidateCoupon = useCallback(async () => {
+    if (!couponCode.trim()) return;
+    setCouponStatus('validating');
+    setCouponError('');
+    setCouponInfo(null);
+    try {
+      const result = await paymentService.validateCoupon(couponCode.trim());
+      setCouponInfo(result);
+      setCouponStatus('valid');
+    } catch (error: any) {
+      setCouponError(error?.message || 'Invalid coupon');
+      setCouponStatus('error');
+    }
+  }, [couponCode]);
+
+  const handleApplyCoupon = useCallback(async () => {
+    if (!couponCode.trim()) return;
+    setCouponStatus('applying');
+    setCouponError('');
+    try {
+      await paymentService.applyCoupon(couponCode.trim(), resumeId);
+      setCouponStatus('applied');
+      // Trigger success — coupon grants download access
+      setTimeout(() => {
+        onPaymentSuccess(false);
+        onClose();
+      }, 800);
+    } catch (error: any) {
+      setCouponError(error?.message || 'Failed to apply coupon');
+      setCouponStatus('error');
+    }
+  }, [couponCode, resumeId, onPaymentSuccess, onClose]);
+
   const handlePayment = useCallback(async () => {
+    setSuccessHandled(false);
     setStatus('loading');
     setErrorMessage('');
 
@@ -80,14 +123,29 @@ export default function PaymentModal({
         otherOptions: { api_key: config.api_key },
       });
 
-      // Step 5: Open payment widget (ensure amount is numeric)
-      const numericAmount = typeof session.amount === 'string' ? parseFloat(session.amount) : session.amount;
-      const result = await zpayInstance.requestPaymentMethod({
-        amount: numericAmount,
-        currency_code: session.currency,
-        payments_session_id: session.payments_session_id,
-        description: selectedPlanInfo?.label || 'PickCV Payment',
-      });
+      // Step 5: Open payment widget (Zoho requires amount as a string)
+      const stringAmount = String(typeof session.amount === 'string' ? session.amount : session.amount.toFixed(2));
+      let result: { payment_id: string; signature: string; message: string } | null = null;
+      try {
+        result = await zpayInstance.requestPaymentMethod({
+          amount: stringAmount,
+          currency_code: session.currency,
+          payments_session_id: session.payments_session_id,
+          description: selectedPlanInfo?.label || 'PickCV Payment',
+        });
+      } finally {
+        // Per Zoho docs, explicitly close widget to prevent stuck overlay states
+        try {
+          await zpayInstance.close();
+        } catch {
+          // no-op
+        }
+      }
+
+      if (!result) {
+        setStatus('idle');
+        return;
+      }
 
       // Step 6: Verify payment on backend
       setStatus('verifying');
@@ -107,18 +165,51 @@ export default function PaymentModal({
         setStatus('error');
       }
     } catch (error: any) {
-      console.error('Payment error:', error);
       if (error?.message?.includes('cancelled') || error?.message?.includes('closed')) {
         setStatus('idle');
         return;
       }
+      // Already paid for this resume — treat as success and let them download
+      if (error?.status === 409 || (error as any)?.code === 'already_paid' || error?.message?.toLowerCase().includes('already paid')) {
+        setStatus('success');
+        setPendingResult({ subscriptionActivated: false });
+        return;
+      }
+      console.error('Payment error:', error);
       setErrorMessage(error?.message || 'Payment failed. Please try again.');
       setStatus('error');
     }
   }, [resumeId, selectedPlan, selectedPlanInfo]);
 
-  /** User clicks "Download Now" after successful payment */
+  /** Auto-proceed 1.2 s after payment succeeds (brief green flash, then close + download) */
+  useEffect(() => {
+    if (!isOpen || status !== 'success' || !pendingResult || successHandled) return;
+    const timer = setTimeout(() => {
+      setSuccessHandled(true);
+      onPaymentSuccess(pendingResult.subscriptionActivated);
+      onClose();
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [isOpen, status, pendingResult, successHandled, onPaymentSuccess, onClose]);
+
+  /** Reset modal state whenever it's closed to avoid stale success re-firing */
+  useEffect(() => {
+    if (isOpen) return;
+    setStatus('idle');
+    setErrorMessage('');
+    setPendingResult(null);
+    setSuccessHandled(false);
+    setShowCouponInput(false);
+    setCouponCode('');
+    setCouponStatus('idle');
+    setCouponError('');
+    setCouponInfo(null);
+  }, [isOpen]);
+
+  /** Manual fallback if user clicks the button before the timer fires */
   const handleDownloadNow = () => {
+    if (successHandled) return;
+    setSuccessHandled(true);
     if (pendingResult) {
       onPaymentSuccess(pendingResult.subscriptionActivated);
     }
@@ -187,6 +278,87 @@ export default function PaymentModal({
             </div>
           ) : (
             <>
+              {/* Coupon Section */}
+              <div className="mb-5">
+                {!showCouponInput ? (
+                  <button
+                    onClick={() => setShowCouponInput(true)}
+                    className="text-sm text-teal-600 hover:text-teal-700 font-medium flex items-center gap-1.5 transition-colors"
+                  >
+                    <i className="ri-coupon-3-line"></i>
+                    Have a coupon code?
+                  </button>
+                ) : couponStatus === 'applied' ? (
+                  <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-xl">
+                    <i className="ri-check-double-line text-green-600 text-lg"></i>
+                    <div>
+                      <p className="text-sm font-semibold text-green-800">Coupon applied!</p>
+                      <p className="text-xs text-green-600">Downloading your resume...</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl space-y-3">
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={couponCode}
+                        onChange={(e) => { setCouponCode(e.target.value.toUpperCase()); setCouponStatus('idle'); setCouponError(''); setCouponInfo(null); }}
+                        placeholder="Enter coupon code"
+                        maxLength={50}
+                        className="flex-1 px-3 py-2 rounded-lg border border-gray-300 text-sm font-mono uppercase tracking-wider placeholder:normal-case placeholder:tracking-normal placeholder:font-sans focus:ring-2 focus:ring-teal-200 focus:border-teal-400 transition-all"
+                        disabled={couponStatus === 'validating' || couponStatus === 'applying'}
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleValidateCoupon(); }}
+                      />
+                      {couponStatus !== 'valid' ? (
+                        <button
+                          onClick={handleValidateCoupon}
+                          disabled={!couponCode.trim() || couponStatus === 'validating'}
+                          className="px-4 py-2 rounded-lg text-sm font-semibold bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                        >
+                          {couponStatus === 'validating' ? (
+                            <i className="ri-loader-4-line animate-spin"></i>
+                          ) : 'Verify'}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={handleApplyCoupon}
+                          disabled={couponStatus === 'applying'}
+                          className="px-4 py-2 rounded-lg text-sm font-semibold bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                        >
+                          {couponStatus === 'applying' ? (
+                            <i className="ri-loader-4-line animate-spin"></i>
+                          ) : (
+                            <><i className="ri-check-line mr-1"></i>Apply</>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                    {couponStatus === 'valid' && couponInfo && (
+                      <div className="flex items-center gap-2 text-green-700 text-xs bg-green-50 px-3 py-2 rounded-lg">
+                        <i className="ri-check-line text-sm"></i>
+                        <span className="font-medium">{couponInfo.description || 'Valid coupon!'}</span>
+                        <span className="text-green-500">({couponInfo.remaining_uses} uses left)</span>
+                      </div>
+                    )}
+                    {couponStatus === 'error' && couponError && (
+                      <p className="text-xs text-red-600 flex items-center gap-1">
+                        <i className="ri-error-warning-line text-sm"></i>
+                        {couponError}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Divider */}
+              {showCouponInput && couponStatus !== 'applied' && (
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="flex-1 h-px bg-gray-200"></div>
+                  <span className="text-xs text-gray-400 font-medium">OR PAY</span>
+                  <div className="flex-1 h-px bg-gray-200"></div>
+                </div>
+              )}
+
               {/* Plan Cards */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                 {plans.map((plan) => {

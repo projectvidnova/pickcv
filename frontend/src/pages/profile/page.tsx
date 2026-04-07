@@ -591,10 +591,6 @@ export default function ProfilePage() {
                   <div className="w-5 h-5 flex items-center justify-center"><i className="ri-edit-2-line text-base text-slate-400" /></div>
                   Edit Profile
                 </button>
-                <Link to="/onboarding" className="flex items-center gap-3 px-4 py-3 rounded-xl glass text-slate-700 text-sm font-semibold hover:bg-white/80 transition-all cursor-pointer">
-                  <div className="w-5 h-5 flex items-center justify-center"><i className="ri-refresh-line text-base text-slate-400" /></div>
-                  Redo Onboarding
-                </Link>
               </div>
 
               <div className="glass-card rounded-2xl p-5 space-y-3">
