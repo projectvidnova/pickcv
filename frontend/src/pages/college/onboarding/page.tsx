@@ -19,12 +19,9 @@ interface StudentRow {
   name: string;
   email: string;
   branch: string;
+  year: string;
+  sem: string;
   cgpa: string;
-  graduationYear: string;
-  phone: string;
-  linkedin: string;
-  skills: string;
-  placementStatus: string;
   error?: string;
 }
 
@@ -116,16 +113,29 @@ export default function CollegeOnboarding() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const name = file.name.toLowerCase();
+    if (!name.endsWith('.csv') && !name.endsWith('.xlsx')) {
+      setParsedStudents([]);
+      return;
+    }
+
     setUploadedFile(file);
     setIsProcessing(true);
 
+    // XLSX files are binary — skip frontend preview, backend will parse
+    if (name.endsWith('.xlsx')) {
+      setParsedStudents([{ id: 'xlsx-preview', name: file.name, email: 'Excel file will be parsed on upload', branch: '', year: '', sem: '', cgpa: '' }]);
+      setIsProcessing(false);
+      return;
+    }
+
+    // CSV: parse for preview
     const reader = new FileReader();
     reader.onload = (event) => {
       const text = event.target?.result as string;
       const rows = text.split('\n').filter(row => row.trim());
-      
       const dataRows = rows.slice(1);
-      
+
       const students: StudentRow[] = dataRows.map((row, index) => {
         const cols = row.split(',').map(col => col.trim());
         const student: StudentRow = {
@@ -133,12 +143,9 @@ export default function CollegeOnboarding() {
           name: cols[0] || '',
           email: cols[1] || '',
           branch: cols[2] || '',
-          cgpa: cols[3] || '',
-          graduationYear: cols[4] || '',
-          phone: cols[5] || '',
-          linkedin: cols[6] || '',
-          skills: cols[7] || '',
-          placementStatus: cols[8] || 'unplaced',
+          year: cols[3] || '',
+          sem: cols[4] || '',
+          cgpa: cols[5] || '',
         };
 
         if (!student.email || !student.email.includes('@')) {
