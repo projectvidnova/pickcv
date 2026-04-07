@@ -703,6 +703,245 @@ class ResumeOSOrchestrator:
             },
         }
 
+    async def optimize_multistep(
+        self,
+        *,
+        resume_text: str,
+        job_title: str,
+        job_description: str,
+        job_link: Optional[str] = None,
+        github_context: Optional[str] = None,
+        progress_callback=None,
+    ) -> Dict:
+        """Run the multi-step optimization pipeline with 4 focused LLM calls.
+
+        This replaces the monolithic single-call approach with:
+          Step 1: Deep JD analysis
+          Step 2: Resume↔JD evidence mapping
+          Step 3: Directive content rewriting (every bullet aligned to JD)
+          Step 4: Scoring, comparison, signal classification
+
+        Args:
+            progress_callback: async callable(step, total, message, detail)
+                               for SSE progress streaming.
+        """
+
+        total_steps = 8  # 4 LLM steps + 4 post-processing steps
+
+        async def _emit(step: int, message: str, detail: str = ""):
+            if progress_callback:
+                await progress_callback(step=step, total=total_steps, message=message, detail=detail)
+
+        # ── Pre-processing (parallel deterministic agents) ──
+        await _emit(1, "Preparing optimization context", "Running role classification and ATS detection...")
+
+        fallback_modes = self._detect_fallback_modes(
+            resume_text=resume_text,
+            job_description=job_description,
+            job_link=job_link,
+        )
+        role_dna = await self._role_intelligence_agent(job_title=job_title, job_description=job_description)
+        constraint_result = self._constraint_engine(
+            resume_text=resume_text,
+            job_description=job_description,
+            role_dna=role_dna,
+        )
+        ats_intel = self._ats_intelligence_agent(job_link)
+        recruiter_scan = self._recruiter_decision_agent(resume_text)
+        gap_scorecard = self._gap_analysis_agent(
+            resume_text=resume_text,
+            job_description=job_description,
+            role_dna=role_dna,
+            recruiter_scan=recruiter_scan,
+        )
+        ats_score_result = self._compute_ats_score(
+            resume_text=resume_text,
+            job_description=job_description,
+            ats_intel=ats_intel,
+            keyword_coverage=gap_scorecard.get("keyword_coverage", 0),
+            title_alignment=gap_scorecard.get("title_alignment", 0),
+        )
+        optimization_input_context = self._build_optimization_context(
+            role_dna=role_dna,
+            ats_intel=ats_intel,
+            recruiter_scan=recruiter_scan,
+            gap_scorecard=gap_scorecard,
+            fallback_modes=fallback_modes,
+            constraint_result=constraint_result,
+            ats_score_result=ats_score_result,
+        )
+
+        await _emit(1, "Context ready",
+                    f"Role: {role_dna.get('cluster_name', 'General')} · Level: {role_dna.get('level', '?')} · ATS: {ats_score_result.get('ats_score', '?')}%")
+
+        # ── 4-Step LLM Pipeline via progress_callback forwarding ──
+        async def _llm_progress(step: int, total: int, message: str, detail: str = ""):
+            # Remap LLM steps 1-4 → overall steps 2-5
+            await _emit(step + 1, message, detail)
+
+        optimization_result = await gemini_service.run_multistep_optimization(
+            resume_text=resume_text,
+            job_description=job_description,
+            job_title=job_title,
+            github_context=github_context or None,
+            resume_os_context=optimization_input_context,
+            progress_callback=_llm_progress,
+        )
+
+        if "error" in optimization_result:
+            return optimization_result
+
+        # ── Post-processing: Variants, Scoring, Validation ──
+        await _emit(6, "Building resume variants", "Creating specialized versions for different angles...")
+
+        tradeoff_log = self._trade_off_engine(
+            role_dna=role_dna,
+            ats_score=ats_score_result.get("ats_score", 0),
+            recruiter_score=recruiter_scan.get("scan_score", 0),
+            authenticity_score=70,
+        )
+        variant_scores, recommended_variant = self._output_engine_variant_scoring(
+            role_dna=role_dna,
+            ats_intel=ats_intel,
+            gap_scorecard=gap_scorecard,
+            match_score=float(optimization_result.get("match_score", 0) or 0),
+        )
+        variant_scores = self._variant_distance_control(variant_scores)
+
+        strategy_log = self._strategy_log_agent(
+            role_dna=role_dna,
+            ats_intel=ats_intel,
+            gap_scorecard=gap_scorecard,
+            changes_made=optimization_result.get("changes_made", []),
+            recommended_variant=recommended_variant,
+            variant_scores=variant_scores,
+            fallback_modes=fallback_modes,
+            constraint_result=constraint_result,
+            tradeoff_log=tradeoff_log,
+        )
+
+        resume_variants = self._build_resume_variants(
+            optimization_result=optimization_result,
+            role_dna=role_dna,
+            ats_intel=ats_intel,
+            variant_scores=variant_scores,
+        )
+
+        await _emit(7, "Scoring and validation", "Running authenticity checks and simulations...")
+
+        for variant in resume_variants:
+            auth_result = self._authenticity_engine(variant.get("optimized_resume_text", ""), role_dna=role_dna, variant_id=variant.get("id", "V1"))
+            variant["authenticity"] = auth_result
+        for variant in resume_variants:
+            sim_result = self._simulation_layer(variant.get("optimized_resume_text", ""), role_dna, variant_id=variant.get("id", "V1"))
+            variant["simulation"] = sim_result
+
+        for variant in resume_variants:
+            ats = ats_score_result.get("ats_score", 0)
+            recruiter = recruiter_scan.get("scan_score", 0)
+            composite = int(round(ats * 0.60 + recruiter * 0.40))
+            variant["scores"] = {
+                "ats_compatibility": ats,
+                "ats_platform": ats_intel.get("platform_name", "Unknown"),
+                "recruiter_scan": recruiter,
+                "signal_density": variant.get("score", 0),
+                "cognitive_load": variant.get("simulation", {}).get("cognitive_load_score", 0),
+                "role_match": gap_scorecard.get("role_match", 0),
+                "simulation": variant.get("simulation", {}).get("simulation_score", 0),
+                "authenticity": variant.get("authenticity", {}).get("authenticity_score", 0),
+                "composite": composite,
+            }
+
+        validation = self._output_validation(
+            variants=resume_variants,
+            strategy_log=strategy_log,
+            constraint_result=constraint_result,
+            role_dna=role_dna,
+        )
+
+        viable = [v for v in resume_variants if ats_score_result.get("ats_score", 0) >= 55]
+        if not viable:
+            viable = resume_variants
+        if viable:
+            best = max(viable, key=lambda v: v.get("scores", {}).get("composite", 0))
+            default_recommendation = {
+                "variant_id": best.get("id"),
+                "variant_name": best.get("name"),
+                "composite_score": best.get("scores", {}).get("composite", 0),
+                "rationale": best.get("rationale", "Highest composite score"),
+            }
+        else:
+            default_recommendation = recommended_variant
+
+        gap_notification = {
+            "missing_required_keywords": gap_scorecard.get("missing_required_keywords", []),
+            "missing_preferred_keywords": [],
+            "development_signals": [
+                f"To strengthen your application, consider developing evidence for: {kw}"
+                for kw in gap_scorecard.get("missing_required_keywords", [])[:5]
+            ],
+        }
+        ats_advisory = {
+            "platform": ats_intel.get("platform_name", "Unknown"),
+            "rules_applied": ats_intel.get("rules", []),
+            "file_format_recommendation": ats_intel.get("preferred_format", "pdf"),
+            "posting_age_warning": None,
+        }
+
+        await _emit(8, "Optimization complete",
+                    f"Match: {optimization_result.get('match_score', 0)}% · "
+                    f"{len(resume_variants)} variants generated")
+
+        return {
+            **optimization_result,
+            "resume_variants": resume_variants,
+            "resume_os": {
+                "run_valid": validation.get("valid", True),
+                "fallback_modes": fallback_modes,
+                "agents_executed": [
+                    "FallbackDetection",
+                    "RoleDNAAgent",
+                    "ConstraintEngine",
+                    "ATSAgent",
+                    "RecruiterScanAgent",
+                    "GapAgent",
+                    "ATSScoringAgent",
+                    "Step1_JDAnalysis",
+                    "Step2_EvidenceMapping",
+                    "Step3_ContentRewriting",
+                    "Step4_ScoringAssembly",
+                    "TradeOffEngine",
+                    "VariantScoringAgent",
+                    "VariantDistanceControl",
+                    "AuthenticityEngine",
+                    "SimulationLayer",
+                    "OutputValidation",
+                    "StrategyLogAgent",
+                ],
+                "role_dna": role_dna,
+                "recommended_variant": {
+                    "id": default_recommendation.get("variant_id", ""),
+                    "name": default_recommendation.get("variant_name", ""),
+                    "score": default_recommendation.get("composite_score", 0),
+                    "rationale": default_recommendation.get("rationale", ""),
+                },
+                "ats_intelligence": ats_intel,
+                "ats_score": ats_score_result,
+                "recruiter_scan": recruiter_scan,
+                "gap_scorecard": gap_scorecard,
+                "constraint_result": constraint_result,
+                "tradeoff_log": tradeoff_log,
+                "variant_scores": variant_scores,
+                "default_recommendation": default_recommendation,
+                "strategy_log": strategy_log,
+                "gap_notification": gap_notification,
+                "ats_advisory": ats_advisory,
+                "validation": validation,
+                "signal_classification": optimization_result.get("signal_classification", {}),
+                "deprioritize_options": self.DEPRIORITIZE_OPTIONS,
+            },
+        }
+
     def _build_resume_variants(
         self,
         *,

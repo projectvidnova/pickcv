@@ -1,9 +1,12 @@
 """Resume management routes."""
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List
+import asyncio
 import logging
+import json as _json
 
 from database import get_db
 from models import User, Resume
@@ -367,6 +370,171 @@ async def optimize_resume_for_job(
         "github_enrichment_used": bool(github_context),
         "resume_os": optimization_result.get("resume_os", {}),
     }
+
+
+@router.post("/{resume_id}/optimize-for-job-stream")
+async def optimize_resume_for_job_stream(
+    resume_id: int,
+    request: ResumeOptimizationRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """SSE streaming endpoint for multi-step resume optimization.
+
+    Streams progress events during the 4-step pipeline, then sends the final result.
+    Event types: progress, result, error.
+    """
+    result = await db.execute(
+        select(Resume).where(Resume.id == resume_id, Resume.user_id == current_user.id)
+    )
+    resume = result.scalar_one_or_none()
+
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+
+    job_title = request.job_title
+    job_description = request.job_description
+    job_link = request.job_link
+
+    # ── Resolve JD (same logic as non-streaming endpoint) ──
+    if job_link:
+        logger.info(f"Stream optimize: LINK — scraping {job_link}")
+        job_description = scraper_service.scrape_job_description(job_link)
+        if not job_description:
+            raise HTTPException(
+                status_code=400,
+                detail="Failed to scrape job description from link. Please try pasting the description instead."
+            )
+    elif not job_description or job_description.strip() == "":
+        logger.info(f"Stream optimize: TITLE ONLY — generating JD for '{job_title}'")
+        job_description = await gemini_service.generate_job_description_from_title(job_title)
+        if not job_description:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to generate job description from title."
+            )
+    else:
+        logger.info(f"Stream optimize: PASTE — {len(job_description)} chars")
+
+    # ── GitHub enrichment ──
+    github_url = None
+    github_context = None
+    try:
+        github_url = scraper_service.extract_github_profile_url(resume.raw_text or "")
+        if not github_url and isinstance(resume.contact_info, dict):
+            for key in ("github", "github_url", "portfolio", "website", "links"):
+                value = resume.contact_info.get(key)
+                if isinstance(value, str):
+                    github_url = scraper_service.extract_github_profile_url(value)
+                    if github_url:
+                        break
+                elif isinstance(value, list):
+                    for item in value:
+                        if isinstance(item, str):
+                            github_url = scraper_service.extract_github_profile_url(item)
+                            if github_url:
+                                break
+                    if github_url:
+                        break
+        if github_url:
+            github_context = scraper_service.build_github_resume_context(github_url)
+    except Exception as e:
+        logger.warning(f"GitHub enrichment skipped: {e}")
+
+    # ── SSE stream generator ──
+    async def event_stream():
+        progress_queue: asyncio.Queue = asyncio.Queue()
+
+        async def on_progress(step: int, total: int, message: str, detail: str = ""):
+            event_data = _json.dumps({
+                "type": "progress",
+                "step": step,
+                "total": total,
+                "message": message,
+                "detail": detail,
+                "percent": int(round(step / total * 100)),
+            })
+            await progress_queue.put(f"data: {event_data}\n\n")
+
+        async def run_optimization():
+            try:
+                optimization_result = await resume_os_orchestrator.optimize_multistep(
+                    resume_text=resume.raw_text,
+                    job_title=job_title,
+                    job_description=job_description,
+                    job_link=job_link,
+                    github_context=github_context,
+                    progress_callback=on_progress,
+                )
+
+                if "error" in optimization_result:
+                    error_event = _json.dumps({"type": "error", "message": optimization_result["error"]})
+                    await progress_queue.put(f"data: {error_event}\n\n")
+                else:
+                    comparison = optimization_result.get("comparison", {})
+                    result_payload = {
+                        "type": "result",
+                        "data": {
+                            "resume_id": resume_id,
+                            "job_title": job_title,
+                            "job_description": job_description,
+                            "original_resume_text": resume.raw_text or "",
+                            "optimized_resume": optimization_result.get("optimized_resume", ""),
+                            "name": optimization_result.get("name", ""),
+                            "title": optimization_result.get("title", ""),
+                            "email": optimization_result.get("email", ""),
+                            "phone": optimization_result.get("phone", ""),
+                            "linkedin": optimization_result.get("linkedin", ""),
+                            "location": optimization_result.get("location", ""),
+                            "professional_summary": optimization_result.get("professional_summary", ""),
+                            "experience": optimization_result.get("experience", []),
+                            "skills": optimization_result.get("skills", []),
+                            "education": optimization_result.get("education", []),
+                            "changes_made": optimization_result.get("changes_made", []),
+                            "key_improvements": optimization_result.get("key_improvements", []),
+                            "keywords_added": optimization_result.get("keywords_added", []),
+                            "match_score": optimization_result.get("match_score", 0),
+                            "ats_optimized": optimization_result.get("ats_optimized", False),
+                            "comparison": comparison,
+                            "resume_variants": optimization_result.get("resume_variants", []),
+                            "job_link": job_link,
+                            "github_profile_url": github_url,
+                            "github_enrichment_used": bool(github_context),
+                            "resume_os": optimization_result.get("resume_os", {}),
+                            "jd_analysis": optimization_result.get("jd_analysis", {}),
+                            "evidence_map": optimization_result.get("evidence_map", []),
+                            "overall_match_assessment": optimization_result.get("overall_match_assessment", {}),
+                        },
+                    }
+                    await progress_queue.put(f"data: {_json.dumps(result_payload)}\n\n")
+            except Exception as exc:
+                logger.exception(f"Stream optimization failed: {exc}")
+                error_event = _json.dumps({"type": "error", "message": str(exc)})
+                await progress_queue.put(f"data: {error_event}\n\n")
+            finally:
+                await progress_queue.put(None)  # sentinel
+
+        # Start optimization as a background task
+        task = asyncio.create_task(run_optimization())
+
+        while True:
+            msg = await progress_queue.get()
+            if msg is None:
+                break
+            yield msg
+
+        # Ensure task is finished
+        await task
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.post("/compress-variant")
