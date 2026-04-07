@@ -216,8 +216,10 @@ export default function ResumeComparisonPage() {
       })
         .then(res => res.json())
         .then(json => {
-          if (json.config) {
-            setDynamicConfigs(prev => ({ ...prev, [configKey]: json.config as DynamicTemplateConfig }));
+          // Backend returns config as top-level OR nested under .config
+          const cfg = json.config || (json.layout ? json : null);
+          if (cfg) {
+            setDynamicConfigs(prev => ({ ...prev, [configKey]: cfg as DynamicTemplateConfig }));
           }
         })
         .catch(() => { /* silently fail — static templates remain */ })

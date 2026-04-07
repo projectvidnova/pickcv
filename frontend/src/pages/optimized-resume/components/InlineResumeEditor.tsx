@@ -178,7 +178,7 @@ const SECTION_META: Record<SectionId, { label: string; icon: string }> = {
 // Section order per variant — matching Resume OS agent prompt priorities
 const VARIANT_SECTION_ORDERS: Record<string, SectionId[]> = {
   // V1 Signal Stack: Skills → Projects → Experience → Education  (tech-first, stack depth leads)
-  v1: ['skills', 'summary', 'experience', 'education'],
+  v1: ['summary', 'skills', 'experience', 'education'],
   // V2 Outcome Ledger: Summary → Metrics → Experience → Skills → Education  (results-first)
   v2: ['summary', 'experience', 'skills', 'education'],
   // V3 Authority Frame: Summary → Tools & Certs → Experience → Education  (formal, certs before exp)
@@ -480,7 +480,7 @@ export default function InlineResumeEditor({
     obs.observe(el);
     requestAnimationFrame(computeBreaks);
     return () => obs.disconnect();
-  }, [templateId, theme]);
+  }, [templateId, theme, activeDynamicConfig]);
 
   const totalPages = pageBreakPositions.length + 1;
 
@@ -504,6 +504,41 @@ export default function InlineResumeEditor({
   useEffect(() => {
     onPageCountChange?.(totalPages);
   }, [totalPages, onPageCountChange]);
+
+  // Inject spacer elements at page breaks so content shifts down visually
+  useEffect(() => {
+    const el = resumeRef.current;
+    if (!el) return;
+    // Remove any previous spacers
+    el.querySelectorAll('.page-break-spacer').forEach(s => s.remove());
+    if (pageBreakPositions.length === 0) return;
+
+    // Find all child elements with their positions
+    const cRect = el.getBoundingClientRect();
+    const children = Array.from(el.children) as HTMLElement[];
+    
+    for (let bIdx = pageBreakPositions.length - 1; bIdx >= 0; bIdx--) {
+      const breakY = pageBreakPositions[bIdx];
+      // Find the child element that contains this break point
+      let targetChild: HTMLElement | null = null;
+      for (const child of children) {
+        if (child.classList.contains('page-break-spacer')) continue;
+        const childTop = child.getBoundingClientRect().top - cRect.top;
+        if (childTop >= breakY - 2) {
+          targetChild = child;
+          break;
+        }
+      }
+      if (targetChild) {
+        const spacer = document.createElement('div');
+        spacer.className = 'page-break-spacer';
+        spacer.style.height = PAGE_GAP + 'px';
+        spacer.style.width = '100%';
+        spacer.style.flexShrink = '0';
+        el.insertBefore(spacer, targetChild);
+      }
+    }
+  }, [pageBreakPositions]);
 
   // Check payment access on mount
   useEffect(() => {
@@ -853,29 +888,36 @@ export default function InlineResumeEditor({
   /* ─── Smart Achievement Highlight (adapts to every template variant) ─── */
   const extractTopMetrics = () => {
     const metrics: { value: string; label: string; numericValue: number }[] = [];
-    const metricPattern = /(?:\$[\d,.]+[MBKmk]?|\d+(?:\.\d+)?[%xX]|\d+\+)/g;
+    /* Patterns that match meaningful achievement metrics */
+    const patterns: { re: RegExp; extractLabel: (m: RegExpMatchArray, bullet: string) => string | null; extractValue: (m: RegExpMatchArray) => { value: string; num: number } | null }[] = [
+      /* "$X revenue/savings/etc" */
+      { re: /\$(\d[\d,.]*)[MBKmk]?/g, extractLabel: (_m, b) => { const after = b.slice((_m.index || 0) + _m[0].length).trim(); const w = after.split(/[\s,]+/).filter(x => x.length > 1).slice(0, 2).join(' '); return w || 'Revenue'; }, extractValue: (m) => { let n = parseFloat(m[1].replace(/,/g,'')); if (/[mM]/.test(m[0])) n*=1e6; if (/[bB]/.test(m[0])) n*=1e9; if (/[kK]/.test(m[0])) n*=1e3; return { value: m[0], num: n }; } },
+      /* "reduced/improved/increased ... by X%" */
+      { re: /\b(reduc|improv|increas|boost|grew|accelerat|cut|sav|enhanc|optimiz|automat|streamlin)\w*\b.{1,60}?(\d+(?:\.\d+)?)[%]/gi, extractLabel: (m) => { const verb = m[1].toLowerCase(); if (/reduc|cut|sav/.test(verb)) return 'Reduction'; if (/improv|enhanc|optimiz/.test(verb)) return 'Improvement'; if (/increas|boost|grew|accelerat/.test(verb)) return 'Growth'; return 'Impact'; }, extractValue: (m) => ({ value: m[2] + '%', num: parseFloat(m[2]) }) },
+      /* "X% improvement/reduction/increase" */
+      { re: /(\d+(?:\.\d+)?)[%]\s+(\w+)/g, extractLabel: (m) => { const w = m[2].toLowerCase(); if (/improv|faster|increase|growth|accuracy|uptime|efficiency/.test(w)) return m[2].charAt(0).toUpperCase() + m[2].slice(1); return null; }, extractValue: (m) => ({ value: m[1] + '%', num: parseFloat(m[1]) }) },
+      /* "X+ users/projects/teams" */
+      { re: /(\d{2,})[+]\s+(\w+)/g, extractLabel: (m) => { const w = m[2].toLowerCase(); if (/user|customer|client|student|team|project|app|system|tool|article|question|problem|member|employee|partner/.test(w)) return m[2].charAt(0).toUpperCase() + m[2].slice(1); return null; }, extractValue: (m) => ({ value: m[1] + '+', num: parseFloat(m[1]) }) },
+      /* "Nx faster/improvement" */
+      { re: /(\d+(?:\.\d+)?)[xX]\s+(\w+)/g, extractLabel: (m) => m[2].charAt(0).toUpperCase() + m[2].slice(1), extractValue: (m) => ({ value: m[1] + 'x', num: parseFloat(m[1]) * 100 }) },
+    ];
+    const seen = new Set<string>();
     for (const exp of data.experience) {
       for (const rawBullet of exp.bullets) {
         const bullet = rawBullet.replace(/\*\*/g, '');
-        let match;
-        while ((match = metricPattern.exec(bullet)) !== null) {
-          const raw = match[0];
-          // Parse numeric value for ranking
-          let num = parseFloat(raw.replace(/[$,+xX]/g, ''));
-          if (raw.includes('%')) num *= 1; // percentages as-is
-          else if (/[mM]$/.test(raw)) num *= 1000000;
-          else if (/[bB]$/.test(raw)) num *= 1000000000;
-          else if (/[kK]$/.test(raw)) num *= 1000;
-          // Extract label from words before the metric
-          const beforeMetric = bullet.slice(0, match.index).replace(/^[\s\u2022\-\u2013]+/, '').trim();
-          const words = beforeMetric.split(/\s+/).filter(w => w.length > 1);
-          const labelRaw = words.slice(-3).join(' ').replace(/\b(by|to|of|in|a|an|the|with|and|for)\s*$/i, '').trim();
-          const label = labelRaw.split(/\s+/).slice(-2).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
-          metrics.push({ value: raw, label: label || 'Impact', numericValue: num });
+        for (const p of patterns) {
+          let match;
+          const re = new RegExp(p.re.source, p.re.flags);
+          while ((match = re.exec(bullet)) !== null) {
+            const label = p.extractLabel(match, bullet);
+            const val = p.extractValue(match);
+            if (!label || !val || seen.has(val.value)) continue;
+            seen.add(val.value);
+            metrics.push({ value: val.value, label, numericValue: val.num });
+          }
         }
       }
     }
-    // Sort by impact (largest numbers first) and deduplicate
     return metrics
       .sort((a, b) => b.numericValue - a.numericValue)
       .filter((m, i, arr) => arr.findIndex(x => x.value === m.value) === i)
@@ -1983,22 +2025,24 @@ export default function InlineResumeEditor({
             className="relative w-[612px]"
             style={{
               minHeight: A4_PAGE_HEIGHT,
-              marginLeft: totalPages > 1 ? 0 : 0,
+              paddingBottom: pageBreakPositions.length * PAGE_GAP,
             }}
           >
             {activeDynamicConfig ? renderDynamicTemplate(activeDynamicConfig) : renderTemplate()}
 
 
 
-            {/* Page-break overlays: clean gap between stacked pages (PDF viewer style) */}
-            {pageBreakPositions.map((y, idx) => (
+            {/* Page-break indicators: thin line markers (content is NOT hidden) */}
+            {pageBreakPositions.map((y, idx) => {
+              const offset = idx * PAGE_GAP; // cumulative shift from prior gaps
+              return (
               <div
                 key={`gap-${idx}`}
                 className="absolute z-20 pointer-events-none"
                 style={{
                   left: -4,
                   right: -4,
-                  top: y - PAGE_GAP / 2,
+                  top: y + offset,
                   height: PAGE_GAP,
                 }}
               >
@@ -2023,7 +2067,8 @@ export default function InlineResumeEditor({
                   }}
                 />
               </div>
-            ))}
+              );
+            })}
           </div>
 
 
