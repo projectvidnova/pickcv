@@ -47,12 +47,12 @@ function EditableText({
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;');
       let html = escaped.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-      // Highlight added keywords with subtle mark
+      // Highlight added keywords with subtle bold-italic style
       if (effectiveHighlights?.length) {
         const sorted = [...effectiveHighlights].sort((a, b) => b.length - a.length);
         for (const kw of sorted) {
           const safeKw = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          html = html.replace(new RegExp(`(\\b)(${safeKw})(\\b)`, 'gi'), '$1<mark class="bg-amber-100/70 text-inherit rounded-sm px-[1px]" style="text-decoration:none">$2</mark>$3');
+          html = html.replace(new RegExp(`(\\b)(${safeKw})(\\b)`, 'gi'), '$1<strong style="font-style:italic;font-weight:600">$2</strong>$3');
         }
       }
       ref.current.innerHTML = html;
@@ -174,6 +174,8 @@ const SECTION_META: Record<SectionId, { label: string; icon: string }> = {
   experience: { label: 'Work Experience', icon: 'ri-briefcase-line' },
   skills: { label: 'Skills', icon: 'ri-tools-line' },
   education: { label: 'Education', icon: 'ri-graduation-cap-line' },
+  certifications: { label: 'Certifications', icon: 'ri-award-line' },
+  achievements: { label: 'Achievements', icon: 'ri-trophy-line' },
 };
 
 // Section order per variant — matching Resume OS agent prompt priorities
@@ -200,7 +202,7 @@ const VARIANT_SECTION_ORDERS: Record<string, SectionId[]> = {
   v10: ['summary', 'skills', 'experience', 'education'],
 };
 
-const DEFAULT_SECTION_ORDER: SectionId[] = ['summary', 'experience', 'skills', 'education'];
+const DEFAULT_SECTION_ORDER: SectionId[] = ['summary', 'experience', 'skills', 'education', 'certifications', 'achievements'];
 
 function getSectionOrder(templateId: string): SectionId[] {
   const prefix = templateId.split('-')[0];
@@ -930,24 +932,25 @@ export default function InlineResumeEditor({
   /* KPI Ribbon removed — metrics now inline in summary */
   const KpiRibbon = () => null;
 
-  /* Achievement highlight strip — adapts style based on variant */
-  /* Achievement highlight — rendered as subtle inline text, not a banner */
-  const AchievementHighlight = () => {
+  /* Standalone achievement highlight — now rendered inside summary, so standalone returns null */
+  const AchievementHighlight = () => null;
+
+  /* Inline achievement highlight — appended to professional summary text */
+  const InlineAchievementHighlight = () => {
     if (topMetrics.length === 0) return null;
     const metrics = topMetrics.slice(0, 3);
     return (
-      <div className="px-6 pb-1" style={{ marginTop: -2 }}>
-        <p className="text-[9.5px] italic text-gray-500 leading-relaxed">
-          <span className="font-semibold not-italic" style={{ color: theme.primary }}>Key Impact:</span>
-          {metrics.map((m, i) => (
-            <span key={i}>
-              {i > 0 && <span className="mx-1 text-gray-300">|</span>}
-              <span className="font-bold not-italic" style={{ color: theme.primary }}>{m.value}</span>
-              {" "}{m.label}
-            </span>
-          ))}
-        </p>
-      </div>
+      <span className="text-[9.5px] italic text-gray-500">
+        {" — "}
+        <span className="font-semibold not-italic" style={{ color: theme.primary }}>Key Impact:</span>
+        {metrics.map((m, i) => (
+          <span key={i}>
+            {i > 0 && <span className="mx-1 text-gray-300">|</span>}
+            <span className="font-bold not-italic" style={{ color: theme.primary }}>{m.value}</span>
+            {" "}{m.label}
+          </span>
+        ))}
+      </span>
     );
   };
 
@@ -1047,7 +1050,10 @@ export default function InlineResumeEditor({
   const SummaryBlock = ({ headingStyle }: { headingStyle?: 'underline' | 'pill' | 'side' | 'caps' }) => (
     <div style={{ marginBottom: rhythm.sectionGap }} data-resume-section="summary">
       <SectionHeading label="Professional Summary" icon="ri-file-text-line" color={theme.sectionLine} borderColor={theme.sectionLine} style={headingStyle} />
-      <EditableText value={data.summary} onChange={(v) => update('summary', v)} tag="p" className="text-[11px] leading-[1.65] text-gray-600" placeholder="Write a compelling summary..." multiline />
+      <p className="text-[11px] leading-[1.65] text-gray-600">
+        <EditableText value={data.summary} onChange={(v) => update('summary', v)} tag="span" className="text-[11px] leading-[1.65] text-gray-600" placeholder="Write a compelling summary..." multiline />
+        <InlineAchievementHighlight />
+      </p>
     </div>
   );
 
@@ -1159,15 +1165,58 @@ export default function InlineResumeEditor({
       case 'experience': return wrap(<ExperienceBlock headingStyle={headingStyle} />);
       case 'skills': return wrap(<SkillsBlock headingStyle={headingStyle} layout={skillLayout} />);
       case 'education': return wrap(<EducationBlock headingStyle={headingStyle} />);
+      case 'certifications': return wrap(<CertificationsBlock headingStyle={headingStyle} />);
+      case 'achievements': return wrap(<AchievementsBlock headingStyle={headingStyle} />);
       default: return null;
     }
+  };
+
+  /* ─── Certifications Block ─── */
+  const CertificationsBlock = ({ headingStyle }: { headingStyle?: 'underline' | 'pill' | 'side' | 'caps' }) => {
+    if (!data.certifications?.length) return null;
+    return (
+      <div style={{ marginBottom: rhythm.sectionGap }} data-resume-section="certifications">
+        <SectionHeading label="Certifications" icon="ri-award-line" color={theme.sectionLine} borderColor={theme.sectionLine} style={headingStyle} />
+        <ul className="mt-1 space-y-1">
+          {data.certifications.map((cert, i) => (
+            <li key={i} data-resume-entry className="flex items-start gap-1.5 group/cert text-[11px] text-gray-700">
+              <span className="mt-[5px] flex-shrink-0 w-1 h-1 rounded-full" style={{ backgroundColor: theme.bulletColor }} />
+              <EditableText value={cert} onChange={(v) => { const certs = [...(data.certifications || [])]; certs[i] = v; update('certifications' as any, certs); }} className="flex-1" placeholder="Certification..." />
+              <button onClick={() => { const certs = [...(data.certifications || [])]; certs.splice(i, 1); update('certifications' as any, certs); }} className="opacity-0 group-hover/cert:opacity-100 flex-shrink-0 text-red-400 hover:text-red-600 text-[10px] mt-0.5"><i className="ri-close-line" /></button>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  };
+
+  /* ─── Achievements Block ─── */
+  const AchievementsBlock = ({ headingStyle }: { headingStyle?: 'underline' | 'pill' | 'side' | 'caps' }) => {
+    if (!data.achievements?.length) return null;
+    return (
+      <div style={{ marginBottom: rhythm.sectionGap }} data-resume-section="achievements">
+        <SectionHeading label="Achievements" icon="ri-trophy-line" color={theme.sectionLine} borderColor={theme.sectionLine} style={headingStyle} />
+        <ul className="mt-1 space-y-1">
+          {data.achievements.map((ach, i) => (
+            <li key={i} data-resume-entry className="flex items-start gap-1.5 group/ach text-[11px] text-gray-700">
+              <span className="mt-[5px] flex-shrink-0 w-1 h-1 rounded-full" style={{ backgroundColor: theme.bulletColor }} />
+              <EditableText value={ach} onChange={(v) => { const achs = [...(data.achievements || [])]; achs[i] = v; update('achievements' as any, achs); }} className="flex-1" placeholder="Achievement..." />
+              <button onClick={() => { const achs = [...(data.achievements || [])]; achs.splice(i, 1); update('achievements' as any, achs); }} className="opacity-0 group-hover/ach:opacity-100 flex-shrink-0 text-red-400 hover:text-red-600 text-[10px] mt-0.5"><i className="ri-close-line" /></button>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
   };
 
 
   /* No-heading variants for bold-bars layout */
   const SummaryBlockNoHeading = () => (
     <div style={{ marginBottom: rhythm.sectionGap }} data-resume-section="summary">
-      <EditableText value={data.summary} onChange={(v) => update('summary', v)} tag="p" className="text-[11px] leading-[1.65] text-gray-600" placeholder="Write a compelling summary..." multiline />
+      <p className="text-[11px] leading-[1.65] text-gray-600">
+        <EditableText value={data.summary} onChange={(v) => update('summary', v)} tag="span" className="text-[11px] leading-[1.65] text-gray-600" placeholder="Write a compelling summary..." multiline />
+        <InlineAchievementHighlight />
+      </p>
     </div>
   );
   const ExperienceBlockNoHeading = () => (

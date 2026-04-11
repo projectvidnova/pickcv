@@ -561,6 +561,8 @@ Return VALID JSON:
             "period": "<from original resume>"
         }}
     ],
+    "certifications": ["<certification from original resume>"],
+    "achievements": ["<achievement from original resume>"],
     "signal_classification": {{
         "hard_signals": ["<metric-containing elements>"],
         "cognitive_signals": ["<problem-diagnosis-action-outcome elements>"],
@@ -615,6 +617,7 @@ Requirements:
 - Max 3 most relevant roles (4 only if necessary). 2-3 bullets per role, each <= 25 words.
 - SKILLS RULE: Max 10 skills. Each must be a REAL skill, tool, framework, language, methodology, or certification (e.g., "Python", "AWS", "Kubernetes", "Agile", "SQL"). Do NOT include generic phrases like "Team Leadership", "Problem Solving", "Cross-functional Collaboration", "Strategic Planning" — weave those into experience bullets instead.
 - Max 2 education entries.
+- PRESERVE certifications and achievements from the original resume. Extract them into the "certifications" and "achievements" arrays. If the original has a combined "Certificates and Achievements" section, split items into the appropriate array.
 - NEVER fabricate personal details.
 - For comparison.detailed_changes, include at most 5-7 key changes.
 """

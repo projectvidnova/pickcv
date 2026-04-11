@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 
 export interface ChangeAnnotation {
   section: string;
-  what_changed: string;
+  what_changed?: string;
   why: string;
 }
 
@@ -24,7 +24,9 @@ const SECTION_MAP: Record<string, string> = {
   'technical skills': 'skills',
   'core skills': 'skills',
   'education': 'education',
-  'certifications': 'education',
+  'certifications': 'certifications',
+  'achievements': 'achievements',
+  'awards': 'achievements',
   'projects': 'experience',
 };
 

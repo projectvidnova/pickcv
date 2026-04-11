@@ -319,7 +319,41 @@ export default function ResumeComparisonPage() {
             period: edu.period || edu.year || '',
           }))
         : [],
+      certifications: Array.isArray(apiData.certifications) && apiData.certifications.length > 0
+        ? apiData.certifications.map((c: any) => typeof c === 'string' ? c : c.name || c.title || '')
+        : Array.isArray(apiData.certificates) && apiData.certificates.length > 0
+        ? apiData.certificates.map((c: any) => typeof c === 'string' ? c : c.name || c.title || '')
+        : [],
+      achievements: Array.isArray(apiData.achievements) && apiData.achievements.length > 0
+        ? apiData.achievements.map((a: any) => typeof a === 'string' ? a : a.description || a.title || '')
+        : Array.isArray(apiData.awards) && apiData.awards.length > 0
+        ? apiData.awards.map((a: any) => typeof a === 'string' ? a : a.description || a.title || '')
+        : Array.isArray(apiData.certificates_and_achievements) && apiData.certificates_and_achievements.length > 0
+        ? apiData.certificates_and_achievements.map((a: any) => typeof a === 'string' ? a : a.description || a.title || '')
+        : [],
     };
+
+    // Fallback: Parse certifications/achievements from original resume text if structured data is empty
+    if ((!transformed.certifications || transformed.certifications.length === 0) ||
+        (!transformed.achievements || transformed.achievements.length === 0)) {
+      const rawText = optimizationData?.original_resume_text || apiData.optimized_resume || '';
+      if (rawText) {
+        const certAchMatch = rawText.match(/(?:certificates?\s+and\s+achievements?|certifications?|achievements?|awards?)\s*\n([\s\S]*?)(?=\n\s*(?:PROFESSIONAL SUMMARY|SUMMARY|EXPERIENCE|WORK EXPERIENCE|EDUCATION|SKILLS|TECHNICAL SKILLS|PROJECTS|PUBLICATIONS|LANGUAGES|INTERESTS|OBJECTIVE|PROFILE)\s*$|\n{3,}|$)/im);
+        if (certAchMatch) {
+          const lines = certAchMatch[1].split('\n')
+            .map(l => l.replace(/^[-•·▪*+]\s*/, '').trim())
+            .filter(l => l.length > 3);
+          if (lines.length > 0) {
+            if (!transformed.certifications?.length && !transformed.achievements?.length) {
+              transformed.achievements = lines;
+            } else if (!transformed.achievements?.length) {
+              transformed.achievements = lines;
+            }
+          }
+        }
+      }
+    }
+
     setResumeData(transformed);
     return transformed;
   };
@@ -420,6 +454,20 @@ export default function ResumeComparisonPage() {
               any text to edit directly
             </p>
 
+            {/* Preview & Edit — positioned prominently */}
+            {showComparison && (
+              <div className="mt-4">
+                <button
+                  onClick={() => setShowComparison(false)}
+                  className="inline-flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold transition-all bg-gradient-to-r from-teal-600 to-emerald-500 text-white shadow-md hover:shadow-lg hover:scale-[1.01]"
+                >
+                  <i className="ri-eye-line text-sm"></i>
+                  Preview & Edit Resume
+                  <i className="ri-arrow-right-s-line text-sm opacity-70"></i>
+                </button>
+              </div>
+            )}
+
             {/* Stats */}
             <div className="flex items-center justify-center gap-6 mt-6 flex-wrap">
               <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/80 shadow-sm border border-gray-100">
@@ -456,24 +504,21 @@ export default function ResumeComparisonPage() {
               <div className="mt-5 max-w-3xl mx-auto bg-white/90 border border-teal-100 rounded-2xl p-4 text-left shadow-sm">
                 <div className="flex flex-wrap items-center gap-2 mb-2">
                   <span className="text-[11px] font-bold uppercase tracking-wide text-teal-700 bg-teal-50 px-2 py-1 rounded-md">
-                    Agentic Resume OS
-                  </span>
-                  <span className="text-xs text-gray-500">Recommended Variant</span>
-                  <span className="text-xs font-semibold text-gray-800">
-                    {optimizationData.resume_os.recommended_variant.id} · {optimizationData.resume_os.recommended_variant.name}
+                    <i className="ri-sparkling-2-fill mr-1"></i>AI Recommendation
                   </span>
                   <span className="text-xs text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
-                    Score {optimizationData.resume_os.recommended_variant.score}%
+                    {optimizationData.resume_os.recommended_variant.score}% Match
                   </span>
                 </div>
 
                 {optimizationData.resume_os?.role_dna && (
-                  <p className="text-xs text-gray-600 mb-1.5">
-                    Role DNA: {optimizationData.resume_os.role_dna.function || 'Unknown'} · {optimizationData.resume_os.role_dna.level || 'L3'} · {optimizationData.resume_os.role_dna.environment || 'Unknown'} · {optimizationData.resume_os.role_dna.cluster_name || 'General'}
+                  <p className="text-sm text-gray-700 mb-1.5">
+                    We've optimized your resume for a <span className="font-semibold">{optimizationData.resume_os.role_dna.level || ''} {optimizationData.resume_os.role_dna.function || ''}</span> role
+                    {optimizationData.resume_os.role_dna.environment ? ` in ${optimizationData.resume_os.role_dna.environment} environments` : ''}.
                   </p>
                 )}
 
-                <p className="text-xs text-gray-600 leading-relaxed">
+                <p className="text-xs text-gray-500 leading-relaxed">
                   {optimizationData.resume_os.recommended_variant.rationale}
                 </p>
               </div>
@@ -741,7 +786,7 @@ export default function ResumeComparisonPage() {
                   return <>{words.map((word, i) => {
                     if (!word.trim()) return word;
                     if (keywordSet.has(word.toLowerCase().replace(/[.,;:!?]/g, ''))) {
-                      return <span key={i} className="bg-amber-100 text-amber-800 px-0.5 rounded font-medium">{word}</span>;
+                      return <strong key={i} className="font-semibold italic">{word}</strong>;
                     }
                     return word;
                   })}</>;
@@ -835,6 +880,19 @@ export default function ResumeComparisonPage() {
                         )}
                       </div>
                       <div className="bg-white rounded-2xl shadow-lg border border-emerald-200 p-6 sm:p-8 text-sm leading-relaxed max-h-[800px] overflow-y-auto">
+                        {/* Contact Info — match the left side */}
+                        {(resumeData.name || resumeData.email || resumeData.phone) && (
+                          <div className="mb-4 pb-3 border-b border-gray-100">
+                            {resumeData.name && <h3 className="text-base font-bold text-gray-900">{resumeData.name}</h3>}
+                            {resumeData.title && <p className="text-xs text-gray-500 mt-0.5">{resumeData.title}</p>}
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-xs text-gray-500">
+                              {resumeData.email && <span><i className="ri-mail-line mr-1 text-gray-400"></i>{resumeData.email}</span>}
+                              {resumeData.phone && <span><i className="ri-phone-line mr-1 text-gray-400"></i>{resumeData.phone}</span>}
+                              {resumeData.linkedin && <span><i className="ri-linkedin-box-line mr-1 text-gray-400"></i>{resumeData.linkedin}</span>}
+                              {resumeData.location && <span><i className="ri-map-pin-line mr-1 text-gray-400"></i>{resumeData.location}</span>}
+                            </div>
+                          </div>
+                        )}
                         {/* Summary */}
                         {resumeData.summary && (
                           <div className="mb-4">
@@ -897,27 +955,51 @@ export default function ResumeComparisonPage() {
                             </ul>
                           </div>
                         ))}
-                        {/* Skills — highlight added keywords */}
+                        {/* Capabilities — inline text per category */}
                         {resumeData.skills?.length > 0 && (
                           <div className="mb-4">
                             <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Skills</h4>
-                            <div className="flex flex-wrap gap-1.5">
-                              {resumeData.skills.map((skill: string, idx: number) => {
-                                const isNewKeyword = keywordSet.has(skill.toLowerCase());
-                                return (
-                                  <span
-                                    key={idx}
-                                    className={`text-xs px-2.5 py-1 rounded-full border ${
-                                      isNewKeyword
-                                        ? 'bg-amber-50 text-amber-700 border-amber-200 font-semibold ring-1 ring-amber-200'
-                                        : 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                                    }`}
-                                  >
-                                    {skill}
-                                    {isNewKeyword && <i className="ri-add-line ml-0.5 text-amber-500 text-[10px]"></i>}
-                                  </span>
-                                );
-                              })}
+                            <div className="space-y-1.5">
+                              {(() => {
+                                const categories: Record<string, string[]> = {};
+                                const langKw = ['python', 'java', 'javascript', 'typescript', 'go', 'rust', 'c++', 'c#', 'ruby', 'php', 'swift', 'kotlin', 'sql', 'html', 'css', 'r', 'scala', 'perl', 'bash'];
+                                const fwKw = ['react', 'angular', 'vue', 'next', 'django', 'flask', 'spring', 'express', 'fastapi', 'node', '.net', 'tensorflow', 'pytorch', 'rails', 'laravel'];
+                                const infraKw = ['aws', 'gcp', 'azure', 'docker', 'kubernetes', 'terraform', 'jenkins', 'ci/cd', 'linux', 'nginx', 'redis', 'kafka', 'postgresql', 'mongodb', 'mysql', 'git'];
+                                const softKw = ['leadership', 'communication', 'agile', 'scrum', 'management', 'collaboration', 'problem-solving', 'analytical', 'strategic', 'mentoring'];
+
+                                for (const skill of resumeData.skills) {
+                                  const lower = skill.toLowerCase();
+                                  if (langKw.some(k => lower.includes(k))) {
+                                    (categories['Languages'] ??= []).push(skill);
+                                  } else if (fwKw.some(k => lower.includes(k))) {
+                                    (categories['Frameworks'] ??= []).push(skill);
+                                  } else if (infraKw.some(k => lower.includes(k))) {
+                                    (categories['Tools & Infrastructure'] ??= []).push(skill);
+                                  } else if (softKw.some(k => lower.includes(k))) {
+                                    (categories['Professional Skills'] ??= []).push(skill);
+                                  } else {
+                                    (categories['Domain Expertise'] ??= []).push(skill);
+                                  }
+                                }
+
+                                return Object.entries(categories).map(([cat, skills]) => (
+                                  <p key={cat} className="text-sm text-gray-700 leading-relaxed">
+                                    <span className="font-semibold text-gray-600">{cat}:</span>{' '}
+                                    {skills.map((skill, idx) => {
+                                      const isNew = keywordSet.has(skill.toLowerCase());
+                                      return (
+                                        <span key={idx}>
+                                          {idx > 0 && ', '}
+                                          {isNew
+                                            ? <span className="font-semibold text-emerald-700">{skill}</span>
+                                            : skill
+                                          }
+                                        </span>
+                                      );
+                                    })}
+                                  </p>
+                                ));
+                              })()}
                             </div>
                           </div>
                         )}
@@ -929,20 +1011,48 @@ export default function ResumeComparisonPage() {
                           </div>
                         ))}
 
-                        {/* Inline Keywords Summary */}
+                        {/* Certifications */}
+                        {resumeData.certifications && resumeData.certifications.length > 0 && (
+                          <div className="mb-4">
+                            <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Certifications</h4>
+                            <ul className="space-y-1">
+                              {resumeData.certifications.map((cert, idx) => (
+                                <li key={idx} className="text-gray-700 pl-4 relative before:content-['•'] before:absolute before:left-0 before:text-emerald-500 text-sm">
+                                  {cert}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Achievements */}
+                        {resumeData.achievements && resumeData.achievements.length > 0 && (
+                          <div className="mb-4">
+                            <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Achievements</h4>
+                            <ul className="space-y-1">
+                              {resumeData.achievements.map((ach, idx) => (
+                                <li key={idx} className="text-gray-700 pl-4 relative before:content-['•'] before:absolute before:left-0 before:text-emerald-500 text-sm">
+                                  {ach}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Keywords woven into content — subtle inline note */}
                         {optimizationData.keywords_added?.length > 0 && (
-                          <div className="mt-4 pt-3 border-t border-gray-100">
-                            <div className="flex items-center gap-2 mb-2">
-                              <i className="ri-key-2-line text-amber-500 text-xs"></i>
-                              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Keywords Added</span>
-                            </div>
-                            <div className="flex flex-wrap gap-1.5">
+                          <div className="mt-3 pt-2 border-t border-gray-100">
+                            <p className="text-xs text-gray-400 leading-relaxed">
+                              <i className="ri-sparkling-line text-emerald-400 mr-1"></i>
+                              <span className="font-medium text-gray-500">{optimizationData.keywords_added.length} keywords integrated</span>
+                              {' — '}
                               {optimizationData.keywords_added.map((kw, idx) => (
-                                <span key={idx} className="text-[11px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-medium">
-                                  {kw}
+                                <span key={idx}>
+                                  {idx > 0 && ', '}
+                                  <span className="text-emerald-600 font-medium">{kw}</span>
                                 </span>
                               ))}
-                            </div>
+                            </p>
                           </div>
                         )}
                       </div>
@@ -951,23 +1061,15 @@ export default function ResumeComparisonPage() {
                 );
               })()}
 
-              {/* CTA: Preview & Edit Button */}
-              <div className="max-w-6xl mx-auto mt-8 flex justify-center">
-                <button
-                  onClick={() => setShowComparison(false)}
-                  className="group px-8 py-4 rounded-2xl text-base font-bold transition-all bg-gradient-to-r from-teal-600 to-emerald-500 text-white shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] flex items-center gap-3"
-                >
-                  <i className="ri-eye-line text-lg"></i>
-                  Preview & Edit Your Resume
-                  <i className="ri-arrow-right-line text-lg opacity-60 group-hover:opacity-100 transition-opacity"></i>
-                </button>
-              </div>
+              {/* CTA moved to header */}
             </div>
           )}
 
           {/* ═══ Editor View (existing) ═══ */}
           {!showComparison && resumeData && (
-            <InlineResumeEditor data={resumeData} onDataChange={setResumeData} initialTemplateId={recommendedTemplate} variantId={variantId} variantRationale={variantRationale} onPageCountChange={handlePageCountChange} activeDynamicConfig={activeDynamicConfig} dynamicConfigs={dynamicConfigs} dynamicLoading={dynamicLoading} onDynamicTemplateSelect={handleDynamicTemplateSelect} changesMade={optimizationData?.changes_made} keywordsAdded={optimizationData?.keywords_added} />
+            <div className="animate-in fade-in duration-300">
+              <InlineResumeEditor data={resumeData} onDataChange={setResumeData} initialTemplateId={recommendedTemplate} variantId={variantId} variantRationale={variantRationale} onPageCountChange={handlePageCountChange} activeDynamicConfig={activeDynamicConfig} dynamicConfigs={dynamicConfigs} dynamicLoading={dynamicLoading} onDynamicTemplateSelect={handleDynamicTemplateSelect} changesMade={optimizationData?.changes_made} keywordsAdded={optimizationData?.keywords_added} />
+            </div>
           )}
 
           {!showComparison && !resumeData && (

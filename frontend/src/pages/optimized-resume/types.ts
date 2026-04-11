@@ -24,9 +24,11 @@ export interface ResumeData {
   experience: ExperienceItem[];
   skills: string[];
   education: EducationItem[];
+  certifications?: string[];
+  achievements?: string[];
 }
 
-export type SectionId = 'summary' | 'experience' | 'skills' | 'education';
+export type SectionId = 'summary' | 'experience' | 'skills' | 'education' | 'certifications' | 'achievements';
 
 export interface ResumeSection {
   id: SectionId;

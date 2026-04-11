@@ -77,16 +77,10 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   const processingSteps = [
-    { icon: 'ri-upload-cloud-2-line', label: 'Uploading resume', detail: 'Securely processing your document' },
-    { icon: 'ri-file-search-line', label: 'Resolving job description', detail: 'Scraping & preparing job context' },
-    { icon: 'ri-github-fill', label: 'Enriching profile', detail: 'Checking GitHub and portfolio links' },
-    { icon: 'ri-settings-4-line', label: 'Preparing context', detail: 'Classifying role, ATS platform & gap analysis' },
-    { icon: 'ri-file-search-line', label: 'Analyzing job description', detail: 'Extracting requirements, skills & qualifiers' },
-    { icon: 'ri-links-line', label: 'Mapping evidence', detail: 'Matching your experience to each JD requirement' },
-    { icon: 'ri-sparkling-2-fill', label: 'Rewriting content', detail: 'Aligning every bullet point to the target job' },
-    { icon: 'ri-bar-chart-box-line', label: 'Scoring & comparison', detail: 'Generating ATS scores and change analysis' },
-    { icon: 'ri-stack-line', label: 'Building variants', detail: 'Creating specialized resume versions' },
-    { icon: 'ri-shield-check-line', label: 'Final validation', detail: 'Authenticity checks and quality assurance' },
+    { icon: 'ri-file-search-line', label: 'Analyzing your resume', detail: 'Extracting skills, experience & achievements' },
+    { icon: 'ri-search-eye-line', label: 'Understanding the job', detail: 'Mapping requirements & key qualifications' },
+    { icon: 'ri-sparkling-2-fill', label: 'Optimizing content', detail: 'Rewriting bullets & aligning to target role' },
+    { icon: 'ri-shield-check-line', label: 'Final review', detail: 'Scoring, ATS checks & quality assurance' },
   ];
 
   const aiInsightMessages = [
@@ -251,9 +245,10 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
             if (event.type === 'progress') {
               // Kill any crawl animation and snap to real server progress
               if (progressTimerRef.current) clearInterval(progressTimerRef.current);
-              // Server sends step/total (1-10 of 10). Step 1 = upload (already done client-side),
-              // so offset by 1 for the frontend display steps (upload = step 1 stays)
-              setProcessingStep(event.step);
+              // Server sends steps 1-10; map to our 4 UI steps
+              const serverStep = event.step || 1;
+              const uiStep = serverStep <= 2 ? 1 : serverStep <= 5 ? 2 : serverStep <= 8 ? 3 : 4;
+              setProcessingStep(uiStep);
               setSmoothProgress(Math.max(event.percent, 10)); // never go below 10% once streaming
               setServerMessage(event.message);
               setServerDetail(event.detail || '');
@@ -290,10 +285,14 @@ export default function OptimizeModal({ isOpen, onClose }: OptimizeModalProps) {
       // Brief completion moment
       await new Promise(resolve => setTimeout(resolve, 600));
 
+      // Navigate BEFORE closing modal so user never sees the underlying page flash
       navigate('/resume-comparison', {
-        state: { optimizedResume: { ...finalData, resumeId } }
+        state: { optimizedResume: { ...finalData, resumeId } },
+        replace: true,
       });
-      handleClose();
+
+      // Delay modal cleanup so it stays visible during navigation
+      setTimeout(() => handleClose(), 100);
     } catch (error) {
       console.error('Optimization error:', error);
       if (progressTimerRef.current) clearInterval(progressTimerRef.current);

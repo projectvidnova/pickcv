@@ -962,6 +962,8 @@ class ResumeOSOrchestrator:
             "experience": optimization_result.get("experience", []) if isinstance(optimization_result.get("experience", []), list) else [],
             "skills": optimization_result.get("skills", []) if isinstance(optimization_result.get("skills", []), list) else [],
             "education": optimization_result.get("education", []) if isinstance(optimization_result.get("education", []), list) else [],
+            "certifications": optimization_result.get("certifications", []) if isinstance(optimization_result.get("certifications", []), list) else [],
+            "achievements": optimization_result.get("achievements", []) if isinstance(optimization_result.get("achievements", []), list) else [],
         }
 
         top = variant_scores[:7]
@@ -1839,27 +1841,27 @@ Return a JSON object with this exact schema:
 
         mapping = {
             # V1 Signal Stack: Skills → Projects → Experience → Education
-            "V1": ["skills", "experience", "education", "summary"],
+            "V1": ["skills", "experience", "education", "certifications", "achievements", "summary"],
             # V2 Outcome Ledger: Summary → Metrics → Experience → Skills → Education
-            "V2": ["summary", "experience", "skills", "education"],
+            "V2": ["summary", "experience", "skills", "education", "certifications", "achievements"],
             # V3 Authority Frame: Summary → Tools/Certs → Experience → Education
-            "V3": ["summary", "skills", "experience", "education"],
+            "V3": ["summary", "skills", "experience", "education", "certifications", "achievements"],
             # V4 Leadership Thesis: Exec Summary → Team/Scale → Experience → Competencies → Education
-            "V4": ["summary", "experience", "skills", "education"],
+            "V4": ["summary", "experience", "skills", "education", "certifications", "achievements"],
             # V5 Proof Sheet: Education (top) → Experience → Skills → Summary
-            "V5": ["education", "experience", "skills", "summary"],
+            "V5": ["education", "experience", "skills", "certifications", "achievements", "summary"],
             # V6 Problem-Solver: Summary → Competency Matrix → Experience (SAR) → Certs → Education
-            "V6": ["summary", "skills", "experience", "education"],
+            "V6": ["summary", "skills", "experience", "certifications", "achievements", "education"],
             # V7 Portfolio Lead: Summary → Case Studies → Tools → Education
-            "V7": ["summary", "experience", "skills", "education"],
+            "V7": ["summary", "experience", "skills", "education", "certifications", "achievements"],
             # V8 Versatility Map: Summary → Cross-functional Skills → Experience → Education
-            "V8": ["summary", "skills", "experience", "education"],
+            "V8": ["summary", "skills", "experience", "education", "certifications", "achievements"],
             # V9 Domain Expert: Domain Summary → Credentials → Experience → Certs → Education
-            "V9": ["summary", "skills", "experience", "education"],
+            "V9": ["summary", "skills", "experience", "certifications", "achievements", "education"],
             # V10 Transition Narrative: Summary → Transferable Skills → Relevant Experience → Education
-            "V10": ["summary", "skills", "experience", "education"],
+            "V10": ["summary", "skills", "experience", "education", "certifications", "achievements"],
         }
-        order = mapping.get(variant_id, ["summary", "experience", "skills", "education"])
+        order = mapping.get(variant_id, ["summary", "experience", "skills", "education", "certifications", "achievements"])
 
         # Fresher override: education before experience (unless V5 already does this)
         if is_fresher and variant_id != "V5":
@@ -1918,11 +1920,29 @@ Return a JSON object with this exact schema:
             for edu in edu_list:
                 lines.append(f"{edu.get('degree', '')} | {edu.get('school', '')} | {edu.get('period', '')}")
 
+        def add_certifications():
+            certs = data.get("certifications", []) if isinstance(data.get("certifications", []), list) else []
+            if not certs:
+                return
+            lines.extend(["", "CERTIFICATIONS"])
+            for cert in certs:
+                lines.append(f"• {cert}")
+
+        def add_achievements():
+            achs = data.get("achievements", []) if isinstance(data.get("achievements", []), list) else []
+            if not achs:
+                return
+            lines.extend(["", "ACHIEVEMENTS"])
+            for ach in achs:
+                lines.append(f"• {ach}")
+
         section_handlers = {
             "summary": add_summary,
             "experience": add_experience,
             "skills": add_skills,
             "education": add_education,
+            "certifications": add_certifications,
+            "achievements": add_achievements,
         }
         for sec in section_order:
             handler = section_handlers.get(sec)
