@@ -3,7 +3,10 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 export interface ChangeAnnotation {
   section: string;
   what_changed?: string;
+  original?: string;
+  rewritten?: string;
   why: string;
+  requirement_matched?: string;
 }
 
 interface ChangeAnnotationsProps {
@@ -115,11 +118,25 @@ function GroupedAnnotationCard({
             <div className="space-y-2">
               {items.map((item, j) => (
                 <div key={j} className="pl-2 border-l-2 border-amber-200">
-                  <p className="text-[10.5px] leading-[1.4] text-gray-700">{item.what_changed}</p>
+                  {item.original && (
+                    <p className="text-[10px] leading-[1.3] text-red-400 line-through mb-0.5">{item.original}</p>
+                  )}
+                  {item.rewritten && (
+                    <p className="text-[10.5px] leading-[1.4] text-gray-800 font-medium">{item.rewritten}</p>
+                  )}
+                  {!item.original && !item.rewritten && item.what_changed && (
+                    <p className="text-[10.5px] leading-[1.4] text-gray-700">{item.what_changed}</p>
+                  )}
                   <p className="text-[9.5px] text-emerald-600 mt-0.5 flex items-start gap-1">
                     <i className="ri-lightbulb-line text-[10px] mt-0.5 flex-shrink-0" />
                     <span>{item.why}</span>
                   </p>
+                  {item.requirement_matched && (
+                    <p className="text-[9px] text-violet-500 mt-0.5">
+                      <i className="ri-check-line text-[9px] mr-0.5" />
+                      {item.requirement_matched}
+                    </p>
+                  )}
                 </div>
               ))}
             </div>

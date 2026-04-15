@@ -3,6 +3,7 @@ import google.genai as genai
 from google.genai import types
 from config import settings
 from typing import Dict, List, Optional
+import asyncio
 import json
 import re
 import logging
@@ -12,11 +13,64 @@ logger = logging.getLogger(__name__)
 # Configure Gemini with API key
 client = genai.Client(api_key=settings.gemini_api_key)
 
-# Reusable config that forces Gemini to return valid JSON
+# Reusable config that forces Gemini to return valid JSON (with thinking disabled for speed)
 JSON_CONFIG = types.GenerateContentConfig(
     response_mime_type="application/json",
     temperature=0.7,
+    thinking_config=types.ThinkingConfig(thinking_budget=0),
 )
+
+# Primary and fallback models
+PRIMARY_MODEL = 'models/gemini-2.5-flash'
+FALLBACK_MODEL = 'models/gemini-2.5-flash'
+
+
+async def _call_with_retry(
+    client_instance,
+    model: str,
+    contents,
+    config,
+    *,
+    max_retries: int = 2,
+    base_delay: float = 1.0,
+    fallback_model: str = FALLBACK_MODEL,
+) -> "genai.types.GenerateContentResponse":
+    """Call Gemini async API with retry + exponential backoff + model fallback.
+
+    On transient errors (503, 429, 500) it retries with backoff on the primary
+    model, then falls back to the fallback model for one more attempt.
+    """
+    last_exc = None
+    # attempts: primary model (max_retries+1 times), then fallback model (1 time)
+    attempts = []
+    for i in range(max_retries + 1):
+        attempts.append((model, i))
+    attempts.append((fallback_model, 0))  # one fallback attempt
+
+    for idx, (current_model, attempt_num) in enumerate(attempts):
+        try:
+            response = await client_instance.aio.models.generate_content(
+                model=current_model,
+                contents=contents,
+                config=config,
+            )
+            return response
+        except Exception as e:
+            last_exc = e
+            err_str = str(e)
+            is_transient = any(code in err_str for code in ('503', '429', '500', 'UNAVAILABLE', 'RESOURCE_EXHAUSTED', 'overloaded', 'high demand'))
+            if not is_transient:
+                raise  # non-transient errors surface immediately
+            if idx < len(attempts) - 1:
+                delay = base_delay * (2 ** attempt_num) + (0.5 * attempt_num)
+                logger.warning(
+                    f"Gemini {current_model} attempt {attempt_num + 1} failed ({err_str[:120]}), "
+                    f"retrying in {delay:.1f}s..."
+                )
+                await asyncio.sleep(delay)
+            else:
+                logger.error(f"All Gemini attempts exhausted. Last error: {err_str[:200]}")
+    raise last_exc  # type: ignore[misc]
 
 
 def _robust_parse_json(text: str) -> Dict:
@@ -86,7 +140,8 @@ class GeminiService:
     """Service for interacting with Google Gemini AI."""
     
     def __init__(self):
-        self.model_name = 'models/gemini-2.5-flash'
+        self.model_name = PRIMARY_MODEL
+        self.fallback_model = FALLBACK_MODEL
         self.client = client
     
     async def analyze_resume(self, resume_text: str) -> Dict:
@@ -342,10 +397,12 @@ Rules:
         role_config = types.GenerateContentConfig(
             response_mime_type="application/json",
             temperature=0.2,
+            thinking_config=types.ThinkingConfig(thinking_budget=0),
         )
 
         try:
-            response = self.client.models.generate_content(
+            response = await _call_with_retry(
+                self.client,
                 model=self.model_name,
                 contents=prompt,
                 config=role_config,
@@ -403,9 +460,14 @@ job posting from a top company in 2026.
 Return ONLY the job description text, no extra commentary."""
 
         try:
-            response = self.client.models.generate_content(
+            response = await _call_with_retry(
+                self.client,
                 model=self.model_name,
-                contents=prompt
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.7,
+                    thinking_config=types.ThinkingConfig(thinking_budget=0),
+                ),
             )
             result = response.text.strip()
             if len(result) > 100:
@@ -622,12 +684,13 @@ Requirements:
 - For comparison.detailed_changes, include at most 5-7 key changes.
 """
         
-        max_retries = 2
+        max_retries = 1
         last_error = None
         
         for attempt in range(max_retries + 1):
             try:
-                response = self.client.models.generate_content(
+                response = await _call_with_retry(
+                    self.client,
                     model=self.model_name,
                     contents=prompt,
                     config=JSON_CONFIG,
@@ -709,12 +772,14 @@ Return VALID JSON:
 Be exhaustive. Extract EVERYTHING. Miss nothing.
 """
         try:
-            response = self.client.models.generate_content(
+            response = await _call_with_retry(
+                self.client,
                 model=self.model_name,
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
                     temperature=0.3,
+                    thinking_config=types.ThinkingConfig(thinking_budget=0),
                 ),
             )
             return _robust_parse_json(response.text)
@@ -778,12 +843,14 @@ Rules:
 - Include ALL requirements from the JD analysis.
 """
         try:
-            response = self.client.models.generate_content(
+            response = await _call_with_retry(
+                self.client,
                 model=self.model_name,
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
                     temperature=0.3,
+                    thinking_config=types.ThinkingConfig(thinking_budget=0),
                 ),
             )
             return _robust_parse_json(response.text)
@@ -912,11 +979,12 @@ Requirements:
 - Education: max 2 entries, concise.
 - NEVER use: "Results-driven", "motivated", "passionate", "dynamic", "seasoned", "team player".
 """
-        max_retries = 2
+        max_retries = 1
         last_error = None
         for attempt in range(max_retries + 1):
             try:
-                response = self.client.models.generate_content(
+                response = await _call_with_retry(
+                    self.client,
                     model=self.model_name,
                     contents=prompt,
                     config=JSON_CONFIG,
@@ -1005,12 +1073,14 @@ Return VALID JSON:
 Focus comparison.detailed_changes on the 5-7 MOST IMPACTFUL changes.
 """
         try:
-            response = self.client.models.generate_content(
+            response = await _call_with_retry(
+                self.client,
                 model=self.model_name,
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
                     temperature=0.4,
+                    thinking_config=types.ThinkingConfig(thinking_budget=0),
                 ),
             )
             return _robust_parse_json(response.text)
@@ -1033,27 +1103,36 @@ Focus comparison.detailed_changes on the 5-7 MOST IMPACTFUL changes.
         github_context: Optional[str] = None,
         resume_os_context: Optional[str] = None,
         progress_callback=None,
+        precomputed_jd_analysis: Optional[Dict] = None,
     ) -> Dict:
         """Run the full 4-step optimization pipeline with optional progress callbacks.
 
         Args:
             progress_callback: async callable(step: int, total: int, message: str, detail: str)
+            precomputed_jd_analysis: If provided, skip step 1 (JD analysis) and use this instead.
         """
         async def _emit(step: int, message: str, detail: str = ""):
             if progress_callback:
                 await progress_callback(step=step, total=4, message=message, detail=detail)
 
-        # ── Step 1: Deep JD Analysis ──
-        await _emit(1, "Analyzing job description", "Extracting requirements, skills, and qualifiers...")
-        jd_analysis = await self.step1_analyze_jd(job_description, job_title)
-        if jd_analysis.get("error"):
-            logger.warning(f"Step 1 returned error, continuing with degraded JD analysis")
-            jd_analysis = {"must_have_requirements": [], "nice_to_have_requirements": [], "technical_stack": []}
+        # ── Step 1: Deep JD Analysis (skip if pre-computed) ──
+        if precomputed_jd_analysis is not None:
+            jd_analysis = precomputed_jd_analysis
+            num_reqs = len(jd_analysis.get("must_have_requirements", []))
+            num_nice = len(jd_analysis.get("nice_to_have_requirements", []))
+            await _emit(1, "Job description analyzed (cached)",
+                        f"Found {num_reqs} must-have and {num_nice} nice-to-have requirements")
+        else:
+            await _emit(1, "Analyzing job description", "Extracting requirements, skills, and qualifiers...")
+            jd_analysis = await self.step1_analyze_jd(job_description, job_title)
+            if jd_analysis.get("error"):
+                logger.warning(f"Step 1 returned error, continuing with degraded JD analysis")
+                jd_analysis = {"must_have_requirements": [], "nice_to_have_requirements": [], "technical_stack": []}
 
-        num_reqs = len(jd_analysis.get("must_have_requirements", []))
-        num_nice = len(jd_analysis.get("nice_to_have_requirements", []))
-        await _emit(1, "Job description analyzed",
-                    f"Found {num_reqs} must-have and {num_nice} nice-to-have requirements")
+            num_reqs = len(jd_analysis.get("must_have_requirements", []))
+            num_nice = len(jd_analysis.get("nice_to_have_requirements", []))
+            await _emit(1, "Job description analyzed",
+                        f"Found {num_reqs} must-have and {num_nice} nice-to-have requirements")
 
         # ── Step 2: Evidence Mapping ──
         await _emit(2, "Mapping your experience to job requirements",
@@ -1093,17 +1172,10 @@ Focus comparison.detailed_changes on the 5-7 MOST IMPACTFUL changes.
         await _emit(3, "Content rewriting complete",
                     f"Made {num_changes} targeted changes · Match score: {rewrite_result.get('match_score', '?')}%")
 
-        # ── Step 4: Scoring & Comparison ──
-        await _emit(4, "Scoring and final assessment",
-                    "Generating comparison, signal analysis, and ATS check...")
-        assembly = await self.step4_assemble_and_score(
-            rewrite_result=rewrite_result,
-            jd_analysis=jd_analysis,
-            evidence_map=evidence_map,
-            resume_os_context=resume_os_context,
-        )
+        # ── Step 4: Deterministic assembly (no LLM call — build from step 3 data) ──
+        await _emit(4, "Assembling final result", "Formatting optimized resume...")
 
-        # ── Merge step 3 (content) + step 4 (scoring) into final result ──
+        # Build optimized_resume text from structured data
         optimized_text_parts = []
         if rewrite_result.get("professional_summary"):
             optimized_text_parts.append(rewrite_result["professional_summary"])
@@ -1115,25 +1187,55 @@ Focus comparison.detailed_changes on the 5-7 MOST IMPACTFUL changes.
         if rewrite_result.get("skills"):
             optimized_text_parts.append("Skills: " + ", ".join(rewrite_result["skills"]))
 
+        # Build comparison summary deterministically from step 3 changes_made
+        changes_made = rewrite_result.get("changes_made", [])
+        keywords_added = rewrite_result.get("keywords_added", [])
+        match_score = rewrite_result.get("match_score", 0)
+        summary_parts = []
+        if num_changes:
+            summary_parts.append(f"Made {num_changes} targeted changes")
+        if keywords_added:
+            summary_parts.append(f"added {len(keywords_added)} keywords ({', '.join(keywords_added[:5])})")
+        if match_score:
+            summary_parts.append(f"achieving {match_score}% match score")
+        comparison_summary = ". ".join(summary_parts) + "." if summary_parts else "Resume optimized for target role."
+
+        # Build detailed_changes from changes_made (top 7 most impactful)
+        detailed_changes = []
+        for cm in changes_made[:7]:
+            if isinstance(cm, dict):
+                detailed_changes.append({
+                    "before": cm.get("original", cm.get("what_changed", "")),
+                    "after": cm.get("rewritten", cm.get("what_changed", "")),
+                    "reason": cm.get("why", ""),
+                    "impact": cm.get("requirement_matched", cm.get("engine", "")),
+                })
+
         final = {
             **rewrite_result,
             "optimized_resume": "\n".join(optimized_text_parts),
-            "signal_classification": assembly.get("signal_classification", {}),
-            "engines_applied": assembly.get("engines_applied", []),
-            "key_improvements": assembly.get("key_improvements", []),
-            "comparison": assembly.get("comparison", {}),
-            "level_gaps_flagged": assembly.get("level_gaps_flagged", []),
-            "orphaned_keywords": assembly.get("orphaned_keywords", []),
-            "remaining_gaps": assembly.get("remaining_gaps", []),
+            "signal_classification": {},
+            "engines_applied": [],
+            "key_improvements": [cm.get("why", "") for cm in changes_made[:5] if isinstance(cm, dict)],
+            "comparison": {
+                "summary": comparison_summary,
+                "detailed_changes": detailed_changes,
+                "improvement_areas": [],
+                "ats_improvements": [],
+                "overall_improvement": f"{match_score}% match",
+            },
+            "level_gaps_flagged": rewrite_result.get("level_gaps_flagged", []),
+            "orphaned_keywords": rewrite_result.get("orphaned_keywords", []),
+            "remaining_gaps": [],
             "jd_analysis": jd_analysis,
             "evidence_map": evidence_map.get("evidence_map", []),
             "overall_match_assessment": evidence_map.get("overall_match_assessment", {}),
         }
 
         await _emit(4, "Optimization complete",
-                    f"Score: {rewrite_result.get('match_score', 0)}% · "
+                    f"Score: {match_score}% · "
                     f"{num_changes} changes · "
-                    f"{len(rewrite_result.get('keywords_added', []))} keywords added")
+                    f"{len(keywords_added)} keywords added")
 
         return final
 

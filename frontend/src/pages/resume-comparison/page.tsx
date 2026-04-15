@@ -1062,6 +1062,102 @@ export default function ResumeComparisonPage() {
               })()}
 
               {/* CTA moved to header */}
+
+              {/* ═══ Skills Diff Section ═══ */}
+              {resumeData?.skills?.length > 0 && (() => {
+                // Extract original skills from raw text
+                const originalSkills: string[] = [];
+                if (optimizationData.original_resume_text) {
+                  const text = optimizationData.original_resume_text;
+                  // Find skills section in original text
+                  const skillsMatch = text.match(/(?:SKILLS|TECHNICAL SKILLS|CORE SKILLS|KEY SKILLS)\s*\n([\s\S]*?)(?:\n(?:EDUCATION|EXPERIENCE|WORK EXPERIENCE|CERTIFICATIONS|PROJECTS|ACHIEVEMENTS|AWARDS)\s*\n|$)/i);
+                  if (skillsMatch) {
+                    const skillsBlock = skillsMatch[1];
+                    // Parse comma-separated, pipe-separated, or line-by-line skills
+                    skillsBlock.split(/[,|\n•·▪]/).forEach(s => {
+                      const cleaned = s.replace(/^[-–—]\s*/, '').replace(/^\s*\d+[.)]\s*/, '').trim();
+                      if (cleaned && cleaned.length < 50 && cleaned.length > 1) {
+                        originalSkills.push(cleaned);
+                      }
+                    });
+                  }
+                }
+
+                const newSkills = resumeData.skills as string[];
+                const originalSet = new Set(originalSkills.map(s => s.toLowerCase()));
+                const newSet = new Set(newSkills.map(s => s.toLowerCase()));
+                
+                const added = newSkills.filter(s => !originalSet.has(s.toLowerCase()));
+                const kept = newSkills.filter(s => originalSet.has(s.toLowerCase()));
+                const removed = originalSkills.filter(s => !newSet.has(s.toLowerCase()));
+
+                if (added.length === 0 && removed.length === 0) return null;
+
+                return (
+                  <div className="max-w-6xl mx-auto mt-6 p-5 rounded-2xl bg-gradient-to-r from-violet-50 to-blue-50 border border-violet-200/60">
+                    <div className="flex items-center gap-2 mb-4">
+                      <i className="ri-tools-line text-violet-500 text-lg" />
+                      <h3 className="text-sm font-bold text-gray-800">Skills Diff</h3>
+                      <span className="text-[10px] text-gray-400 ml-auto">
+                        {originalSkills.length > 0 ? `${originalSkills.length} original` : 'Original skills extracted from resume'} → {newSkills.length} optimized
+                      </span>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      {/* Added Skills */}
+                      {added.length > 0 && (
+                        <div>
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <i className="ri-add-circle-line text-emerald-500 text-xs" />
+                            <span className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider">Added ({added.length})</span>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {added.map((skill, i) => (
+                              <span key={i} className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-medium border border-emerald-200">
+                                + {skill}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Kept Skills */}
+                      {kept.length > 0 && (
+                        <div>
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <i className="ri-check-line text-gray-400 text-xs" />
+                            <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Kept ({kept.length})</span>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {kept.map((skill, i) => (
+                              <span key={i} className="px-2.5 py-1 rounded-full bg-gray-100 text-gray-600 text-[11px] border border-gray-200">
+                                {skill}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Removed Skills */}
+                      {removed.length > 0 && (
+                        <div>
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <i className="ri-close-circle-line text-red-400 text-xs" />
+                            <span className="text-[11px] font-semibold text-red-500 uppercase tracking-wider">Removed ({removed.length})</span>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {removed.map((skill, i) => (
+                              <span key={i} className="px-2.5 py-1 rounded-full bg-red-50 text-red-400 text-[11px] border border-red-200 line-through">
+                                {skill}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
 

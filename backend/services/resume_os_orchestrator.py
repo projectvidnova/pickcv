@@ -732,15 +732,34 @@ class ResumeOSOrchestrator:
             if progress_callback:
                 await progress_callback(step=step, total=total_steps, message=message, detail=detail)
 
-        # ── Pre-processing (parallel deterministic agents) ──
-        await _emit(1, "Preparing optimization context", "Running role classification and ATS detection...")
+        # ── Pre-processing: run role DNA (LLM) + JD analysis (LLM) in parallel ──
+        # These don't depend on each other, saving ~8-12s of wall-clock time.
+        await _emit(1, "Preparing optimization context", "Running role classification and JD analysis in parallel...")
+
+        import asyncio as _asyncio
 
         fallback_modes = self._detect_fallback_modes(
             resume_text=resume_text,
             job_description=job_description,
             job_link=job_link,
         )
-        role_dna = await self._role_intelligence_agent(job_title=job_title, job_description=job_description)
+
+        # Fire both LLM calls concurrently
+        role_dna_task = _asyncio.ensure_future(
+            self._role_intelligence_agent(job_title=job_title, job_description=job_description)
+        )
+        jd_analysis_task = _asyncio.ensure_future(
+            gemini_service.step1_analyze_jd(job_description, job_title)
+        )
+
+        role_dna = await role_dna_task
+        jd_analysis = await jd_analysis_task
+
+        if jd_analysis.get("error"):
+            logger.warning("Step 1 (JD analysis) returned error, continuing with degraded analysis")
+            jd_analysis = {"must_have_requirements": [], "nice_to_have_requirements": [], "technical_stack": []}
+
+        # Deterministic agents (instant, no LLM)
         constraint_result = self._constraint_engine(
             resume_text=resume_text,
             job_description=job_description,
@@ -771,10 +790,14 @@ class ResumeOSOrchestrator:
             ats_score_result=ats_score_result,
         )
 
+        num_reqs = len(jd_analysis.get("must_have_requirements", []))
+        num_nice = len(jd_analysis.get("nice_to_have_requirements", []))
         await _emit(1, "Context ready",
-                    f"Role: {role_dna.get('cluster_name', 'General')} · Level: {role_dna.get('level', '?')} · ATS: {ats_score_result.get('ats_score', '?')}%")
+                    f"Role: {role_dna.get('cluster_name', 'General')} · Level: {role_dna.get('level', '?')} · "
+                    f"ATS: {ats_score_result.get('ats_score', '?')}% · "
+                    f"JD: {num_reqs} must-have, {num_nice} nice-to-have reqs")
 
-        # ── 4-Step LLM Pipeline via progress_callback forwarding ──
+        # ── Remaining LLM Pipeline (steps 2-4) with pre-computed JD analysis ──
         async def _llm_progress(step: int, total: int, message: str, detail: str = ""):
             # Remap LLM steps 1-4 → overall steps 2-5
             await _emit(step + 1, message, detail)
@@ -786,6 +809,7 @@ class ResumeOSOrchestrator:
             github_context=github_context or None,
             resume_os_context=optimization_input_context,
             progress_callback=_llm_progress,
+            precomputed_jd_analysis=jd_analysis,
         )
 
         if "error" in optimization_result:

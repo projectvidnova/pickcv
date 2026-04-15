@@ -8,7 +8,7 @@ pgvector==0.2.4
 python-multipart==0.0.9
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
-google-genai==0.3.0
+google-genai>=1.73.0
 google-cloud-storage==2.10.0
 google-auth-oauthlib==1.2.0
 google-auth==2.27.0
