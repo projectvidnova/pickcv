@@ -129,7 +129,10 @@ export default function CollegeDashboard() {
   const [selectedSemester, setSelectedSemester] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [selectedPlacement, setSelectedPlacement] = useState<string>('all');
+  const [selectedCgpaMin, setSelectedCgpaMin] = useState<string>('all');
   const [showFilters, setShowFilters] = useState(false);
+  const [sortBy, setSortBy] = useState<'cgpa' | 'year' | 'department' | null>(null);
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [expandedStudent, setExpandedStudent] = useState<number | null>(null);
   const [selectedStudents, setSelectedStudents] = useState<number[]>([]);
   const [showShareModal, setShowShareModal] = useState(false);
@@ -232,6 +235,15 @@ export default function CollegeDashboard() {
     return Array.from(branchSet).sort() as string[];
   }, [students]);
 
+  const branchCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    students.forEach(s => {
+      const b = s.branch || s.department_name;
+      if (b) counts[b] = (counts[b] || 0) + 1;
+    });
+    return counts;
+  }, [students]);
+
   const years = useMemo(() => {
     const yearSet = new Set(students.map(s => s.graduation_year).filter(Boolean));
     return Array.from(yearSet).sort() as number[];
@@ -255,9 +267,42 @@ export default function CollegeDashboard() {
       const matchesSemester = selectedSemester === 'all' || student.current_semester?.toString() === selectedSemester;
       const matchesStatus = selectedStatus === 'all' || student.status === selectedStatus;
       const matchesPlacement = selectedPlacement === 'all' || student.placement_status === selectedPlacement;
-      return matchesSearch && matchesBranch && matchesYear && matchesSemester && matchesStatus && matchesPlacement;
+      const matchesCgpaMin = selectedCgpaMin === 'all' || (student.cgpa != null && student.cgpa >= parseFloat(selectedCgpaMin));
+      return matchesSearch && matchesBranch && matchesYear && matchesSemester && matchesStatus && matchesPlacement && matchesCgpaMin;
     });
-  }, [students, searchQuery, selectedBranch, selectedYear, selectedSemester, selectedStatus, selectedPlacement]);
+  }, [students, searchQuery, selectedBranch, selectedYear, selectedSemester, selectedStatus, selectedPlacement, selectedCgpaMin]);
+
+  const sortedStudents = useMemo(() => {
+    if (!sortBy) return filteredStudents;
+    return [...filteredStudents].sort((a, b) => {
+      let cmp = 0;
+      if (sortBy === 'cgpa') {
+        cmp = (a.cgpa ?? 0) - (b.cgpa ?? 0);
+      } else if (sortBy === 'year') {
+        cmp = (a.graduation_year ?? 0) - (b.graduation_year ?? 0);
+      } else if (sortBy === 'department') {
+        const aName = (a.department_name || a.branch || '').toLowerCase();
+        const bName = (b.department_name || b.branch || '').toLowerCase();
+        cmp = aName.localeCompare(bName);
+      }
+      return sortOrder === 'asc' ? cmp : -cmp;
+    });
+  }, [filteredStudents, sortBy, sortOrder]);
+
+  const toggleSort = (col: 'cgpa' | 'year' | 'department') => {
+    if (sortBy === col) {
+      if (sortOrder === 'desc') setSortOrder('asc');
+      else { setSortBy(null); setSortOrder('desc'); }
+    } else {
+      setSortBy(col);
+      setSortOrder('desc');
+    }
+  };
+
+  const sortIcon = (col: 'cgpa' | 'year' | 'department') => {
+    if (sortBy !== col) return 'ri-arrow-up-down-line text-gray-400';
+    return sortOrder === 'asc' ? 'ri-arrow-up-s-line text-teal-600' : 'ri-arrow-down-s-line text-teal-600';
+  };
 
   const clearAllFilters = () => {
     setSearchQuery('');
@@ -266,10 +311,14 @@ export default function CollegeDashboard() {
     setSelectedSemester('all');
     setSelectedStatus('all');
     setSelectedPlacement('all');
+    setSelectedCgpaMin('all');
+    setSortBy(null);
+    setSortOrder('desc');
   };
 
   const hasActiveFilters = searchQuery !== '' || selectedBranch !== 'all' ||
-    selectedYear !== 'all' || selectedSemester !== 'all' || selectedStatus !== 'all' || selectedPlacement !== 'all';
+    selectedYear !== 'all' || selectedSemester !== 'all' || selectedStatus !== 'all' ||
+    selectedPlacement !== 'all' || selectedCgpaMin !== 'all';
 
   const toggleStudentSelection = (studentId: number) => {
     setSelectedStudents(prev =>
@@ -555,6 +604,45 @@ export default function CollegeDashboard() {
                   />
                 </div>
 
+                {/* Quick Filters — always visible */}
+                <div className="flex flex-wrap items-end gap-3 mb-4">
+                  <div className="min-w-[180px]">
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Department</label>
+                    <select value={selectedBranch} onChange={e => setSelectedBranch(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 cursor-pointer">
+                      <option value="all">All Departments ({students.length})</option>
+                      {branches.map(b => <option key={b} value={b}>{b} ({branchCounts[b] || 0})</option>)}
+                    </select>
+                  </div>
+                  <div className="min-w-[150px]">
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">CGPA Minimum</label>
+                    <select value={selectedCgpaMin} onChange={e => setSelectedCgpaMin(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 cursor-pointer">
+                      <option value="all">All CGPA</option>
+                      <option value="7">&ge; 7.0</option>
+                      <option value="7.5">&ge; 7.5</option>
+                      <option value="8">&ge; 8.0</option>
+                      <option value="8.5">&ge; 8.5</option>
+                      <option value="9">&ge; 9.0</option>
+                      <option value="9.5">&ge; 9.5</option>
+                    </select>
+                  </div>
+                  <div className="min-w-[140px]">
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Year</label>
+                    <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 cursor-pointer">
+                      <option value="all">All Years</option>
+                      {years.map(y => <option key={y} value={y.toString()}>{y}</option>)}
+                    </select>
+                  </div>
+                  {hasActiveFilters && (
+                    <button onClick={clearAllFilters}
+                      className="px-3 py-2 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-colors cursor-pointer flex items-center gap-1">
+                      <i className="ri-close-circle-line"></i>Clear
+                    </button>
+                  )}
+                </div>
+
                 {/* Filter Panel */}
                 {showFilters && (
                   <div className="bg-gray-50 rounded-xl p-5 border border-gray-100 mb-4">
@@ -639,6 +727,12 @@ export default function CollegeDashboard() {
                               <button onClick={() => setSelectedPlacement('all')} className="cursor-pointer"><i className="ri-close-line text-xs"></i></button>
                             </span>
                           )}
+                          {selectedCgpaMin !== 'all' && (
+                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-medium">
+                              CGPA &ge; {selectedCgpaMin}
+                              <button onClick={() => setSelectedCgpaMin('all')} className="cursor-pointer"><i className="ri-close-line text-xs"></i></button>
+                            </span>
+                          )}
                         </div>
                         <button onClick={clearAllFilters}
                           className="text-sm font-medium text-teal-600 hover:text-teal-700 cursor-pointer">Clear All</button>
@@ -670,17 +764,24 @@ export default function CollegeDashboard() {
                       <tr>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-10"></th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Student</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Dept / Branch</th>
-                        <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">CGPA</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer select-none hover:text-teal-700" onClick={() => toggleSort('department')}>
+                          <span className="inline-flex items-center gap-1">Dept / Branch <i className={sortIcon('department')}></i></span>
+                        </th>
+                        <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer select-none hover:text-teal-700" onClick={() => toggleSort('cgpa')}>
+                          <span className="inline-flex items-center gap-1">CGPA <i className={sortIcon('cgpa')}></i></span>
+                        </th>
                         <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Resume</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Skills</th>
                         <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Placement</th>
                         <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
+                        <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer select-none hover:text-teal-700" onClick={() => toggleSort('year')}>
+                          <span className="inline-flex items-center gap-1">Year <i className={sortIcon('year')}></i></span>
+                        </th>
                         <th className="px-4 py-3 w-16"></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {filteredStudents.map(student => {
+                      {sortedStudents.map(student => {
                         const displayName = student.full_name || student.name || student.email.split('@')[0];
                         const initials = displayName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
                         return (
@@ -755,6 +856,9 @@ export default function CollegeDashboard() {
                                 <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border ${getStatusBadge(student.status)}`}>
                                   {getStatusLabel(student.status)}
                                 </span>
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <span className="text-sm text-gray-700">{student.graduation_year ?? '—'}</span>
                               </td>
                               <td className="px-4 py-3">
                                 <div className="flex items-center gap-1">
