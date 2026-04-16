@@ -10,6 +10,8 @@ import COEGroupsTab from './components/COEGroupsTab';
 import SkillAnalyticsTab from './components/SkillAnalyticsTab';
 import AlertsPanel from './components/AlertsPanel';
 import AddStudentsModal from './components/AddStudentsModal';
+import AdminsTab from './components/AdminsTab';
+import ChangePasswordModal from './components/ChangePasswordModal';
 import { apiService } from '../../services/api';
 
 // ─── Interfaces ───────────────────────────────────────────────
@@ -22,6 +24,10 @@ interface CollegeProfile {
   state: string;
   naac_grade: string;
   total_students: number | null;
+  plan_type?: string;
+  plan_status?: string;
+  plan_start_date?: string | null;
+  plan_end_date?: string | null;
 }
 
 interface StudentResume {
@@ -110,7 +116,7 @@ interface Department {
   student_count?: number;
 }
 
-type TabKey = 'students' | 'departments' | 'coe' | 'analytics' | 'alerts';
+type TabKey = 'students' | 'departments' | 'coe' | 'analytics' | 'alerts' | 'team';
 
 // ─── Main Component ───────────────────────────────────────────
 export default function CollegeDashboard() {
@@ -139,6 +145,8 @@ export default function CollegeDashboard() {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showAddStudentsModal, setShowAddStudentsModal] = useState(false);
   const [isInviting, setIsInviting] = useState(false);
+  const [isOwner, setIsOwner] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
 
   // Auth check & load data
   useEffect(() => {
@@ -152,6 +160,10 @@ export default function CollegeDashboard() {
       if (!parsed.onboarding_completed) {
         navigate(resolvePath('/college/onboarding'));
         return;
+      }
+      setIsOwner(parsed.role === 'owner');
+      if (parsed.must_change_password) {
+        setShowChangePassword(true);
       }
     }
     loadDashboardData();
@@ -385,6 +397,7 @@ export default function CollegeDashboard() {
     { key: 'coe', label: 'COE Groups', icon: 'ri-lightbulb-line', badge: stats.coe_stats?.total_groups },
     { key: 'analytics', label: 'Skill Analytics', icon: 'ri-bar-chart-box-line' },
     { key: 'alerts', label: 'Alerts', icon: 'ri-notification-3-line', badge: stats.alerts_count },
+    { key: 'team', label: 'Team', icon: 'ri-team-line' },
   ];
 
   // ─── Loading ────────────────────────────────────────────────
@@ -427,6 +440,15 @@ export default function CollegeDashboard() {
                     <span className="flex items-center gap-1.5">
                       <i className="ri-award-line text-teal-600"></i>
                       NAAC {collegeProfile.naac_grade}
+                    </span>
+                  )}
+                  {collegeProfile?.plan_status === 'active' && collegeProfile?.plan_end_date && new Date(collegeProfile.plan_end_date) > new Date() && (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-semibold bg-violet-50 text-violet-600 border border-violet-200">
+                      <i className="ri-vip-crown-line"></i>
+                      {collegeProfile.plan_type === 'monthly' ? '1 Month' : collegeProfile.plan_type === 'quarterly' ? '3 Months' : collegeProfile.plan_type === 'half_yearly' ? '6 Months' : collegeProfile.plan_type === 'yearly' ? '1 Year' : ''} Plan
+                      <span className="text-violet-400 font-normal ml-1">
+                        &middot; expires {new Date(collegeProfile.plan_end_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </span>
                     </span>
                   )}
                 </div>
@@ -1062,6 +1084,11 @@ export default function CollegeDashboard() {
             {activeTab === 'alerts' && (
               <AlertsPanel />
             )}
+
+            {/* ──── Team Tab ──── */}
+            {activeTab === 'team' && (
+              <AdminsTab isOwner={isOwner} />
+            )}
           </div>
         </div>
       </div>
@@ -1119,6 +1146,13 @@ export default function CollegeDashboard() {
         onClose={() => setShowAddStudentsModal(false)}
         onStudentsAdded={loadDashboardData}
       />
+
+      {showChangePassword && (
+        <ChangePasswordModal
+          isForced={true}
+          onClose={() => setShowChangePassword(false)}
+        />
+      )}
 
       <Footer />
     </main>

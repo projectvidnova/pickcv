@@ -621,5 +621,74 @@ class EmailService:
             logger.error("Failed to send college approval email: %s", e)
             return False
 
+    def send_college_admin_credentials(
+        self,
+        recipient_email: str,
+        admin_name: str,
+        institution_name: str,
+        temp_password: str,
+        login_url: str = "",
+    ) -> bool:
+        """Send login credentials to a newly added college admin / placement officer."""
+        try:
+            name = admin_name or "there"
+            login_link = login_url or f"{settings.frontend_url}/college/login"
+
+            subject = f"You've been added as an admin for {institution_name} on PickCV"
+            body = f"""\
+<h2 style="color:#0d9488; margin:0 0 16px;">Welcome to PickCV! 🎓</h2>
+<p style="color:#334155; font-size:15px; line-height:1.6;">
+  Hi {name},
+</p>
+<p style="color:#334155; font-size:15px; line-height:1.6;">
+  You have been added as a <strong>Placement Officer</strong> for
+  <strong>{institution_name}</strong> on PickCV. You can now log in
+  to manage student profiles, track placements, and share profiles with recruiters.
+</p>
+<div style="background:#f0fdfa; border-radius:8px; padding:20px; margin:20px 0; border-left:4px solid #0d9488;">
+  <p style="color:#0d9488; font-weight:600; margin:0 0 10px;">Your Login Credentials</p>
+  <table style="width:100%; border-collapse:collapse;">
+    <tr>
+      <td style="padding:6px 0; color:#64748b; font-size:14px;">Email:</td>
+      <td style="padding:6px 0; color:#334155; font-size:14px; font-weight:600;">{recipient_email}</td>
+    </tr>
+    <tr>
+      <td style="padding:6px 0; color:#64748b; font-size:14px;">Temporary Password:</td>
+      <td style="padding:6px 0; color:#334155; font-size:14px; font-weight:600; font-family:monospace; background:#f8fafc; padding:4px 8px; border-radius:4px;">{temp_password}</td>
+    </tr>
+  </table>
+</div>
+<div style="background:#fffbeb; border-radius:8px; padding:14px; margin:16px 0; border-left:4px solid #f59e0b;">
+  <p style="color:#92400e; font-size:13px; margin:0;">
+    ⚠️ <strong>Important:</strong> You will be asked to change your password on first login.
+  </p>
+</div>
+<div style="text-align:center; margin:28px 0;">
+  <a href="{login_link}"
+     style="background:linear-gradient(135deg,#0d9488,#10b981); color:white;
+            padding:14px 40px; text-decoration:none; border-radius:8px;
+            display:inline-block; font-weight:600; font-size:15px;">
+    Sign In Now
+  </a>
+</div>
+<p style="color:#94a3b8; font-size:12px; margin-top:24px;">
+  This invitation was sent by {institution_name} via PickCV.
+  If this wasn't meant for you, please ignore this email.
+</p>"""
+
+            text = (
+                f"Hi {name},\n\n"
+                f"You've been added as an admin for {institution_name} on PickCV.\n\n"
+                f"Email: {recipient_email}\n"
+                f"Temporary Password: {temp_password}\n\n"
+                f"Please change your password after first login.\n\n"
+                f"Sign in at: {login_link}\n\n"
+                f"The PickCV Team"
+            )
+            return self._send_email(recipient_email, subject, _wrap_html(body), text)
+        except Exception as e:
+            logger.error("Failed to send college admin credentials email: %s", e)
+            return False
+
 
 email_service = EmailService()

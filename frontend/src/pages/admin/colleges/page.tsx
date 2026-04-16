@@ -19,7 +19,18 @@ interface CollegeRegistration {
   status: 'pending' | 'approved' | 'rejected';
   rejection_reason?: string;
   student_count: number;
+  plan_type?: string;
+  plan_status?: string;
+  plan_start_date?: string | null;
+  plan_end_date?: string | null;
 }
+
+const PLAN_OPTIONS = [
+  { value: 'monthly', label: '1 Month', desc: '30 days' },
+  { value: 'quarterly', label: '3 Months', desc: '90 days' },
+  { value: 'half_yearly', label: '6 Months', desc: '182 days' },
+  { value: 'yearly', label: '1 Year', desc: '365 days' },
+] as const;
 
 export default function AdminColleges() {
   const navigate = useNavigate();
@@ -30,6 +41,10 @@ export default function AdminColleges() {
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectTargetId, setRejectTargetId] = useState<number>(0);
   const [rejectReason, setRejectReason] = useState('');
+  const [showPlanModal, setShowPlanModal] = useState(false);
+  const [planTargetCollege, setPlanTargetCollege] = useState<CollegeRegistration | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState<string>('monthly');
+  const [planLoading, setPlanLoading] = useState(false);
 
   // Check admin auth and load data
   useEffect(() => {
@@ -101,6 +116,52 @@ export default function AdminColleges() {
     setShowRejectModal(false);
     setRejectTargetId(0);
     setRejectReason('');
+  };
+
+  const openPlanModal = (reg: CollegeRegistration) => {
+    setPlanTargetCollege(reg);
+    setSelectedPlan(reg.plan_type && reg.plan_type !== 'none' ? reg.plan_type : 'monthly');
+    setShowPlanModal(true);
+  };
+
+  const handleSetPlan = async () => {
+    if (!planTargetCollege) return;
+    setPlanLoading(true);
+    const result = await apiService.setCollegePlan(planTargetCollege.id, selectedPlan);
+    if (result.success && result.data) {
+      setRegistrations(prev =>
+        prev.map(reg => reg.id === planTargetCollege.id
+          ? { ...reg, plan_type: selectedPlan, plan_status: 'active', plan_start_date: result.data.plan_start_date, plan_end_date: result.data.plan_end_date }
+          : reg
+        )
+      );
+      setShowPlanModal(false);
+      setPlanTargetCollege(null);
+    }
+    setPlanLoading(false);
+  };
+
+  const handleRemovePlan = async (id: number) => {
+    const result = await apiService.removeCollegePlan(id);
+    if (result.success) {
+      setRegistrations(prev =>
+        prev.map(reg => reg.id === id
+          ? { ...reg, plan_type: 'none', plan_status: 'none', plan_start_date: null, plan_end_date: null }
+          : reg
+        )
+      );
+    }
+  };
+
+  const getPlanLabel = (planType?: string) => {
+    if (!planType || planType === 'none') return null;
+    const opt = PLAN_OPTIONS.find(p => p.value === planType);
+    return opt?.label || planType;
+  };
+
+  const isPlanExpired = (reg: CollegeRegistration) => {
+    if (!reg.plan_end_date || reg.plan_status !== 'active') return false;
+    return new Date(reg.plan_end_date) < new Date();
   };
 
   const formatDate = (dateStr: string) => {
@@ -211,6 +272,7 @@ export default function AdminColleges() {
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Location</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Registered</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Plan</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
@@ -256,6 +318,34 @@ export default function AdminColleges() {
                       )}
                     </td>
                     <td className="px-6 py-4">
+                      {reg.status === 'approved' ? (
+                        <div>
+                          {reg.plan_status === 'active' && !isPlanExpired(reg) ? (
+                            <div className="flex flex-col gap-1">
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-violet-50 text-violet-600 border border-violet-200">
+                                <i className="ri-vip-crown-line mr-1"></i>
+                                {getPlanLabel(reg.plan_type)}
+                              </span>
+                              {reg.plan_end_date && (
+                                <span className="text-[10px] text-gray-400">
+                                  Expires {formatDate(reg.plan_end_date)}
+                                </span>
+                              )}
+                            </div>
+                          ) : isPlanExpired(reg) ? (
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-orange-50 text-orange-500 border border-orange-200">
+                              <i className="ri-time-line mr-1"></i>
+                              Expired
+                            </span>
+                          ) : (
+                            <span className="text-xs text-gray-400">No plan</span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-300">&mdash;</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
                         {reg.status === 'pending' && (
                           <>
@@ -273,8 +363,26 @@ export default function AdminColleges() {
                             </button>
                           </>
                         )}
-                        {reg.status !== 'pending' && (
-                          <span className="text-xs text-gray-400 italic">No actions</span>
+                        {reg.status === 'approved' && (
+                          <>
+                            <button
+                              onClick={() => openPlanModal(reg)}
+                              className="px-3 py-1.5 rounded-lg bg-violet-50 text-violet-600 text-xs font-medium hover:bg-violet-100 transition-colors cursor-pointer flex items-center gap-1.5">
+                              <i className="ri-vip-crown-line"></i>
+                              {reg.plan_status === 'active' && !isPlanExpired(reg) ? 'Change Plan' : 'Set Plan'}
+                            </button>
+                            {reg.plan_status === 'active' && !isPlanExpired(reg) && (
+                              <button
+                                onClick={() => handleRemovePlan(reg.id)}
+                                className="px-3 py-1.5 rounded-lg bg-gray-50 text-gray-500 text-xs font-medium hover:bg-gray-100 transition-colors cursor-pointer flex items-center gap-1.5">
+                                <i className="ri-close-line"></i>
+                                Remove
+                              </button>
+                            )}
+                          </>
+                        )}
+                        {reg.status === 'rejected' && (
+                          <span className="text-xs text-gray-400 italic">Rejected</span>
                         )}
                       </div>
                     </td>
@@ -335,6 +443,69 @@ export default function AdminColleges() {
                 className="px-5 py-2.5 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-2">
                 <i className="ri-close-circle-line"></i>
                 Reject Registration
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Plan Modal */}
+      {showPlanModal && planTargetCollege && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setShowPlanModal(false)}></div>
+          <div className="relative bg-white rounded-2xl border border-gray-200 p-8 w-full max-w-md shadow-2xl">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 rounded-full bg-violet-50 flex items-center justify-center">
+                <i className="ri-vip-crown-line text-violet-500 text-xl"></i>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Set Plan</h3>
+                <p className="text-sm text-gray-500 truncate max-w-[280px]">{planTargetCollege.institution_name}</p>
+              </div>
+            </div>
+
+            <div className="mb-6 space-y-3">
+              {PLAN_OPTIONS.map(opt => (
+                <label
+                  key={opt.value}
+                  className={`flex items-center gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition-all ${
+                    selectedPlan === opt.value
+                      ? 'border-violet-400 bg-violet-50/50'
+                      : 'border-gray-200 hover:border-gray-300 bg-white'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="plan"
+                    value={opt.value}
+                    checked={selectedPlan === opt.value}
+                    onChange={() => setSelectedPlan(opt.value)}
+                    className="accent-violet-500"
+                  />
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-gray-900">{opt.label}</p>
+                    <p className="text-xs text-gray-400">{opt.desc} from today</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowPlanModal(false)}
+                className="px-5 py-2.5 rounded-xl bg-gray-100 text-gray-600 text-sm font-medium hover:bg-gray-200 transition-colors cursor-pointer">
+                Cancel
+              </button>
+              <button
+                onClick={handleSetPlan}
+                disabled={planLoading}
+                className="px-5 py-2.5 rounded-xl bg-violet-500 text-white text-sm font-semibold hover:bg-violet-600 transition-colors disabled:opacity-50 cursor-pointer flex items-center gap-2">
+                {planLoading ? (
+                  <i className="ri-loader-4-line animate-spin"></i>
+                ) : (
+                  <i className="ri-vip-crown-line"></i>
+                )}
+                Activate Plan
               </button>
             </div>
           </div>

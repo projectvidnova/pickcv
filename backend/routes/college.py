@@ -11,7 +11,7 @@ from database import get_db, async_session_maker
 from models import (
     College, CollegeStudent, User, Resume, SharedProfile,
     Department, StudentSkill, SkillTaxonomy, COEGroup, COEMembership,
-    CollegeAlert, CollegeAuditLog, UserSkill
+    CollegeAlert, CollegeAuditLog, UserSkill, CollegeAdmin
 )
 from schemas import (
     CollegeRegisterRequest, CollegeLoginRequest, CollegeResponse,
@@ -20,6 +20,7 @@ from schemas import (
     StudentUploadItem, StudentResumeInfo, StudentProfileUpdate,
     StudentBulkUpdateRequest, CollegeAlertResponse, AlertDismissRequest,
     CollegeAuditLogResponse, CGPASegregationResponse, StudentCGPATier,
+    CollegeAdminCreateRequest, CollegeAdminResponse, CollegeChangePasswordRequest,
 )
 from services.auth_service import auth_service
 from services.college_service import college_service
@@ -64,11 +65,12 @@ async def _send_invitations_background(
 
 
 # ─── Auth helpers ────────────────────────────────────────────
-def _create_college_token(college_id: int, email: str) -> str:
-    """Create JWT token for a college user."""
-    return auth_service.create_access_token(
-        data={"sub": str(college_id), "type": "college", "email": email}
-    )
+def _create_college_token(college_id: int, email: str, *, college_admin_id: int | None = None, role: str = "owner") -> str:
+    """Create JWT token for a college user (owner or sub-admin)."""
+    data = {"sub": str(college_id), "type": "college", "email": email, "role": role}
+    if college_admin_id:
+        data["college_admin_id"] = str(college_admin_id)
+    return auth_service.create_access_token(data=data)
 
 
 async def get_current_college(
@@ -87,7 +89,7 @@ async def get_current_college_auth(
     credentials: HTTPAuthorizationCredentials = Depends(college_security),
     db: AsyncSession = Depends(get_db),
 ) -> College:
-    """Verify JWT and return college entity."""
+    """Verify JWT and return college entity. Works for both owner and sub-admin tokens."""
     payload = auth_service.decode_access_token(credentials.credentials)
     if not payload or payload.get("type") != "college":
         raise HTTPException(status_code=401, detail="Invalid college token")
@@ -162,27 +164,69 @@ async def login_college(
     data: CollegeLoginRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    """Login for college users. Returns JWT + college info."""
+    """Login for college users (owner or sub-admin). Returns JWT + college info."""
+
+    # 1. Try owner login (colleges table)
     result = await db.execute(
         select(College).where(College.official_email == data.email)
     )
     college = result.scalar_one_or_none()
 
-    if not college or not auth_service.verify_password(data.password, college.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
+    if college and auth_service.verify_password(data.password, college.password_hash):
+        # Owner login
+        token = _create_college_token(college.id, college.official_email, role="owner")
+        return {
+            "access_token": token,
+            "token_type": "bearer",
+            "college_id": college.id,
+            "institution_name": college.institution_name,
+            "status": college.status,
+            "rejection_reason": college.rejection_reason,
+            "onboarding_completed": college.onboarding_completed,
+            "role": "owner",
+            "must_change_password": False,
+        }
 
-    # Return status info so frontend can decide next step
-    token = _create_college_token(college.id, college.official_email)
+    # 2. Try sub-admin login (college_admins table)
+    admin_result = await db.execute(
+        select(CollegeAdmin).where(
+            CollegeAdmin.email == data.email,
+            CollegeAdmin.is_active == True,
+        )
+    )
+    college_admin = admin_result.scalar_one_or_none()
 
-    return {
-        "access_token": token,
-        "token_type": "bearer",
-        "college_id": college.id,
-        "institution_name": college.institution_name,
-        "status": college.status,  # pending, approved, rejected
-        "rejection_reason": college.rejection_reason,
-        "onboarding_completed": college.onboarding_completed,
-    }
+    if college_admin and auth_service.verify_password(data.password, college_admin.password_hash):
+        # Load the parent college
+        college_result = await db.execute(
+            select(College).where(College.id == college_admin.college_id)
+        )
+        college = college_result.scalar_one_or_none()
+        if not college:
+            raise HTTPException(status_code=401, detail="College not found")
+
+        # Update last_login
+        college_admin.last_login = datetime.now(timezone.utc)
+        await db.commit()
+
+        token = _create_college_token(
+            college.id, college_admin.email,
+            college_admin_id=college_admin.id, role=college_admin.role,
+        )
+        return {
+            "access_token": token,
+            "token_type": "bearer",
+            "college_id": college.id,
+            "institution_name": college.institution_name,
+            "status": college.status,
+            "rejection_reason": college.rejection_reason,
+            "onboarding_completed": college.onboarding_completed,
+            "role": college_admin.role,
+            "must_change_password": college_admin.must_change_password,
+            "admin_name": college_admin.name,
+        }
+
+    raise HTTPException(status_code=401, detail="Invalid email or password")
 
 
 # ─── Profile ─────────────────────────────────────────────────
@@ -975,6 +1019,225 @@ async def delete_student(
     await db.delete(student)
     await db.commit()
     return {"success": True, "message": "Student removed"}
+
+
+# ─── College Admin (Multi-user) Management ────────────────────
+
+def _get_token_role(credentials: HTTPAuthorizationCredentials) -> dict:
+    """Extract role and admin info from JWT."""
+    payload = auth_service.decode_access_token(credentials.credentials)
+    if not payload or payload.get("type") != "college":
+        raise HTTPException(status_code=401, detail="Invalid college token")
+    return payload
+
+
+@router.get("/admins", response_model=list[CollegeAdminResponse])
+async def list_college_admins(
+    college: College = Depends(get_current_college_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all admins for this college. Includes the owner as a virtual entry."""
+    result = await db.execute(
+        select(CollegeAdmin)
+        .where(CollegeAdmin.college_id == college.id)
+        .order_by(CollegeAdmin.created_at)
+    )
+    admins = result.scalars().all()
+
+    # Include the owner (from colleges table) as the first entry
+    owner_entry = CollegeAdminResponse(
+        id=0,
+        college_id=college.id,
+        email=college.official_email,
+        name=college.contact_person_name,
+        role="owner",
+        is_active=True,
+        must_change_password=False,
+        last_login=None,
+        created_at=college.created_at,
+    )
+    return [owner_entry] + [CollegeAdminResponse.model_validate(a) for a in admins]
+
+
+@router.post("/admins", response_model=CollegeAdminResponse, status_code=201)
+async def add_college_admin(
+    data: CollegeAdminCreateRequest,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(college_security),
+    college: College = Depends(get_current_college_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """Add a new placement officer / admin. Only the owner can do this."""
+    payload = _get_token_role(credentials)
+    if payload.get("role") != "owner":
+        raise HTTPException(status_code=403, detail="Only the institution owner can add admins")
+
+    # Check email not already used as owner
+    if data.email.lower() == college.official_email.lower():
+        raise HTTPException(status_code=400, detail="This email is the institution owner email")
+
+    # Check email not already an admin for this college
+    existing = await db.execute(
+        select(CollegeAdmin).where(
+            CollegeAdmin.college_id == college.id,
+            CollegeAdmin.email == data.email,
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="This email is already an admin for your institution")
+
+    # Generate a random temporary password
+    temp_password = secrets.token_urlsafe(10)
+    hashed_pw = auth_service.get_password_hash(temp_password)
+
+    new_admin = CollegeAdmin(
+        college_id=college.id,
+        email=data.email,
+        password_hash=hashed_pw,
+        name=data.name,
+        role="admin",
+        is_active=True,
+        must_change_password=True,
+    )
+    db.add(new_admin)
+    await db.commit()
+    await db.refresh(new_admin)
+
+    logger.info(f"College admin added: {new_admin.email} for college {college.institution_name} (ID {college.id})")
+
+    # Send credentials email
+    background_tasks.add_task(
+        email_service.send_college_admin_credentials,
+        recipient_email=new_admin.email,
+        admin_name=new_admin.name,
+        institution_name=college.institution_name,
+        temp_password=temp_password,
+        login_url=f"{get_frontend_origin(request)}/college/login",
+    )
+
+    return CollegeAdminResponse.model_validate(new_admin)
+
+
+@router.delete("/admins/{admin_id}")
+async def remove_college_admin(
+    admin_id: int,
+    credentials: HTTPAuthorizationCredentials = Depends(college_security),
+    college: College = Depends(get_current_college_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """Remove a sub-admin. Only the owner can do this."""
+    payload = _get_token_role(credentials)
+    if payload.get("role") != "owner":
+        raise HTTPException(status_code=403, detail="Only the institution owner can remove admins")
+
+    admin = await db.get(CollegeAdmin, admin_id)
+    if not admin or admin.college_id != college.id:
+        raise HTTPException(status_code=404, detail="Admin not found")
+
+    await db.delete(admin)
+    await db.commit()
+    logger.info(f"College admin removed: {admin.email} from college {college.id}")
+    return {"success": True, "message": "Admin removed"}
+
+
+@router.put("/admins/{admin_id}/toggle")
+async def toggle_college_admin(
+    admin_id: int,
+    credentials: HTTPAuthorizationCredentials = Depends(college_security),
+    college: College = Depends(get_current_college_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """Activate/deactivate a sub-admin. Owner only."""
+    payload = _get_token_role(credentials)
+    if payload.get("role") != "owner":
+        raise HTTPException(status_code=403, detail="Only the institution owner can manage admins")
+
+    admin = await db.get(CollegeAdmin, admin_id)
+    if not admin or admin.college_id != college.id:
+        raise HTTPException(status_code=404, detail="Admin not found")
+
+    admin.is_active = not admin.is_active
+    await db.commit()
+    await db.refresh(admin)
+    status_str = "activated" if admin.is_active else "deactivated"
+    logger.info(f"College admin {status_str}: {admin.email} (college {college.id})")
+    return {"success": True, "is_active": admin.is_active, "message": f"Admin {status_str}"}
+
+
+@router.post("/change-password")
+async def change_password(
+    data: CollegeChangePasswordRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(college_security),
+    db: AsyncSession = Depends(get_db),
+):
+    """Change password for the logged-in college user (owner or sub-admin)."""
+    payload = auth_service.decode_access_token(credentials.credentials)
+    if not payload or payload.get("type") != "college":
+        raise HTTPException(status_code=401, detail="Invalid college token")
+
+    college_admin_id = payload.get("college_admin_id")
+
+    if college_admin_id:
+        # Sub-admin changing password
+        admin = await db.get(CollegeAdmin, int(college_admin_id))
+        if not admin:
+            raise HTTPException(status_code=404, detail="Admin not found")
+        if not auth_service.verify_password(data.current_password, admin.password_hash):
+            raise HTTPException(status_code=400, detail="Current password is incorrect")
+
+        admin.password_hash = auth_service.get_password_hash(data.new_password)
+        admin.must_change_password = False
+        await db.commit()
+        logger.info(f"College admin password changed: {admin.email}")
+    else:
+        # Owner changing password
+        college_id = int(payload["sub"])
+        result = await db.execute(select(College).where(College.id == college_id))
+        college = result.scalar_one_or_none()
+        if not college:
+            raise HTTPException(status_code=404, detail="College not found")
+        if not auth_service.verify_password(data.current_password, college.password_hash):
+            raise HTTPException(status_code=400, detail="Current password is incorrect")
+
+        college.password_hash = auth_service.get_password_hash(data.new_password)
+        await db.commit()
+        logger.info(f"College owner password changed: {college.official_email}")
+
+    return {"success": True, "message": "Password changed successfully"}
+
+
+@router.get("/me")
+async def get_current_user_info(
+    credentials: HTTPAuthorizationCredentials = Depends(college_security),
+    college: College = Depends(get_current_college_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get info about the currently logged-in college user (owner or admin)."""
+    payload = _get_token_role(credentials)
+    college_admin_id = payload.get("college_admin_id")
+
+    if college_admin_id:
+        admin = await db.get(CollegeAdmin, int(college_admin_id))
+        if not admin:
+            raise HTTPException(status_code=404, detail="Admin not found")
+        return {
+            "role": admin.role,
+            "name": admin.name,
+            "email": admin.email,
+            "must_change_password": admin.must_change_password,
+            "college_id": college.id,
+            "institution_name": college.institution_name,
+        }
+    else:
+        return {
+            "role": "owner",
+            "name": college.contact_person_name,
+            "email": college.official_email,
+            "must_change_password": False,
+            "college_id": college.id,
+            "institution_name": college.institution_name,
+        }
 
 
 @router.delete("/students/bulk")

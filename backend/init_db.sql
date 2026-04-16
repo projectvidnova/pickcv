@@ -286,11 +286,20 @@ CREATE TABLE IF NOT EXISTS colleges (
     placement_season_start DATE,
     placement_season_end DATE,
     autonomy_status VARCHAR(50),
-    affiliated_university VARCHAR(500)
+    affiliated_university VARCHAR(500),
+    -- Plan management (set by platform admin)
+    plan_type VARCHAR(20) DEFAULT 'none',
+    plan_start_date TIMESTAMP WITH TIME ZONE,
+    plan_end_date TIMESTAMP WITH TIME ZONE,
+    plan_status VARCHAR(20) DEFAULT 'none',
+    plan_set_by INTEGER REFERENCES admins(id) ON DELETE SET NULL,
+    plan_set_at TIMESTAMP WITH TIME ZONE
 );
 
 CREATE INDEX IF NOT EXISTS idx_colleges_email ON colleges(official_email);
 CREATE INDEX IF NOT EXISTS idx_colleges_status ON colleges(status);
+CREATE INDEX IF NOT EXISTS idx_colleges_plan_status ON colleges(plan_status) WHERE plan_status = 'active';
+CREATE INDEX IF NOT EXISTS idx_colleges_plan_end_date ON colleges(plan_end_date) WHERE plan_end_date IS NOT NULL;
 
 -- ============= 14. DEPARTMENTS TABLE =============
 CREATE TABLE IF NOT EXISTS departments (
@@ -392,7 +401,25 @@ CREATE TABLE IF NOT EXISTS skill_taxonomy (
 CREATE INDEX IF NOT EXISTS idx_skill_taxonomy_name_lower ON skill_taxonomy(name_lower);
 CREATE INDEX IF NOT EXISTS idx_skill_taxonomy_category ON skill_taxonomy(category);
 
--- ============= 18. CURRICULUM COURSES TABLE =============
+-- ============= 18. COLLEGE ADMINS TABLE =============
+CREATE TABLE IF NOT EXISTS college_admins (
+    id SERIAL PRIMARY KEY,
+    college_id INTEGER NOT NULL REFERENCES colleges(id) ON DELETE CASCADE,
+    email VARCHAR(255) NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    role VARCHAR(20) NOT NULL DEFAULT 'admin',
+    is_active BOOLEAN DEFAULT TRUE,
+    must_change_password BOOLEAN DEFAULT FALSE,
+    last_login TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(college_id, email)
+);
+CREATE INDEX IF NOT EXISTS idx_college_admins_college_id ON college_admins(college_id);
+CREATE INDEX IF NOT EXISTS idx_college_admins_email ON college_admins(email);
+
+-- ============= 19. CURRICULUM COURSES TABLE =============
 CREATE TABLE IF NOT EXISTS curriculum_courses (
     id SERIAL PRIMARY KEY,
     department_id INTEGER NOT NULL REFERENCES departments(id) ON DELETE CASCADE,

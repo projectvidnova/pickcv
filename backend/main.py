@@ -201,7 +201,7 @@ async def startup_event():
     
     # Auto-create database tables
     from database import engine, Base
-    from models import User, Admin, College, CollegeStudent, SharedProfile, Payment, Coupon, CouponRedemption  # noqa: F401 - Import to register models
+    from models import User, Admin, College, CollegeStudent, CollegeAdmin, SharedProfile, Payment, Coupon, CouponRedemption  # noqa: F401 - Import to register models
     from models import (  # noqa: F401 - Phase 1 models
         SkillTaxonomy, Department, CurriculumCourse, CourseSkillMapping,
         StudentSkill, COEGroup, COEMembership, CollegeAlert, CollegeAuditLog
@@ -264,6 +264,13 @@ async def startup_event():
                 "ALTER TABLE college_students ADD COLUMN IF NOT EXISTS placed_at TIMESTAMP WITH TIME ZONE",
                 # shared_profiles table
                 "ALTER TABLE shared_profiles ADD COLUMN IF NOT EXISTS view_count INTEGER DEFAULT 0",
+                # colleges table – plan management
+                "ALTER TABLE colleges ADD COLUMN IF NOT EXISTS plan_type VARCHAR(20) DEFAULT 'none'",
+                "ALTER TABLE colleges ADD COLUMN IF NOT EXISTS plan_start_date TIMESTAMP WITH TIME ZONE",
+                "ALTER TABLE colleges ADD COLUMN IF NOT EXISTS plan_end_date TIMESTAMP WITH TIME ZONE",
+                "ALTER TABLE colleges ADD COLUMN IF NOT EXISTS plan_status VARCHAR(20) DEFAULT 'none'",
+                "ALTER TABLE colleges ADD COLUMN IF NOT EXISTS plan_set_by INTEGER REFERENCES admins(id) ON DELETE SET NULL",
+                "ALTER TABLE colleges ADD COLUMN IF NOT EXISTS plan_set_at TIMESTAMP WITH TIME ZONE",
             ]
             try:
                 for stmt in _migrations:

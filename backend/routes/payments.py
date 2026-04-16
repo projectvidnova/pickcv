@@ -28,7 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
 
 from database import get_db
-from models import User, Resume, Payment, Subscription, Coupon, CouponRedemption
+from models import User, Resume, Payment, Subscription, Coupon, CouponRedemption, CollegeStudent, College
 from routes.auth import get_current_user
 from services.zoho_payment_service import zoho_payment_service
 from config import settings
@@ -228,6 +228,24 @@ async def _count_free_downloads(user_id: int, db: AsyncSession) -> int:
     return result.scalar() or 0
 
 
+async def _has_active_college_plan(user_id: int, db: AsyncSession) -> bool:
+    """Check if the user belongs to a college with an active plan."""
+    now = datetime.now(timezone.utc)
+    result = await db.execute(
+        select(College.id)
+        .join(CollegeStudent, CollegeStudent.college_id == College.id)
+        .where(
+            and_(
+                CollegeStudent.user_id == user_id,
+                College.plan_status == "active",
+                College.plan_end_date > now,
+            )
+        )
+        .limit(1)
+    )
+    return result.scalar_one_or_none() is not None
+
+
 async def _has_resume_payment(user_id: int, resume_id: int, db: AsyncSession) -> bool:
     """Check if the user has a successful per-resume, free-download, or coupon payment for this resume."""
     result = await db.execute(
@@ -313,6 +331,17 @@ async def check_download_access(
         return CheckAccessResponse(
             has_access=True,
             access_type="free",
+            payment_required=False,
+            free_downloads_remaining=0,
+            active_subscription=None,
+            plans=plans,
+        )
+
+    # 1b. College plan → free access for students of colleges with an active plan
+    if await _has_active_college_plan(current_user.id, db):
+        return CheckAccessResponse(
+            has_access=True,
+            access_type="college_plan",
             payment_required=False,
             free_downloads_remaining=0,
             active_subscription=None,

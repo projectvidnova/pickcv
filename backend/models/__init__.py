@@ -422,6 +422,14 @@ class College(Base):
     approved_at = Column(DateTime(timezone=True))
     approved_by = Column(Integer, ForeignKey("admins.id", ondelete="SET NULL"))
     
+    # Plan / subscription (set by platform admin)
+    plan_type = Column(String(20), default="none")              # none, monthly, quarterly, half_yearly, yearly
+    plan_start_date = Column(DateTime(timezone=True))
+    plan_end_date = Column(DateTime(timezone=True))
+    plan_status = Column(String(20), default="none")            # none, active, expired
+    plan_set_by = Column(Integer, ForeignKey("admins.id", ondelete="SET NULL"))
+    plan_set_at = Column(DateTime(timezone=True))
+
     # Phase 1: Enhanced college fields
     subscription_tier = Column(String(50), default="free")       # free, basic, premium, enterprise
     max_students = Column(Integer, default=500)
@@ -437,6 +445,31 @@ class College(Base):
     departments = relationship("Department", back_populates="college", cascade="all, delete-orphan")
     coe_groups = relationship("COEGroup", back_populates="college", cascade="all, delete-orphan")
     alerts = relationship("CollegeAlert", back_populates="college", cascade="all, delete-orphan")
+    college_admins = relationship("CollegeAdmin", back_populates="college", cascade="all, delete-orphan")
+
+
+class CollegeAdmin(Base):
+    """Additional admin/placement officer for a college."""
+    __tablename__ = "college_admins"
+
+    id = Column(Integer, primary_key=True, index=True)
+    college_id = Column(Integer, ForeignKey("colleges.id", ondelete="CASCADE"), nullable=False, index=True)
+    email = Column(String(255), nullable=False, index=True)
+    password_hash = Column(String(255), nullable=False)
+    name = Column(String(255), nullable=False)
+    role = Column(String(20), default="admin")  # owner, admin
+    is_active = Column(Boolean, default=True)
+    must_change_password = Column(Boolean, default=False)
+    last_login = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint('college_id', 'email', name='uq_college_admins_college_email'),
+    )
+
+    # Relationships
+    college = relationship("College", back_populates="college_admins")
 
 
 class CollegeStudent(Base):

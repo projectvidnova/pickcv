@@ -13,6 +13,7 @@ from models import Admin, College, CollegeStudent, Payment, Subscription, User, 
 from schemas import (
     AdminLoginRequest, AdminLoginResponse,
     AdminCollegeResponse, AdminRejectRequest, AdminStatsResponse,
+    AdminSetPlanRequest,
 )
 from schemas.recruiter import AdminRecruiterResponse, AdminRecruiterRejectRequest
 from services.auth_service import auth_service
@@ -120,6 +121,10 @@ async def list_colleges(
                 student_count=student_count,
                 created_at=c.created_at,
                 approved_at=c.approved_at,
+                plan_type=c.plan_type or "none",
+                plan_status=c.plan_status or "none",
+                plan_start_date=c.plan_start_date,
+                plan_end_date=c.plan_end_date,
             )
         )
 
@@ -420,3 +425,83 @@ async def reject_recruiter(
     )
 
     return {"message": f"Recruiter {rec.full_name} rejected"}
+
+
+# ─── College Plan Management ─────────────────────────────────
+
+PLAN_DURATIONS = {
+    "monthly": timedelta(days=30),
+    "quarterly": timedelta(days=90),
+    "half_yearly": timedelta(days=182),
+    "yearly": timedelta(days=365),
+}
+
+PLAN_LABELS = {
+    "monthly": "1 Month",
+    "quarterly": "3 Months",
+    "half_yearly": "6 Months",
+    "yearly": "1 Year",
+}
+
+
+@router.put("/colleges/{college_id}/plan")
+async def set_college_plan(
+    college_id: int,
+    data: AdminSetPlanRequest,
+    admin: Admin = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Set or update a college's plan. Starts immediately."""
+    result = await db.execute(select(College).where(College.id == college_id))
+    college = result.scalar_one_or_none()
+    if not college:
+        raise HTTPException(status_code=404, detail="College not found")
+    if college.status != "approved":
+        raise HTTPException(status_code=400, detail="College must be approved before setting a plan")
+
+    now = datetime.now(timezone.utc)
+    duration = PLAN_DURATIONS[data.plan_type]
+
+    college.plan_type = data.plan_type
+    college.plan_start_date = now
+    college.plan_end_date = now + duration
+    college.plan_status = "active"
+    college.plan_set_by = admin.id
+    college.plan_set_at = now
+    await db.commit()
+
+    logger.info(
+        f"Plan '{data.plan_type}' set for college {college.institution_name} "
+        f"(id={college_id}) by admin {admin.email}, expires {college.plan_end_date.date()}"
+    )
+
+    return {
+        "message": f"{PLAN_LABELS[data.plan_type]} plan activated for {college.institution_name}",
+        "plan_type": data.plan_type,
+        "plan_start_date": college.plan_start_date.isoformat(),
+        "plan_end_date": college.plan_end_date.isoformat(),
+    }
+
+
+@router.delete("/colleges/{college_id}/plan")
+async def remove_college_plan(
+    college_id: int,
+    admin: Admin = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Remove / deactivate a college's plan immediately."""
+    result = await db.execute(select(College).where(College.id == college_id))
+    college = result.scalar_one_or_none()
+    if not college:
+        raise HTTPException(status_code=404, detail="College not found")
+
+    college.plan_type = "none"
+    college.plan_start_date = None
+    college.plan_end_date = None
+    college.plan_status = "none"
+    college.plan_set_at = datetime.now(timezone.utc)
+    college.plan_set_by = admin.id
+    await db.commit()
+
+    logger.info(f"Plan removed for college {college.institution_name} (id={college_id}) by admin {admin.email}")
+    return {"message": f"Plan removed for {college.institution_name}"}

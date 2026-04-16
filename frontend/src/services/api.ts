@@ -873,6 +873,9 @@ class ApiService {
         institution_name: data.institution_name,
         status: data.status,
         onboarding_completed: data.onboarding_completed,
+        role: data.role || 'owner',
+        must_change_password: data.must_change_password || false,
+        admin_name: data.admin_name || null,
       }));
       return { success: true, data };
     } catch (error) {
@@ -1543,6 +1546,124 @@ class ApiService {
     }
   }
 
+  // ===== COLLEGE ADMIN MANAGEMENT =====
+
+  /**
+   * List all admins for this college (includes owner)
+   */
+  async getCollegeAdmins() {
+    try {
+      const response = await fetch(`${this.baseUrl}/college/admins`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${this.collegeToken}` },
+      });
+      if (!response.ok) throw new Error('Failed to fetch admins');
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to fetch admins' };
+    }
+  }
+
+  /**
+   * Add a new college admin / placement officer
+   */
+  async addCollegeAdmin(data: { email: string; name: string }) {
+    try {
+      const response = await fetch(`${this.baseUrl}/college/admins`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.collegeToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to add admin');
+      }
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to add admin' };
+    }
+  }
+
+  /**
+   * Remove a college admin
+   */
+  async removeCollegeAdmin(adminId: number) {
+    try {
+      const response = await fetch(`${this.baseUrl}/college/admins/${adminId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${this.collegeToken}` },
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to remove admin');
+      }
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to remove admin' };
+    }
+  }
+
+  /**
+   * Toggle activate/deactivate a college admin
+   */
+  async toggleCollegeAdmin(adminId: number) {
+    try {
+      const response = await fetch(`${this.baseUrl}/college/admins/${adminId}/toggle`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${this.collegeToken}` },
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to toggle admin');
+      }
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to toggle admin' };
+    }
+  }
+
+  /**
+   * Change password for the logged-in college user
+   */
+  async changeCollegePassword(currentPassword: string, newPassword: string) {
+    try {
+      const response = await fetch(`${this.baseUrl}/college/change-password`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.collegeToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to change password');
+      }
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to change password' };
+    }
+  }
+
+  /**
+   * Get current college user info (role, name, must_change_password)
+   */
+  async getCollegeMe() {
+    try {
+      const response = await fetch(`${this.baseUrl}/college/me`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${this.collegeToken}` },
+      });
+      if (!response.ok) throw new Error('Failed to fetch user info');
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to fetch user info' };
+    }
+  }
+
   // ===== ADMIN API METHODS =====
 
   /**
@@ -1624,6 +1745,48 @@ class ApiService {
       return { success: true, data: await response.json() };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Failed to reject college' };
+    }
+  }
+
+  /**
+   * Set a plan for a college (admin)
+   */
+  async setCollegePlan(collegeId: number, planType: string) {
+    try {
+      const response = await fetch(`${this.baseUrl}/admin/colleges/${collegeId}/plan`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${this.adminToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ plan_type: planType }),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || 'Failed to set plan');
+      }
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to set plan' };
+    }
+  }
+
+  /**
+   * Remove a college plan (admin)
+   */
+  async removeCollegePlan(collegeId: number) {
+    try {
+      const response = await fetch(`${this.baseUrl}/admin/colleges/${collegeId}/plan`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${this.adminToken}` },
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || 'Failed to remove plan');
+      }
+      return { success: true, data: await response.json() };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to remove plan' };
     }
   }
 

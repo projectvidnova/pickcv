@@ -235,6 +235,11 @@ class CollegeResponse(BaseModel):
     placement_season_end: Optional[date] = None
     autonomy_status: Optional[str] = None
     affiliated_university: Optional[str] = None
+    # Plan fields
+    plan_type: Optional[str] = "none"
+    plan_status: Optional[str] = "none"
+    plan_start_date: Optional[datetime] = None
+    plan_end_date: Optional[datetime] = None
     
     class Config:
         from_attributes = True
@@ -426,9 +431,21 @@ class AdminCollegeResponse(BaseModel):
     student_count: int = 0
     created_at: datetime
     approved_at: Optional[datetime]
+    plan_type: Optional[str] = "none"
+    plan_status: Optional[str] = "none"
+    plan_start_date: Optional[datetime] = None
+    plan_end_date: Optional[datetime] = None
     
     class Config:
         from_attributes = True
+
+
+class AdminSetPlanRequest(BaseModel):
+    plan_type: str = Field(..., pattern="^(monthly|quarterly|half_yearly|yearly)$")
+
+
+class AdminRemovePlanRequest(BaseModel):
+    pass
 
 
 class AdminRejectRequest(BaseModel):
@@ -768,6 +785,35 @@ class CollegeAuditLogResponse(BaseModel):
     
     class Config:
         from_attributes = True
+
+
+# ============= COLLEGE ADMIN MANAGEMENT =============
+
+class CollegeAdminCreateRequest(BaseModel):
+    """Request to add a new placement officer / admin for the college."""
+    email: EmailStr
+    name: str = Field(..., min_length=2, max_length=255)
+
+
+class CollegeAdminResponse(BaseModel):
+    id: int
+    college_id: int
+    email: str
+    name: str
+    role: str
+    is_active: bool
+    must_change_password: bool
+    last_login: Optional[datetime] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class CollegeChangePasswordRequest(BaseModel):
+    """Request to change the logged-in college user's password."""
+    current_password: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=6)
 
 
 # ============= PHASE 1: PAGINATION =============
